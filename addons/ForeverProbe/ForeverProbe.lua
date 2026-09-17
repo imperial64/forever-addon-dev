@@ -1,9 +1,16 @@
 -- Forever Probe
 --
--- Records the addon API surface of WoW Forever and empirically determines what a
--- rotation helper can and cannot do. Built around one question the press quotes
--- cannot answer: is the in-combat "disarmament" the same shape as retail's, where
--- an addon may SUGGEST an ability but never PRESS it?
+-- Records the addon API surface of WoW Forever.
+--
+-- Primary job (2026-09-17 onwards): decide the two live plans - does an Auction
+-- House API exist (the economy addon, which is the goal), and is there any channel
+-- across the client boundary (the Claude Code bridge). The out-of-combat run
+-- answers both on its own.
+--
+-- Secondary job: the combat delta. The rotation helper is shelved, since Tim Jones
+-- said Forever has parity with retail on the INFORMATION addons can access, so the
+-- combat run is now a kill-check (and a collateral-damage check for the two live
+-- plans) rather than the point of the addon.
 --
 --   /fprobe          static surface scan + action tests out of combat
 --   /fprobe combat   re-run the action tests while actually in combat
@@ -101,9 +108,10 @@ local function scan(list)
     return found, missing
 end
 
--- What a rotation helper READS. None of this should be restricted. If any of it
--- is missing, a rotation helper cannot compute a recommendation at all, which is
--- a far harder blocker than the execute-side rules.
+-- What a rotation helper READS. Expect some of this to be restricted: the
+-- read side is what Blizzard has said it is restricting. Presence alone proves
+-- nothing here - a black box keeps the function and returns nil or a masked
+-- value, so the read tests compare VALUES across combat states.
 local READ_SURFACE = {
     "GetSpellCooldown", "C_Spell.GetSpellCooldown", "GetSpellCharges", "C_Spell.GetSpellCharges",
     "IsUsableSpell", "C_Spell.IsSpellUsable", "IsSpellInRange", "C_Spell.IsSpellInRange",
@@ -141,12 +149,19 @@ local SECURE_SURFACE = {
     "C_AssistedCombat", "C_AssistedCombat.GetNextCastSpell", "AssistedCombatManager",
 }
 
--- The three original addon plans, unchanged.
+-- The two live plans: the economy addon and the notification bridge. This is now
+-- the highest-value section of the scan - it decides both, out of combat.
+--
+-- The bridge half is deliberately broad. It is general-purpose tooling for talking
+-- to Claude Code from inside the game, not a WoW feature, so anything that moves
+-- bytes across the client boundary in either direction counts: file access, addon
+-- messages, and whatever else the global dump turns up.
 local PLAN_SURFACE = {
     "C_AuctionHouse", "QueryAuctionItems", "GetAuctionItemInfo", "GetNumAuctionItems",
-    "C_GuildInfo", "C_Club", "GetGuildRosterInfo", "GuildRoster", "C_GuildBank",
     "C_ChatInfo.SendAddonMessage", "SendAddonMessage", "C_ChatInfo.RegisterAddonMessagePrefix",
     "io", "os", "loadstring", "require", "debug", "package",
+    "C_AddOns.GetAddOnMetadata", "ReloadUI", "C_CVar.GetCVar", "C_CVar.SetCVar",
+    "GetScreenWidth", "CreateFrame", "C_Timer.NewTicker",
 }
 
 local function probeSurfaces()
@@ -166,6 +181,36 @@ local function probeSurfaces()
     if lookup("C_AssistedCombat") then
         out("|cffffaa00C_AssistedCombat PRESENT|r - Blizzard ships its own rotation assist here")
     end
+
+    -- Verdicts for the two live plans, so one out-of-combat run settles them
+    -- without needing the combat pass at all.
+    local verdict = {}
+    if lookup("C_AuctionHouse") then
+        verdict.auctionHouse = "retail"
+        out("|cff44ff44AH|r      C_AuctionHouse present - economy addon viable, retail AH code ports")
+    elseif lookup("QueryAuctionItems") then
+        verdict.auctionHouse = "classic"
+        out("|cffffaa00AH|r      Classic-era QueryAuctionItems only - throttled full-scan design")
+    else
+        verdict.auctionHouse = "none"
+        out("|cffff4444AH|r      no Auction House API found - economy plan dead as designed")
+    end
+
+    verdict.export = {
+        io = lookup("io") ~= nil, os = lookup("os") ~= nil,
+        loadstring = (lookup("loadstring") or lookup("load")) ~= nil,
+        addonMessage = (lookup("C_ChatInfo.SendAddonMessage") or lookup("SendAddonMessage")) ~= nil,
+        cvar = (lookup("C_CVar.SetCVar") or lookup("SetCVar")) ~= nil,
+    }
+    out(("|cff44ddffBRIDGE|r  io=%s os=%s load=%s addonMsg=%s cvar=%s")
+        :format(tostring(verdict.export.io), tostring(verdict.export.os),
+                tostring(verdict.export.loadstring), tostring(verdict.export.addonMessage),
+                tostring(verdict.export.cvar)))
+    if not verdict.export.io then
+        out("  outbound is SavedVariables on /reload; inbound needs a CVar, a macro, or a pixel channel")
+    end
+
+    db.planVerdict = verdict
 end
 
 -- Full global dump, for diffing against retail and Classic Era later.
