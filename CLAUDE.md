@@ -9,6 +9,8 @@ rather than press reporting.
 
 - `docs/findings.md` — everything established so far, with sources and confidence levels.
   Read it before answering any question about what Forever permits.
+- `docs/auction-addon-architecture.md` — how existing auction addons acquire, store, price
+  and act on market data. Read it before designing anything Auction House related.
 - News monitoring does **not** happen in this repo. A scheduled task owns it:
   `C:\Users\efeay\.claude\scheduled-tasks\wow-forever-addon-watch\seen.md`. Read that file
   for the latest external information; do not duplicate its searching here.
@@ -96,8 +98,16 @@ edit addons/ForeverProbe/  ->  scripts/install-addon.ps1  ->  play, run /fprobe
 Probe usage in-game:
 
 - `/fprobe` — static API surface scan plus action and read tests, out of combat
+- `/fprobe ah` — Auction House detail; run it standing at an auction house
+- `/fprobe ah scan` — fire a full `ReplicateItems` scan. Burns the 15-minute throttle
+- `/fprobe bridge` — inbound `BridgeData.lua` and outbound SavedVariables flush
 - `/fprobe combat` — re-run the tests while actually in combat (pull a mob first)
 - `/fprobe report` — print the out-of-combat vs in-combat delta
+
+The bridge check needs a write from outside the game first:
+`scripts/write-bridge-data.ps1`, then `/reload`, then `/fprobe bridge`. That script
+writes into the *installed* addon folder, and `install-addon.ps1` preserves the
+installed `BridgeData.lua` unless you pass `-ResetBridgeData`.
 
 Both runs are required before the delta means anything. `/reload` or log out to flush
 SavedVariables.

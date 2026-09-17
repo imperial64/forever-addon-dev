@@ -15,6 +15,9 @@
 --   /fprobe          static surface scan + action tests out of combat
 --   /fprobe combat   re-run the action tests while actually in combat
 --   /fprobe report   print the out-of-combat vs in-combat delta
+--   /fprobe ah       Auction House detail, standing at an auction house
+--   /fprobe ah scan  fire a full ReplicateItems scan (burns the 15 min throttle)
+--   /fprobe bridge   inbound BridgeData.lua and outbound SavedVariables flush
 --
 -- Results persist to WTF/Account/<ACCT>/SavedVariables/ForeverProbe.lua on
 -- /reload or logout.
@@ -24,8 +27,28 @@
 -- report a false "allowed". Both events are captured and correlated with
 -- whichever test was running.
 
+local ADDON, ns = ...
+
 ForeverProbeDB = ForeverProbeDB or {}
 local db = ForeverProbeDB
+
+-- Inbound bridge channel ------------------------------------------------------
+-- This is the mechanism every serious auction addon uses to get out-of-game data
+-- into the client, and TradeSkillMaster_AppHelper is the reference implementation:
+-- an external process overwrites a .lua file inside the addon folder, the client
+-- executes it as ADDON CODE at load, and the addon reads it back out of memory.
+-- There is no polling and no push - new data costs a /reload. It works because the
+-- file is code being run, not data being read, which is the only door the sandbox
+-- leaves open. See docs/auction-addon-architecture.md section 5.
+--
+-- BridgeData.lua is that file. It ships with a known default so an untouched
+-- install is distinguishable from a successful external write.
+local bridgeInbox = {}
+
+function ns.LoadBridgeData(tag, ...)
+    bridgeInbox[tag] = bridgeInbox[tag] or {}
+    table.insert(bridgeInbox[tag], { ... })
+end
 
 local function out(msg) DEFAULT_CHAT_FRAME:AddMessage("|cff44ddffFProbe|r " .. tostring(msg)) end
 
@@ -38,6 +61,13 @@ watcher:RegisterEvent("ADDON_ACTION_FORBIDDEN")
 watcher:RegisterEvent("PLAYER_LOGIN")
 watcher:SetScript("OnEvent", function(_, event, addon, func)
     if event == "PLAYER_LOGIN" then
+        -- Outbound half of the bridge. db is whatever was restored from disk, so a
+        -- token written during the LAST session is sitting right here if the flush
+        -- on /reload or logout actually happened.
+        db.bridge = db.bridge or {}
+        db.bridge.tokenFromPreviousSession = db.bridge.tokenWrittenThisSession
+        db.bridge.tokenWrittenThisSession = nil
+        db.bridge.loads = (db.bridge.loads or 0) + 1
         out("loaded. /fprobe out of combat, then /fprobe combat mid-fight.")
         return
     end
@@ -156,13 +186,360 @@ local SECURE_SURFACE = {
 -- to Claude Code from inside the game, not a WoW feature, so anything that moves
 -- bytes across the client boundary in either direction counts: file access, addon
 -- messages, and whatever else the global dump turns up.
+-- The Auction House half lives in its own section below; this is the bridge half.
 local PLAN_SURFACE = {
-    "C_AuctionHouse", "QueryAuctionItems", "GetAuctionItemInfo", "GetNumAuctionItems",
     "C_ChatInfo.SendAddonMessage", "SendAddonMessage", "C_ChatInfo.RegisterAddonMessagePrefix",
     "io", "os", "loadstring", "require", "debug", "package",
     "C_AddOns.GetAddOnMetadata", "ReloadUI", "C_CVar.GetCVar", "C_CVar.SetCVar",
     "GetScreenWidth", "CreateFrame", "C_Timer.NewTicker",
 }
+
+-- Auction House ---------------------------------------------------------------
+-- The economy addon is the goal, so this decides the project. Checks come from
+-- docs/auction-addon-architecture.md section 9.
+--
+-- PRESENCE ONLY. Nothing in here posts, bids, buys or cancels. The seven
+-- restricted functions are scanned for existence and never called - calling them
+-- would list or buy real items, which is the same reasoning that removed the
+-- SendChatMessage tests. The one live request, ReplicateItems, is a read, and it
+-- is still opt-in via /fprobe ah scan because it burns a 15 minute throttle.
+
+-- Retail's C_AuctionHouse read surface (mainline 8.3.0+, Cataclysm Classic 4.4.2+).
+local AH_MODERN = {
+    "C_AuctionHouse.SendBrowseQuery", "C_AuctionHouse.RequestMoreBrowseResults",
+    "C_AuctionHouse.GetBrowseResults", "C_AuctionHouse.SendSearchQuery",
+    "C_AuctionHouse.SendSellSearchQuery",
+    "C_AuctionHouse.GetNumItemSearchResults", "C_AuctionHouse.GetItemSearchResultInfo",
+    "C_AuctionHouse.GetItemKeyInfo", "C_AuctionHouse.QueryOwnedAuctions",
+    "C_AuctionHouse.GetOwnedAuctionInfo", "C_AuctionHouse.CalculateItemDeposit",
+    "C_AuctionHouse.IsThrottledMessageSystemReady",
+}
+
+-- The commodity half of the 8.3 split. A Classic+ game could plausibly ship the
+-- modern namespace WITHOUT it, in which case every stackable good is an
+-- individually listed stack again and the whole pricing model changes.
+local AH_COMMODITY = {
+    "C_AuctionHouse.GetItemCommodityStatus",
+    "C_AuctionHouse.GetNumCommoditySearchResults",
+    "C_AuctionHouse.GetCommoditySearchResultInfo",
+    "C_AuctionHouse.GetCommoditySearchResultsQuantity",
+    "C_AuctionHouse.CalculateCommodityDeposit",
+}
+
+-- Bulk read. 15 minute account-wide throttle in retail, and anonymised since 9.0.2.
+local AH_REPLICATE = {
+    "C_AuctionHouse.ReplicateItems", "C_AuctionHouse.GetNumReplicateItems",
+    "C_AuctionHouse.GetReplicateItemInfo",
+}
+
+-- Legacy Classic API. Not an either/or: MoP Classic carries both this and the
+-- modern namespace, so scan for both and report the overlap.
+local AH_LEGACY = {
+    "QueryAuctionItems", "CanSendAuctionQuery", "GetNumAuctionItems",
+    "GetAuctionItemInfo", "GetAuctionItemLink", "SortAuctionItems",
+    "GetAuctionSellItemInfo", "GetAuctionItemTimeLeft",
+}
+
+-- The seven functions retail flags HasRestrictions, meaning #hwevent + #noscript:
+-- computable in advance, but a human has to click once per action. Scanned, never
+-- called. A shorter list here is interesting; a longer one would be astonishing.
+local AH_RESTRICTED = {
+    "C_AuctionHouse.PostItem", "C_AuctionHouse.PostCommodity",
+    "C_AuctionHouse.ConfirmPostItem", "C_AuctionHouse.ConfirmPostCommodity",
+    "C_AuctionHouse.PlaceBid", "C_AuctionHouse.StartCommoditiesPurchase",
+    "C_AuctionHouse.CancelAuction",
+}
+
+-- Legacy equivalents of the same actions. Also never called.
+local AH_LEGACY_ACTIONS = { "PlaceAuctionBid", "StartAuction", "PostAuction", "CancelAuction" }
+
+local function packReturns(...)
+    local n = select("#", ...)
+    local t = { n = n }
+    for i = 1, n do t[i] = (select(i, ...)) end
+    return t
+end
+
+local function probeAuctionHouse()
+    local ah = {}
+    local function section(name, list)
+        local found, missing = scan(list)
+        ah[name] = { present = found, absent = missing }
+        out(("  %-13s %d/%d"):format(name, #found, #found + #missing))
+        return #found, #found + #missing
+    end
+
+    out("|cff44ddffAUCTION HOUSE|r")
+    local nModern    = section("modern", AH_MODERN)
+    local nCommodity = section("commodity", AH_COMMODITY)
+    local nReplicate = section("replicate", AH_REPLICATE)
+    local nLegacy    = section("legacy", AH_LEGACY)
+    local nRestricted, totalRestricted = section("restricted", AH_RESTRICTED)
+    section("legacyAction", AH_LEGACY_ACTIONS)
+
+    -- 1. Which API ships, and whether the two coexist as they do in MoP Classic.
+    if nModern > 0 and nLegacy > 0 then
+        ah.api = "both"
+        out("  |cff44ff44API|r  both - modern C_AuctionHouse AND the legacy query API, like MoP Classic")
+    elseif nModern > 0 then
+        ah.api = "retail"
+        out("  |cff44ff44API|r  modern C_AuctionHouse only - retail AH code largely ports")
+    elseif nLegacy > 0 then
+        ah.api = "classic"
+        out("  |cffffaa00API|r  legacy QueryAuctionItems only - paginated, ~0.3s throttle, 15min getAll")
+    else
+        ah.api = "none"
+        out("  |cffff4444API|r  no Auction House API at all - economy plan dead as designed")
+    end
+
+    -- 2. Bulk reads. Without one of these there is no market snapshot at all,
+    -- only per-item searches.
+    ah.hasReplicate = nReplicate > 0
+    ah.hasLegacyGetAll = lookup("CanSendAuctionQuery") ~= nil
+    if not ah.hasReplicate and not ah.hasLegacyGetAll then
+        out("  |cffff4444no bulk read|r - no ReplicateItems and no getAll; per-item queries only")
+    end
+
+    -- 5. The commodity split.
+    ah.hasCommodities = nCommodity > 0
+    if nModern > 0 and nCommodity == 0 then
+        out("  |cffffaa00modern API without commodities|r - every stack is its own listing; pricing model changes")
+    end
+
+    -- 1 (continued). Compare the restricted set against retail's seven.
+    ah.restrictedCount = nRestricted
+    if nRestricted > 0 and nRestricted < totalRestricted then
+        out("  restricted set differs from retail - absent: " ..
+            table.concat(ah.restricted.absent, ", "):sub(1, 200))
+    end
+
+    ah.perPage = NUM_AUCTION_ITEMS_PER_PAGE
+    ah.frames = {
+        modern = lookup("AuctionHouseFrame") ~= nil,
+        legacy = lookup("AuctionFrame") ~= nil,
+    }
+
+    db.auctionHouse = db.auctionHouse or {}
+    for k, v in pairs(ah) do db.auctionHouse[k] = v end
+    out("  stand at an auction house and run |cffffffff/fprobe ah|r for the live half")
+    return ah.api
+end
+
+-- Live half. Everything below needs an open auction house window.
+local ahScanFrame = CreateFrame("Frame")
+local ahScan = nil
+
+-- Retail strips owner names from replicate results (hotfixed in 9.0.2) while
+-- keeping the fields, so this is a VALUE check, not a presence check. Position
+-- 14/15 in the retail tuple, but a Classic+ client could return a different shape
+-- entirely - keep the raw tuple so the shape can be read off it afterwards rather
+-- than trusting the index.
+local function sampleReplicate(limit)
+    local get = C_AuctionHouse and C_AuctionHouse.GetReplicateItemInfo
+    local num = C_AuctionHouse and C_AuctionHouse.GetNumReplicateItems
+    if not get or not num then return 0, {}, 0, 0 end
+    local ok, total = pcall(num)
+    total = (ok and total) or 0
+    local samples, withOwner, withoutOwner = {}, 0, 0
+    local last = total
+    if limit < last then last = limit end
+    for i = 0, last - 1 do
+        local gotInfo, info = pcall(function() return packReturns(get(i)) end)
+        if gotInfo then
+            local owner, ownerFull = info[14], info[15]
+            if owner ~= nil or ownerFull ~= nil then
+                withOwner = withOwner + 1
+            else
+                withoutOwner = withoutOwner + 1
+            end
+            if #samples < 5 then
+                local parts = {}
+                for k = 1, info.n do parts[k] = k .. "=" .. tostring(info[k]) end
+                samples[#samples + 1] = {
+                    index = i, returns = info.n,
+                    owner = tostring(owner), ownerFullName = tostring(ownerFull),
+                    tuple = table.concat(parts, " "):sub(1, 400),
+                }
+            end
+        end
+    end
+    return total, samples, withOwner, withoutOwner
+end
+
+local function finishReplicateScan()
+    if not ahScan or ahScan.done then return end
+    ahScan.done = true
+    ahScanFrame:UnregisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+
+    local total, samples, withOwner, withoutOwner = sampleReplicate(200)
+    ahScan.total, ahScan.samples = total, samples
+    ahScan.ownersPresent, ahScan.ownersNil = withOwner, withoutOwner
+
+    db.auctionHouse = db.auctionHouse or {}
+    db.auctionHouse.scan = ahScan
+
+    if total == 0 and ahScan.updates == 0 then
+        out("  |cffff4444no update event and 0 items|r - throttled, unsupported, or the AH window was shut")
+    else
+        out(("  |cff44ff44replicate scan|r %d auctions, %d update events, first response %.1fs")
+            :format(total, ahScan.updates, ahScan.elapsed or -1))
+        out(("  owner names: %d with, %d nil (retail returns nil for everyone but you since 9.0.2)")
+            :format(withOwner, withoutOwner))
+        if samples[1] then
+            out(("  shape: %d returns | %s"):format(samples[1].returns, samples[1].tuple:sub(1, 150)))
+        end
+    end
+end
+
+ahScanFrame:SetScript("OnEvent", function(_, event)
+    if event ~= "REPLICATE_ITEM_LIST_UPDATE" or not ahScan or ahScan.done then return end
+    ahScan.updates = ahScan.updates + 1
+    if ahScan.updates == 1 then ahScan.elapsed = GetTime() - ahScan.startedAt end
+end)
+
+local function ahReplicateScan()
+    if not (C_AuctionHouse and C_AuctionHouse.ReplicateItems) then
+        out("|cffff4444no C_AuctionHouse.ReplicateItems|r - nothing to scan. The probe deliberately does")
+        out("  not fire a legacy getAll: it can disconnect the client and burns 15 minutes either way.")
+        return
+    end
+    -- ReplicateItems does nothing useful with the window shut, and a wasted call
+    -- still burns the throttle, so say so rather than reporting an empty result.
+    local open = (AuctionHouseFrame and AuctionHouseFrame:IsShown())
+        or (AuctionFrame and AuctionFrame:IsShown()) or false
+    if not open then
+        out("|cffffaa00auction house window is not open|r - open it first; a wasted call still burns the throttle")
+        return
+    end
+
+    db.auctionHouse = db.auctionHouse or {}
+    local history = db.auctionHouse.scanHistory or {}
+    if history[#history] then
+        out(("  last scan was %d seconds ago (retail throttle is 900)"):format(time() - history[#history]))
+    end
+    history[#history + 1] = time()
+    db.auctionHouse.scanHistory = history
+
+    ahScan = { updates = 0, startedAt = GetTime(), requestedAt = time(), done = false }
+    ahScanFrame:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+
+    activeTest = "ReplicateItems"
+    local ok, err = pcall(C_AuctionHouse.ReplicateItems)
+    activeTest = nil
+    local blocked = blocksFor("ReplicateItems")
+    ahScan.callOk = ok
+    ahScan.callErr = (not ok) and tostring(err):sub(1, 200) or nil
+    ahScan.blockEvents = (#blocked > 0) and blocked or nil
+    out(("  ReplicateItems() %s%s"):format(
+        ok and "called" or ("ERR " .. tostring(err):sub(1, 60)),
+        (#blocked > 0) and (" [" .. blocked[1] .. "]") or ""))
+
+    if C_Timer and C_Timer.After then
+        out("  waiting 12s for the list...")
+        C_Timer.After(12, finishReplicateScan)
+    else
+        finishReplicateScan()
+    end
+end
+
+local function ahLiveReads()
+    local live = {}
+    live.auctionFrameOpen = (AuctionHouseFrame and AuctionHouseFrame:IsShown())
+        or (AuctionFrame and AuctionFrame:IsShown()) or false
+    if not live.auctionFrameOpen then
+        out("  |cffffaa00auction house window is not open|r - open it and run /fprobe ah again")
+    end
+
+    if CanSendAuctionQuery then
+        local ok, canQuery, canQueryAll = pcall(CanSendAuctionQuery)
+        if ok then
+            live.canQuery, live.canQueryAll = canQuery, canQueryAll
+            out(("  CanSendAuctionQuery   query=%s getAll=%s"):format(tostring(canQuery), tostring(canQueryAll)))
+        end
+    end
+    if C_AuctionHouse and C_AuctionHouse.IsThrottledMessageSystemReady then
+        local ok, ready = pcall(C_AuctionHouse.IsThrottledMessageSystemReady)
+        if ok then live.throttleReady = ready end
+        out("  throttleSystemReady   " .. tostring(ok and ready))
+    end
+
+    -- Legacy owner check, read off whatever page the player already has open. No
+    -- query is sent, so this costs nothing and cannot disconnect anyone.
+    if GetNumAuctionItems and GetAuctionItemInfo then
+        local ok, batch, total = pcall(GetNumAuctionItems, "list")
+        if ok then
+            live.legacyBatch, live.legacyTotal = batch, total
+            out(("  GetNumAuctionItems    batch=%s total=%s"):format(tostring(batch), tostring(total)))
+            if (batch or 0) > 0 then
+                local gotInfo, info = pcall(function() return packReturns(GetAuctionItemInfo("list", 1)) end)
+                if gotInfo then
+                    local parts = {}
+                    for k = 1, info.n do parts[k] = k .. "=" .. tostring(info[k]) end
+                    live.legacyReturns = info.n
+                    live.legacySample = table.concat(parts, " "):sub(1, 400)
+                    live.legacyOwner = tostring(info[14])
+                    live.legacyOwnerFullName = tostring(info[15])
+                    out(("  legacy owner fields   %s / %s"):format(tostring(info[14]), tostring(info[15])))
+                end
+            end
+        end
+    end
+
+    if C_AuctionHouse and C_AuctionHouse.GetNumReplicateItems then
+        local ok, n = pcall(C_AuctionHouse.GetNumReplicateItems)
+        live.replicateCached = ok and n or nil
+        out("  replicate cache       " .. tostring(ok and n))
+    end
+
+    live.perPage = NUM_AUCTION_ITEMS_PER_PAGE
+    db.auctionHouse = db.auctionHouse or {}
+    db.auctionHouse.live = live
+end
+
+-- Bridge report ---------------------------------------------------------------
+local function printBridge()
+    db.bridge = db.bridge or {}
+
+    out("|cff44ddffBRIDGE inbound|r (BridgeData.lua, executed at load)")
+    local tags, entries = {}, 0
+    for tag, list in pairs(bridgeInbox) do
+        tags[#tags + 1] = tag .. "(" .. #list .. ")"
+        entries = entries + #list
+    end
+    table.sort(tags)
+    local def = bridgeInbox["default"] and bridgeInbox["default"][1]
+    local untouched = (def and def[1] == "unmodified" and entries == 1) and true or false
+
+    if entries == 0 then
+        out("  |cffff4444nothing received|r - BridgeData.lua is missing from the .toc or failed to load")
+    elseif untouched then
+        out("  |cffffaa00shipped default only|r - the file loads and the channel works, but nothing has")
+        out("  written to it yet. Run scripts/write-bridge-data.ps1, then /reload.")
+    else
+        out("  |cff44ff44external write received:|r " .. table.concat(tags, " "))
+        for tag, list in pairs(bridgeInbox) do
+            local first = list[1]
+            if first then
+                local parts = {}
+                for i = 1, #first do parts[i] = tostring(first[i]) end
+                out(("    %s -> %s"):format(tag, table.concat(parts, ", "):sub(1, 120)))
+            end
+        end
+    end
+    db.bridge.inbox = bridgeInbox
+    db.bridge.inboxEntries = entries
+    db.bridge.untouched = untouched
+
+    out("|cff44ddffBRIDGE outbound|r (SavedVariables flush)")
+    if db.bridge.tokenFromPreviousSession then
+        out("  |cff44ff44confirmed|r - last session's token survived: " .. tostring(db.bridge.tokenFromPreviousSession))
+    else
+        out("  |cffffaa00unconfirmed|r - /reload and run /fprobe bridge again to close the loop")
+    end
+    db.bridge.tokenWrittenThisSession = ("%s-%d"):format(
+        date and date("%H%M%S") or tostring(time()), math.random(1000, 9999))
+    out("  wrote token " .. db.bridge.tokenWrittenThisSession .. " - it should reappear after /reload")
+end
 
 local function probeSurfaces()
     local sections = {
@@ -185,16 +562,7 @@ local function probeSurfaces()
     -- Verdicts for the two live plans, so one out-of-combat run settles them
     -- without needing the combat pass at all.
     local verdict = {}
-    if lookup("C_AuctionHouse") then
-        verdict.auctionHouse = "retail"
-        out("|cff44ff44AH|r      C_AuctionHouse present - economy addon viable, retail AH code ports")
-    elseif lookup("QueryAuctionItems") then
-        verdict.auctionHouse = "classic"
-        out("|cffffaa00AH|r      Classic-era QueryAuctionItems only - throttled full-scan design")
-    else
-        verdict.auctionHouse = "none"
-        out("|cffff4444AH|r      no Auction House API found - economy plan dead as designed")
-    end
+    verdict.auctionHouse = probeAuctionHouse()
 
     verdict.export = {
         io = lookup("io") ~= nil, os = lookup("os") ~= nil,
@@ -417,9 +785,18 @@ end
 -- Driver ----------------------------------------------------------------------
 SLASH_FPROBE1 = "/fprobe"
 SlashCmdList.FPROBE = function(arg)
-    arg = (arg or ""):lower():match("^%s*(%S*)") or ""
-    if arg == "report" then return printReport() end
-    if arg == "combat" then
+    local cmd, sub = ((arg or ""):lower()):match("^%s*(%S*)%s*(%S*)")
+    cmd, sub = cmd or "", sub or ""
+    if cmd == "report" then return printReport() end
+    if cmd == "bridge" then return printBridge() end
+    if cmd == "ah" then
+        if sub == "scan" then return ahReplicateScan() end
+        probeAuctionHouse()
+        ahLiveReads()
+        out("full scan (fires ReplicateItems, burns the 15 min throttle): |cffffffff/fprobe ah scan|r")
+        return
+    end
+    if cmd == "combat" then
         if not (InCombatLockdown and InCombatLockdown()) then
             out("|cffffaa00not in combat - will be labelled out-of-combat|r")
         end
@@ -433,7 +810,8 @@ SlashCmdList.FPROBE = function(arg)
     out(("build %s (%s) toc %s"):format(tostring(version), tostring(build), tostring(toc)))
     probeSurfaces()
     probeGlobals()
+    printBridge()
     out("action tests:")
     runActionTests()
-    out("now pull a mob and run |cffffffff/fprobe combat|r, then /reload.")
+    out("next: |cffffffff/fprobe ah|r at an auction house, |cffffffff/fprobe combat|r on a mob, then /reload.")
 end

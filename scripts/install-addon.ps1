@@ -10,7 +10,8 @@
 param(
     [string]$WowRoot,
     [string]$Flavor = "_beta_",
-    [string]$Addon  = "ForeverProbe"
+    [string]$Addon  = "ForeverProbe",
+    [switch]$ResetBridgeData
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,12 +65,29 @@ if ($luajit -or $luac) {
 
 $dest = Join-Path $flavorPath "Interface\AddOns\$Addon"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
+
+# BridgeData.lua is the inbound channel, not source: write-bridge-data.ps1 owns the
+# installed copy, and reinstalling would silently wipe a payload that is mid-test.
+# Preserve whatever is there unless -ResetBridgeData is passed.
+$bridge = Join-Path $dest "BridgeData.lua"
+$keepBridge = $null
+if ((Test-Path $bridge) -and -not $ResetBridgeData) {
+    $keepBridge = [System.IO.File]::ReadAllText($bridge)
+}
+
 Copy-Item -Path (Join-Path $src "*") -Destination $dest -Recurse -Force
+
+if ($keepBridge) {
+    [System.IO.File]::WriteAllText($bridge, $keepBridge, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host "Kept the installed BridgeData.lua (-ResetBridgeData to overwrite it)" -ForegroundColor Yellow
+}
 
 Write-Host "Installed $Addon -> $dest" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Cyan
 Write-Host "  1. At the character screen, enable 'Load out of date AddOns' (the .toc interface number is a guess)."
 Write-Host "  2. In game, out of combat:  /fprobe"
-Write-Host "  3. Pull a mob, then:        /fprobe combat"
-Write-Host "  4. /reload, then run:       .\scripts\collect-savedvars.ps1"
+Write-Host "  3. At an auction house:     /fprobe ah    (then /fprobe ah scan for a full scan)"
+Write-Host "  4. Pull a mob, then:        /fprobe combat"
+Write-Host "  5. Bridge test:             .\scripts\write-bridge-data.ps1, then /reload and /fprobe bridge"
+Write-Host "  6. /reload, then run:       .\scripts\collect-savedvars.ps1"

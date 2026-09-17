@@ -3,6 +3,10 @@
 Last updated 2026-09-17. Everything here predates any client testing; all of it is
 superseded by probe output once that exists.
 
+Companion document: `auction-addon-architecture.md` — how existing auction addons acquire,
+store, price and act on market data, and the four constraints that decide whether the
+economy plan is buildable. Read it before designing anything Auction House related.
+
 Confidence labels: **[PRIMARY]** fetched and read directly · **[REPORTED]** credible
 secondary source, fetched · **[UNVERIFIED]** surfaced in search, not independently
 confirmed · **[EXCLUDED]** checked and found irrelevant or unreliable.
@@ -226,8 +230,16 @@ live plans; the combat run only closes out the shelved one.
 ## Open questions, in priority order
 
 1. Which Auction House API, if any? Gates the economy plan, which is the project's goal.
+   Modern `C_AuctionHouse`, legacy `QueryAuctionItems`, or both — Cataclysm Classic 4.4.2
+   proves a Classic title can get the modern one. `auction-addon-architecture.md` §2.
 2. Any out-of-game export channel beyond SavedVariables, and anything usable *inbound*?
-   Gates the bridge.
+   Gates the bridge. Partly answered: the inbound channel used in practice is a generated
+   `.lua` file inside the addon folder, executed at load, which means `/reload` is the
+   refresh cost. `auction-addon-architecture.md` §5.
+2a. Will Forever expose auction data through Blizzard's Game Data API? No Classic title
+   has since late 2024, and TSM's entire architecture depends on that feed. This gates
+   what *kind* of economy addon is possible, independently of question 1.
+   `auction-addon-architecture.md` §7.
 3. Is the black box combat-only or always-on? — decides the shelved rotation helper, and
    is the cheap check that the two live plans are not caught by collateral damage.
 4. Does `COMBAT_LOG_EVENT_UNFILTERED` still fire with full fields?
