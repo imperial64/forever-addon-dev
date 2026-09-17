@@ -1,0 +1,6 @@
+## Interface: 11500
+## Title: Forever Probe
+## Notes: Dumps API surface and tests addon restrictions.
+## SavedVariables: ForeverProbeDB
+
+ForeverProbe.lua
