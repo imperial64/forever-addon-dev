@@ -44,6 +44,24 @@ if (-not (Test-Path $flavorPath)) {
 $src = Join-Path $repo "addons\$Addon"
 if (-not (Test-Path $src)) { Write-Error "Addon source not found: $src" }
 
+# Syntax-gate the install. A Lua parse error means the addon never loads and
+# /fprobe is simply not there in game, which is a slow and confusing way to find
+# out. LuaJIT is preferred: it parses Lua 5.1, which is what WoW runs. luac 5.4
+# is a usable second choice - it accepts everything 5.1 does and a little more.
+$luajit = Get-Command luajit -ErrorAction SilentlyContinue
+$luac   = Get-Command luac   -ErrorAction SilentlyContinue
+if ($luajit -or $luac) {
+    $checker = if ($luajit) { "luajit (5.1)" } else { "luac (5.4)" }
+    foreach ($file in Get-ChildItem $src -Filter *.lua -Recurse) {
+        if ($luajit) { & $luajit.Source -bl $file.FullName | Out-Null }
+        else         { & $luac.Source -p $file.FullName }
+        if ($LASTEXITCODE -ne 0) { Write-Error "Lua syntax error in $($file.Name) - not installing." }
+    }
+    Write-Host "Lua syntax OK ($checker)" -ForegroundColor Green
+} else {
+    Write-Host "No lua/luajit on PATH - skipping the syntax check. Install with: winget install DEVCOM.LuaJIT" -ForegroundColor Yellow
+}
+
 $dest = Join-Path $flavorPath "Interface\AddOns\$Addon"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 Copy-Item -Path (Join-Path $src "*") -Destination $dest -Recurse -Force
