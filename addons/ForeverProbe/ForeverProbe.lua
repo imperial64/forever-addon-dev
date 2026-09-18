@@ -150,6 +150,11 @@ watcher:SetScript("OnEvent", function(_, event, addon, func)
         db.bridge.tokenWrittenThisSession = nil
         db.bridge.loads = (db.bridge.loads or 0) + 1
         out("loaded. /fprobe out of combat, then /fprobe combat mid-fight.")
+        -- Checked every login, not just on demand: someone reading a signature
+        -- that no longer exists has no way to notice on their own.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(1, function() pcall(docsVersionCheck, false) end)
+        end
         -- The forbidden-action dialog can appear before the player types anything,
         -- so point at the command that explains it rather than leaving the popup
         -- looking like a fault. Deferred one tick so the block log is settled.
@@ -1522,6 +1527,69 @@ local function printReport()
     db.delta = { combatOnly = combatOnly, flatBan = flatBan, maskedReads = masked }
 end
 
+-- Is the shipped reference still true of this client? -------------------------
+-- The reference ships generated from one specific build. Blizzard moved this
+-- beta 69893 -> 69913 in a single day, so the reference being behind the client
+-- is the normal case and silence would be the wrong default: a player reading a
+-- signature that no longer exists has no way to tell.
+--
+-- Three severities, because they mean different things:
+--   interface number differs -> a major patch. Assume the reference is wrong
+--                               until regenerated; whole systems move.
+--   version string differs   -> a content patch. Signatures may have changed.
+--   build number differs     -> a hotfix. Usually harmless, occasionally not.
+local function docsVersionCheck(verbose)
+    local shipped = ForeverProbeDocsVersion
+    local version, build, _, toc = GetBuildInfo()
+    version, build, toc = plain(version), plain(build), plain(toc)
+
+    local state = { clientVersion = version, clientBuild = build, clientInterface = toc }
+    if type(shipped) ~= "table" then
+        state.severity = "missing"
+        out("|cffff4444no API reference version|r - DocsVersion.lua is missing or failed to load")
+        db.docsVersion = state
+        return state
+    end
+
+    state.refVersion, state.refBuild = plain(shipped.version), plain(shipped.build)
+    state.refInterface, state.generated = shipped.interface, plain(shipped.generated)
+
+    local severity, why
+    if shipped.interface and toc and tostring(shipped.interface) ~= tostring(toc) then
+        severity = "major"
+        why = ("interface %s -> %s"):format(plain(shipped.interface), toc)
+    elseif shipped.version and version and plain(shipped.version) ~= version then
+        severity = "major"
+        why = ("version %s -> %s"):format(plain(shipped.version), version)
+    elseif shipped.build and build and plain(shipped.build) ~= build then
+        severity = "minor"
+        why = ("build %s -> %s"):format(plain(shipped.build), build)
+    else
+        severity = "current"
+    end
+    state.severity, state.why = severity, why
+
+    if severity == "major" then
+        out("|cffff4444API REFERENCE IS OUT OF DATE|r - " .. plain(why))
+        out("  The shipped reference describes a different client. Signatures may be")
+        out("  wrong and whole systems may have moved. Regenerate before trusting it:")
+        out("  |cffffffff/fprobe docs dump|r then |cffffffff/reload|r")
+    elseif severity == "minor" then
+        out("|cffffaa00API reference is behind this client|r - " .. plain(why))
+        out("  Usually harmless on a hotfix, but regenerate if something looks wrong:")
+        out("  |cffffffff/fprobe docs dump|r then |cffffffff/reload|r")
+    elseif verbose then
+        out(("|cff44ff44API reference matches this client|r - %s build %s, generated %s")
+            :format(plain(shipped.version), plain(shipped.build), plain(shipped.generated)))
+        out(("  covers %s systems, %s functions, %s events, %s tables")
+            :format(plain(shipped.systems), plain(shipped.functions),
+                    plain(shipped.events), plain(shipped.tables)))
+    end
+
+    db.docsVersion = state
+    return state
+end
+
 -- Blizzard's own API documentation ------------------------------------------
 -- The whole plugin plan hangs on this one question: does Forever ship
 -- Blizzard_APIDocumentationGenerated, and may an addon load it?
@@ -1563,6 +1631,7 @@ end
 
 local function probeApiDocs()
     out("|cff44ddffAPI DOCUMENTATION|r")
+    docsVersionCheck(true)
     local api = {}
 
     if not APIDocumentation_LoadUI then
@@ -1851,7 +1920,16 @@ local function dumpApiDocs(startAt, count)
 
     db.apiDocs = db.apiDocs or {}
     local store = db.apiDocs
-    store.build = db.build or nil
+    -- Read the build HERE rather than trusting db.build, which is only set by a
+    -- full /fprobe run. Measured 2026-09-18: a 3.9 MB capture landed with no
+    -- build recorded at all, because the session only ran the dump - a reference
+    -- that cannot say which client produced it is the exact drift problem the
+    -- version flagging exists to solve.
+    local bVersion, bBuild, bDate, bToc = GetBuildInfo()
+    store.client = {
+        version = plain(bVersion), build = plain(bBuild),
+        date = plain(bDate), interface = plain(bToc),
+    }
     store.systems = store.systems or {}
     store.capturedAt = date and date("%Y-%m-%d %H:%M:%S") or time()
 
@@ -1920,6 +1998,7 @@ SlashCmdList.FPROBE = function(arg)
     if cmd == "blocked" then return printBlocked() end
     if cmd == "events" then return probeEvents() end
     if cmd == "docs" then
+        if sub == "version" then return docsVersionCheck(true) end
         if sub == "dump" then
             -- The two range numbers come off the raw argument, because the
             -- three-token parse above only reaches as far as `extra`.

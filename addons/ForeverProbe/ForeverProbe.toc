@@ -3,5 +3,6 @@
 ## Notes: Dumps API surface and tests addon restrictions.
 ## SavedVariables: ForeverProbeDB
 
+DocsVersion.lua
 ForeverProbe.lua
 BridgeData.lua
