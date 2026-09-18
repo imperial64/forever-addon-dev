@@ -1,12 +1,2 @@
-# WoW client output
-WTF/
-*.bak
-
-# Keep captured probe data, it is the point of the repo.
-!data/*.lua
-
-# Editors / OS
-.vscode/
-.idea/
-Thumbs.db
-desktop.ini
+__pycache__/
+*.pyc
