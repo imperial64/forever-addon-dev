@@ -75,4 +75,7 @@ fetched and queried — see `docs/findings.md` §0. Two things follow from it:
   is protected, so each refresh costs a manual `/reload`.
 - **The restriction rules are not what the doctrine says** (§P.10). Out of combat, auras
   and cooldowns — named as removed — are readable, while class resources, explicitly
-  promised as readable, come back `<SECRET>`. Neither live plan reads any of it.
+  promised as readable, come back `<SECRET>`. There are three separate systems here, not
+  one switch: the combat log, per-category value secrecy, and protected actions (§P.12).
+- **Both live plans are clear of all three.** Every event they need is allowed and nothing
+  they read is gated — measured, not assumed (§P.12).

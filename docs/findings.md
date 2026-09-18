@@ -255,7 +255,53 @@ was loaded at the time. Ours has one global the capture lacks, for the same reas
 
 ---
 
-### P.7 Consequences of P.1
+### P.12 The rule is the combat log, not combat information
+
+`/fprobe events` walked the neighbourhood of §P.1's refusal, registering each event and
+attributing every refusal. The answer is clean:
+
+**Refused — both forms, nothing else:**
+
+```
+COMBAT_LOG_EVENT
+COMBAT_LOG_EVENT_UNFILTERED
+```
+
+**Allowed:** `AUCTION_HOUSE_SHOW`, `AUCTION_HOUSE_THROTTLED_SYSTEM_READY`, `BAG_UPDATE`,
+`CHAT_MSG_ADDON`, `PLAYER_MONEY`, `PLAYER_REGEN_DISABLED`, `PLAYER_REGEN_ENABLED`,
+`UNIT_AURA`, `UNIT_COMBAT`, and the remaining unit events. **Not on this client:** none —
+every event tried exists.
+
+**This settles the shape of the rule.** It is not "addons may not know about combat". An
+addon may still subscribe to `UNIT_AURA`, to `UNIT_COMBAT`, and to both combat-state
+events. What it may not have is the combat log itself, in either form. The restriction is
+narrow and specific, and it lines up with the three separate mechanisms now visible on this
+client:
+
+1. **The combat log** — refused at subscription, and no reader function exists (§P.1).
+2. **Per-category secrecy** — `C_Secrets` gates on values, some already on out of combat,
+   and not matching the published doctrine in either direction (§P.10).
+3. **Protected actions** — `UseAction` forbidden, `ADDON_ACTION_FORBIDDEN` on call (§P.4).
+
+Three systems, three different rules. Any summary that treats "addon disarmament" as one
+switch — including §3, and every press piece derived from it — is wrong about this client.
+
+**The collateral-damage check both live plans needed has now passed.** Every event either
+plan requires is in the allowed list: `AUCTION_HOUSE_SHOW` and
+`AUCTION_HOUSE_THROTTLED_SYSTEM_READY` for the economy addon, `CHAT_MSG_ADDON`,
+`PLAYER_MONEY` and `BAG_UPDATE` for the bridge and for inventory-side economy work. Nothing
+the two plans read or listen to is restricted at any of the three levels above.
+
+`PLAYER_REGEN_DISABLED`/`ENABLED` being allowed is worth keeping: an addon can still know
+whether it is in combat, which is what lets both plans defer their work to a safe moment
+rather than discovering a restriction mid-scan.
+
+The full allowed list is in `db.eventProbe` in the SavedVariables; the in-game print
+truncates it.
+
+---
+
+### P.13 Consequences of P.1
 
 - **Neither live plan is touched.** The economy addon and the bridge read auction data,
   money, bags and addon messages. None of them subscribe to the combat log.
@@ -268,7 +314,7 @@ was loaded at the time. Ours has one global the capture lacks, for the same reas
   with Jones saying they are shipping one (§1) and with `C_DamageMeter` being present
   (§0.3).
 
-### P.8 Still to measure here
+### P.14 Still to measure here
 
 `/fprobe events` walks the neighbourhood of the refusal and attributes each result, so the
 next run says whether the rule is "no combat log" or "no combat information": it tries
@@ -654,11 +700,14 @@ presence rows are now confirmations rather than discoveries.
    out of combat. What remains is to get a clean gate table now that the argument arity is
    handled, and to run the in-combat pass for the delta. Neither live plan reads any of
    it, which is the only reason this is still a curiosity rather than a problem.
-4. **Answered 2026-09-18 (§P.1): the question does not apply.** An addon may not register
-   for the event at all — `ADDON_ACTION_FORBIDDEN`, at load, out of combat — and there is
-   no `CombatLogGetCurrentEventInfo` to read it with. What is left is the *boundary*:
-   whether the rule is "no combat log" or "no combat information". `/fprobe events`
-   answers that on the next run.
+   **The collateral-damage check has passed** (§P.12): every event both live plans need is
+   allowed, and nothing they read is gated.
+4. **Closed 2026-09-18 (§P.1, §P.12).** An addon may not register for the combat log at
+   all — both `COMBAT_LOG_EVENT` and `COMBAT_LOG_EVENT_UNFILTERED` are refused, out of
+   combat, and there is no `CombatLogGetCurrentEventInfo` to read either with. The
+   boundary is mapped and it is narrow: every other event tried is allowed, including
+   `UNIT_AURA`, `UNIT_COMBAT` and both combat-state events. The rule is "no combat log",
+   not "no combat information".
 5. What is actually inside "certain restrictions"? Only a published list or the beta
    client answers this.
 

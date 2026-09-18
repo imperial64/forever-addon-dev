@@ -71,11 +71,12 @@ What is still open, in order:
    generated-`.lua` channel is the mechanism, but on the beta the client writes
    SavedVariables and never reads them back, and `ReloadUI()` is protected. The outbound
    half can still be fine — that is what `collect-savedvars.ps1` decides.
-3. Is the box closed **only in combat**, or at all times? Now known to be two separate
-   mechanisms. Event subscription is unconditionally forbidden — measured out of combat,
-   at load (`docs/findings.md` §P.1). Whether the `C_Secrets` value gates are combat-scoped
-   is still open; `/fprobe report` diffs them across combat states. Neither reaches what
-   the live plans read.
+3. **Answered for both live plans: they are clear.** Three separate restriction systems
+   exist on this client, not one — the combat log (refused at subscription, both forms),
+   per-category `C_Secrets` value gates (some already on out of combat, and not matching
+   the published doctrine), and protected actions. Every event and every read either live
+   plan needs is allowed. `docs/findings.md` §P.10 and §P.12. What is left is curiosity:
+   the in-combat gate delta, via `/fprobe combat` then `/fprobe report`.
 
 `ForeverProbe` exists to answer these from our own client. Prioritise its out-of-combat
 run: that alone resolves both live plans. Presence is already known from §0 — what the
