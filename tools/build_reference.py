@@ -131,7 +131,7 @@ class Restrictions:
     document the reader has to know to go and find.
     """
 
-    def __init__(self, path: Path | None, findings_link: str = "docs/findings.md") -> None:
+    def __init__(self, path: Path | None, findings_link: str = "research/findings.md") -> None:
         # Where the evidence document lives relative to the repo root. Kept
         # configurable because the restructure moves it to research/.
         self.findings_link = findings_link
@@ -576,7 +576,7 @@ def main() -> int:
                         help="remove the output tree first, so deletions show in the diff")
     parser.add_argument("--restrictions", type=Path, default=Path("research/restrictions.yaml"))
     parser.add_argument("--restrictions-json", type=Path, default=Path("data/restrictions.json"))
-    parser.add_argument("--findings", type=Path, default=Path("docs/findings.md"))
+    parser.add_argument("--findings", type=Path, default=Path("research/findings.md"))
     parser.add_argument("--surface", type=Path, default=None,
                         help="a capture containing globalFunctions/namespaces, used to "
                              "stub symbols the client has but Blizzard does not document")

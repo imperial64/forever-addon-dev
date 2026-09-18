@@ -1,9 +1,9 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
 
 # C_ChatInfo.SendAddonMessageLogged
 
 > **CAUTION — measured, at all times.** AreOutgoingAddonChatMessagesRestricted() returns true, in and out of combat.
-> Measured 2026-09-18 on build 69913. Evidence: §P.10, §P.18 in [findings](../../../../docs/findings.md).
+> Measured 2026-09-18 on build 69913. Evidence: §P.10, §P.18 in [findings](../../../../research/findings.md).
 
 ```lua
 result = C_ChatInfo.SendAddonMessageLogged(prefix, message, chatType, target)

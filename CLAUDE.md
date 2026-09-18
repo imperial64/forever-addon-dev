@@ -1,86 +1,60 @@
-# WoW Forever addon experimentation
+# forever-addon-dev
 
-Empirical investigation of what addons can actually do in World of Warcraft: Forever
-(Blizzard's Classic+ title, launches 2026-11-04; beta from 2026-09-17). The goal is to
-decide which of four planned addons are buildable, using evidence from the live client
-rather than press reporting.
+A Claude Code plugin for building World of Warcraft: Forever addons (Blizzard's Classic+
+title, launches 2026-11-04; beta from 2026-09-17).
+
+This began as an empirical investigation into whether a TradeSkillMaster-style economy
+addon was buildable. That investigation is **finished** - every question it set out to
+answer is answered - and the repo is now the plugin those answers pay for. The research did
+not get archived: it is the plugin's evidence base, and the git history is kept, because a
+restriction list is only trustworthy if you can see the commits that measured it.
 
 ## Read this first
 
-- `docs/findings.md` — everything established so far, with sources and confidence levels.
-  Read it before answering any question about what Forever permits.
-- `docs/auction-addon-architecture.md` — how existing auction addons acquire, store, price
-  and act on market data. Read it before designing anything Auction House related.
-- News monitoring does **not** happen in this repo. A scheduled task owns it:
-  `C:\Users\efeay\.claude\scheduled-tasks\wow-forever-addon-watch\seen.md`. Read that file
-  for the latest external information; do not duplicate its searching here.
+- `research/findings.md` - everything measured, with confidence levels. Section P is our
+  own client and outranks everything; section 0 is a third-party capture of the same build;
+  sections 1-8 are press and dev statements. Read it before answering any question about
+  what Forever permits.
+- `research/restrictions.yaml` - the same material as machine-readable entries. This is the
+  single hand-maintained source: the generator emits page banners, `data/restrictions.json`
+  and `reference/api/RESTRICTIONS.md` from it, so they cannot drift. **Edit restrictions
+  here, never in the generated tree.**
+- `research/auction-addon-architecture.md` - how auction addons acquire, store, price and
+  act on market data. Read it before designing anything Auction House related.
+- News monitoring does **not** happen in this repo. A scheduled task owns it, under
+  `.claude/scheduled-tasks/wow-forever-addon-watch/seen.md` in Efe's home directory.
 
-## The addon plans (pruned 2026-09-17)
+## What this repo produces
 
-Two plans, down from four. Don't add a third.
+| Piece | What it is |
+|---|---|
+| `skills/` | What Claude loads: `build`, `api`, `restrictions`, `regenerate` |
+| `reference/api/` | **Generated.** One page per symbol, path derivable from the name. 15,049 pages |
+| `reference/guides/`, `reference/restrictions/` | Hand-written, for an outside reader |
+| `tools/` | The generator, the linter, the SavedVariables parser. Python, so plugin users need no Lua runtime |
+| `addons/ForeverProbe/` | The probe - and the doc generator the `regenerate` skill drives |
+| `scripts/` | Install to the client, collect results back. PowerShell, because they touch a Windows WoW install |
+| `research/` | The lab notebook, kept as the cited evidence base |
 
-| Plan | Status | Blocker |
-|---|---|---|
-| Economy / TradeSkillMaster-style | **The goal — unblocked 2026-09-18** | None. Forever ships the full modern `C_AuctionHouse`; what is left is measuring throttle and caps |
-| Claude Code bridge | Tooling, built alongside | Partly. Sandbox intact, inbound `.lua` channel works, but `ReloadUI()` is protected so a human must `/reload` |
-| Guild management | **Scrapped** 2026-09-17 | None — dropped to keep focus, not blocked |
-| Rotation helper | **Closed** 2026-09-18 | Read side restricted. `C_AssistedCombat` is present in the beta; Efe was asked and declined to reopen on it. Do not raise it again |
+**Generated versus hand-written is a directory boundary.** Everything under
+`reference/api/` carries a generated header and is rewritten wholesale; editing it by hand
+is always wrong. Determinism there is load-bearing: no per-symbol page carries a timestamp,
+so regenerating against a newer client produces a diff that *is* the patch delta.
 
-The economy addon is what this project is for. The bridge is **general-purpose tooling for
-talking to Claude Code from inside a running client**, not a WoW feature — it is expected
-to be reused across projects, which is why it survives the cut even though it is not the
-goal. Treat its design as "what channel exists across the client boundary", not "what
-WoW notifications look nice".
+## Research status: closed
 
-Guild management is scrapped: nothing blocks it, which is precisely why it was not worth
-the divided attention. Do not probe for it, design it, or reopen it without Efe asking.
+| Question | Answer |
+|---|---|
+| Which Auction House API | Modern `C_AuctionHouse`, 85 functions, no legacy API. All four numbers measured (P.15, P.17) |
+| Any channel across the client boundary | Both directions work; costs a manual `/reload` (P.9) |
+| Combat-only or always-on | Three separate systems, none touching either live plan (P.18) |
+| Combat log | Addons may not subscribe, either form (P.1, P.12) |
 
-The rotation helper is not an active plan: do not design, scaffold, or spec against it.
-As of 2026-09-18 it is closed rather than merely shelved — `C_AssistedCombat` turned out to
-be present in the beta, which was its stated revival trigger, and Efe declined to reopen on
-it. The probe records what that API returns because the record should be accurate. Nothing
-else follows. Do not raise it again without Efe raising it first.
-
-## The central question
-
-Blizzard's disarmament doctrine (Ion Hazzikostas, for Midnight) treats combat state as a
-black box: addons may restyle the box but not look inside. Addons cannot know target
-buffs/debuffs, cannot determine cooldown states, and cannot parse combat events in real
-time.
-
-**A capture of the live beta client (`docs/findings.md` §0, fetched and queried 2026-09-18)
-has moved most of this.** Forever is the Retail API set on interface 16001, the restriction
-is implemented as `C_Secrets` gates that are all unit/spell/combat-scoped, and neither the
-Auction House nor any bridge channel appears in a restriction surface.
-
-**Question 1 — does Forever inherit it — is answered.** Tim Jones, on camera at BlizzCon
-2026: there will be "parity between certain restrictions... in terms of the information
-that add-ons have access to". That is the read side, which is the half that kills a
-rotation helper. Blizzard shipping its own damage meter and cooldown manager in Forever
-points the same way. Hedged with "certain restrictions" and "probably", and no restriction
-list has been published, but the Midnight→Forever link is no longer a press inference.
-
-What is still open, in order:
-
-1. The Auction House **numbers** — the active piece of work. Real scan throttle, the
-   per-query browse cap, whether `ReplicateItems` still carries owner names, and how long
-   a full scan takes. The API question itself is answered: modern `C_AuctionHouse`, 85
-   functions, no legacy API. `/fprobe ah browse` is free and repeatable; `/fprobe ah scan`
-   costs the throttle; `/fprobe ah throttle` reports what the throttle turned out to be.
-2. Does the bridge's round trip survive this build? The sandbox is intact and the inbound
-   generated-`.lua` channel is the mechanism, but on the beta the client writes
-   SavedVariables and never reads them back, and `ReloadUI()` is protected. The outbound
-   half can still be fine — that is what `collect-savedvars.ps1` decides.
-3. **Answered for both live plans: they are clear.** Three separate restriction systems
-   exist on this client, not one — the combat log (refused at subscription, both forms),
-   per-category `C_Secrets` value gates (some already on out of combat, and not matching
-   the published doctrine), and protected actions. Every event and every read either live
-   plan needs is allowed. `docs/findings.md` §P.10 and §P.12. What is left is curiosity:
-   the in-combat gate delta, via `/fprobe combat` then `/fprobe report`.
-
-`ForeverProbe` exists to answer these from our own client. Prioritise its out-of-combat
-run: that alone resolves both live plans. Presence is already known from §0 — what the
-probe adds is permission, returned values, and runtime gating.
+The economy addon is unblocked and is the flagship worked example. The Claude Code bridge
+is general-purpose tooling for talking to Claude Code from inside a running client. Guild
+management was scrapped 2026-09-17 for focus. The rotation helper is **closed** -
+`C_AssistedCombat` turned out to be present, which was its stated revival trigger, and Efe
+declined to reopen on it. Do not raise it again without Efe raising it first.
 
 ## Working rules
 
@@ -118,7 +92,8 @@ probe adds is permission, returned values, and runtime gating.
 
 ```
 edit addons/ForeverProbe/  ->  scripts/install-addon.ps1  ->  play, run /fprobe
-  ->  scripts/collect-savedvars.ps1  ->  results land in data/  ->  analyse, commit
+  ->  scripts/collect-savedvars.ps1  ->  captures land in research/captures/
+  ->  tools/build_reference.py  ->  reference/api/  ->  commit
 ```
 
 Probe usage in-game:
@@ -139,14 +114,18 @@ Probe usage in-game:
   dialog; press Ignore
 - `/fprobe combat` — re-run the tests while actually in combat (pull a mob first)
 - `/fprobe report` — print the out-of-combat vs in-combat delta
+- `/fprobe docs` — does Blizzard's own API documentation load, and what shape is it
+- `/fprobe docs dump [start] [count]` — dump it into SavedVariables for the generator
+- `/fprobe docs version` — whether the shipped reference still matches this client
 
 The bridge check needs a write from outside the game first:
 `scripts/write-bridge-data.ps1`, then `/reload`, then `/fprobe bridge`. That script
 writes into the *installed* addon folder, and `install-addon.ps1` preserves the
 installed `BridgeData.lua` unless you pass `-ResetBridgeData`.
 
-Both runs are required before the delta means anything. `/reload` or log out to flush
-SavedVariables.
+Both runs are required before the delta means anything, and **both must happen in one
+session**: this build writes SavedVariables and never reads them back, so a `/reload`
+discards whichever pass came first. `/reload` or log out to flush.
 
 ## Cautions
 

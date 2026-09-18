@@ -7,7 +7,7 @@
   The WoW client has no io, no os and no sockets, so the only way to hand a running
   addon data from outside is to write a .lua file the .toc already lists and let the
   client execute it as addon code at load. This is the mechanism the TSM desktop app
-  uses (TradeSkillMaster_AppHelper\AppData.lua); see docs/auction-addon-architecture.md
+  uses (TradeSkillMaster_AppHelper\AppData.lua); see research/auction-addon-architecture.md
   section 5.
 
   This writes into the GAME folder, not the repo, so that .\scripts\install-addon.ps1

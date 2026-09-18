@@ -4,7 +4,7 @@ Last updated 2026-09-18. §P is our own probe, run on the beta client, and outra
 everything. §0 is a third-party capture of the same build, fetched and queried here, which
 outranks every press source below it.
 
-Companion document: `auction-addon-architecture.md` — how existing auction addons acquire,
+Companion document: `research/auction-addon-architecture.md` — how existing auction addons acquire,
 store, price and act on market data, and the four constraints that decide whether the
 economy plan is buildable. Read it before designing anything Auction House related.
 
@@ -304,7 +304,7 @@ truncates it.
 ### P.15 The Auction House numbers, measured
 
 Run at an auction house on 2026-09-18, build 69913. This is what the project existed to
-find out, and it is better than `auction-addon-architecture.md` §3 predicted.
+find out, and it is better than `research/auction-addon-architecture.md` §3 predicted.
 
 **Browse — the free, repeatable read:**
 
@@ -356,7 +356,7 @@ and stamps with absolute time.
 
 ### P.16 This changes the addon's shape
 
-`auction-addon-architecture.md` §3 concluded, from retail's documented behaviour, that "you
+`research/auction-addon-architecture.md` §3 concluded, from retail's documented behaviour, that "you
 cannot build a live market view from in-game scanning" and that every addon appearing to
 have one gets its data from outside the game. **That conclusion does not hold on this
 client.**
@@ -607,7 +607,7 @@ The Classic-era API is **gone**: `QueryAuctionItems`, `CanSendAuctionQuery`,
 
 **Consequence.** The economy addon is a **Retail port, not a Classic one** — the modern
 namespace with commodities, which is the good outcome and the one
-`auction-addon-architecture.md` is written against. No Auction House function appears in
+`research/auction-addon-architecture.md` is written against. No Auction House function appears in
 any restriction surface (§0.3). What is still unknown is every *number*: scan throttle,
 result caps, whether `ReplicateItems` returns owner names. Only the probe answers those.
 
@@ -644,7 +644,7 @@ unattractive largely because of payload encoding.
 The working inbound pattern is unchanged and now has a second independent implementation:
 an external process writes Lua into the AddOns folder and the client executes it as addon
 code at load (the kit's `ForeverCompat` `seeds/` plus `tools/sv_bridge.py` and a
-sub-second `sv_watch.py`). This is the same mechanism as `auction-addon-architecture.md`
+sub-second `sv_watch.py`). This is the same mechanism as `research/auction-addon-architecture.md`
 §5, and the one `BridgeData.lua` already tests.
 
 ### 0.3 The restriction surface — open question 3, strong indication
@@ -916,17 +916,17 @@ presence rows are now confirmations rather than discoveries.
    event, no client stall, owner names `nil`. Its throttle is real and bracketed to
    between 162 and 1047 seconds — and silent, returning an empty list rather than an
    error. Deliberately not narrowed further: browse is unthrottled, so the exact figure
-   changes no design decision. `auction-addon-architecture.md` §2, §3 and §9.
+   changes no design decision. `research/auction-addon-architecture.md` §2, §3 and §9.
 2. **Closed 2026-09-18 by measurement (§P.9).** Outbound works — the SavedVariables file
    is on disk and an external process can read it. Inbound works — the generated `.lua` is
    executed as addon code and the receiver runs. The client not reading its own saves back
    costs the design nothing, because nothing in it needed that. The price is a manual
    `/reload` per refresh, because `ReloadUI()` is protected. The bridge is buildable; what
-   is left is building it. `auction-addon-architecture.md` §5.
+   is left is building it. `research/auction-addon-architecture.md` §5.
 2a. Will Forever expose auction data through Blizzard's Game Data API? No Classic title
    has since late 2024, and TSM's entire architecture depends on that feed. This gates
    what *kind* of economy addon is possible, independently of question 1.
-   `auction-addon-architecture.md` §7.
+   `research/auction-addon-architecture.md` §7.
 3. **Answered 2026-09-18 (§P.18): the black box is combat-scoped, with one exception.**
    Auras, cooldowns, action cooldowns and unit stats are readable out of combat and become
    secret on entering it — the gates flip, measured both ways. `UnitPower` is the

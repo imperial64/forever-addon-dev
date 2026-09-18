@@ -7,7 +7,7 @@ Probe output lands here via scripts/collect-savedvars.ps1. Timestamped so runs c
   the auction surface, the secrecy gates and the bridge state. Note it holds the CRASHED
   run of 14:23 rather than the clean one that followed: the client flushes on logout, and
   the fix landed between the two. Its gate values read ERR for anything taking arguments;
-  the corrected table is in docs/findings.md section P.10.
+  the corrected table is in research/findings.md section P.10.
 
 Its existence is itself the finding: the client writes SavedVariables even though it never
 reads them back, which is the outbound half of the bridge working. See findings section P.9.

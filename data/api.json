@@ -1,14 +1,14 @@
 {
  "build": {
-  "build": null,
-  "capture": "ForeverProbe_2026-09-18_164207_apidocs-full2.lua",
+  "build": "69913",
+  "capture": "ForeverProbe_2026-09-18_170953_apidocs-stamped.lua",
   "events": 1802,
   "functions": 6577,
-  "generated": "2026-09-18 16:41:16",
-  "interface": null,
+  "generated": "2026-09-18 17:08:45",
+  "interface": "16001",
   "systems": 408,
   "tables": 792,
-  "version": null
+  "version": "1.60.1"
  },
  "systems": {
   "AccessibilityOptions": {

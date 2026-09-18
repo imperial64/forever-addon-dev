@@ -46,7 +46,7 @@ local db = ForeverProbeDB
 -- executes it as ADDON CODE at load, and the addon reads it back out of memory.
 -- There is no polling and no push - new data costs a /reload. It works because the
 -- file is code being run, not data being read, which is the only door the sandbox
--- leaves open. See docs/auction-addon-architecture.md section 5.
+-- leaves open. See research/auction-addon-architecture.md section 5.
 --
 -- BridgeData.lua is that file. It ships with a known default so an untouched
 -- install is distinguishable from a successful external write.
@@ -431,7 +431,7 @@ end
 
 -- Auction House ---------------------------------------------------------------
 -- The economy addon is the goal, so this decides the project. Checks come from
--- docs/auction-addon-architecture.md section 9.
+-- research/auction-addon-architecture.md section 9.
 --
 -- PRESENCE ONLY. Nothing in here posts, bids, buys or cancels. The seven
 -- restricted functions are scanned for existence and never called - calling them
@@ -794,7 +794,7 @@ local function ahLiveReads()
 end
 
 -- Auction House measurement --------------------------------------------------
--- Presence is settled: docs/findings.md section 0.1 read the modern namespace off
+-- Presence is settled: research/findings.md section 0.1 read the modern namespace off
 -- a capture of this exact build. What is NOT settled is every number, and the
 -- numbers are what decide the addon's data model:
 --

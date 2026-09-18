@@ -1,7 +1,7 @@
 -- BridgeData.lua
 --
 -- The inbound half of the Claude Code bridge, and the probe for section 9 item 6
--- of docs/auction-addon-architecture.md.
+-- of research/auction-addon-architecture.md.
 --
 -- This file is meant to be OVERWRITTEN by a process outside the game. The client
 -- has no io, no os and no sockets, so the only way to hand an addon data from

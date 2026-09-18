@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
 
 # TRY_PURCHASE_TO_NODE_PARTIAL_SUCCESS
 

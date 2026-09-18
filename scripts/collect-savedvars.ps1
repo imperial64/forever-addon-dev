@@ -43,7 +43,7 @@ if (-not $found) {
 }
 
 $stamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
-$dataDir = Join-Path $repo "data"
+$dataDir = Join-Path $repo "research\captures"
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 
 foreach ($f in $found) {
@@ -77,4 +77,4 @@ foreach ($key in @("tocversion", "maskedReads", "flatBan", "combatOnly", "secrec
     Write-Host ("  {0,-18} {1}" -f $key, $hit)
 }
 Write-Host ""
-Write-Host "Hand the file in data/ to Claude for analysis." -ForegroundColor Cyan
+Write-Host "Hand the file in research/captures/ to Claude for analysis." -ForegroundColor Cyan

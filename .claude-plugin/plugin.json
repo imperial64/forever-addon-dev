@@ -1,0 +1,17 @@
+{
+  "name": "forever-addon-dev",
+  "displayName": "WoW Forever Addon Dev",
+  "description": "Build World of Warcraft: Forever addons against measured ground truth: the client's own API documentation, plus a restriction list established by probing a live client rather than by reading patch notes.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Efe Ayvaz"
+  },
+  "license": "MIT",
+  "keywords": [
+    "world-of-warcraft",
+    "wow-forever",
+    "addon",
+    "lua",
+    "api-reference"
+  ]
+}
