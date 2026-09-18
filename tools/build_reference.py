@@ -499,6 +499,59 @@ class ReferenceBuilder:
             lines.append("")
         self._write(self.out / "RESTRICTIONS.md", lines)
 
+    def update_skill_table(self, skill: Path) -> bool:
+        """Rewrite the generated block inside the restrictions skill.
+
+        The skill carries the whole table inline so that "what am I not allowed to
+        do" is answerable in one load with no follow-up reads. Inline content
+        drifts from its source, so the table is written here instead of by hand:
+        the prose around the markers is hand-written, everything between them is
+        generated from restrictions.yaml.
+        """
+        begin = "<!-- BEGIN GENERATED restrictions-table -->"
+        end = "<!-- END GENERATED restrictions-table -->"
+        if not skill.exists() or not self.restrictions.entries:
+            return False
+        text = skill.read_text(encoding="utf-8")
+        if begin not in text or end not in text:
+            return False
+
+        rows = ["## Every restriction, measured", "",
+                "| Applies to | Verdict | Scope | What happens |",
+                "|---|---|---|---|"]
+        for entry in sorted(self.restrictions.entries,
+                            key=lambda e: (e.get("scope", ""), e["id"])):
+            # A label wins when one is given: most of these entries are
+            # behaviours, not symbols, and printing an internal id in the
+            # "applies to" column reads like a bug.
+            if entry.get("label"):
+                target_text = entry["label"]
+            else:
+                targets = (entry.get("symbols") or entry.get("events")
+                           or entry.get("namespaces") or [entry.get("gate") or entry["id"]])
+                target_text = ", ".join(f"`{t}`" for t in targets[:2])
+                if len(targets) > 2:
+                    target_text += f" +{len(targets) - 2}"
+            rows.append(
+                "| {t} | **{v}** | {s} | {summary} |".format(
+                    t=target_text,
+                    v=VERDICT_LABEL.get(entry.get("verdict", ""), entry.get("verdict", "")),
+                    s=entry.get("scope", ""),
+                    summary=" ".join((entry.get("summary") or "").split()),
+                )
+            )
+        meta = self.restrictions.meta
+        rows += ["",
+                 f"Measured {meta.get('measured_on')} on client {meta.get('client')} build"
+                 f" {meta.get('build')}. Detail and evidence for each:"
+                 " `reference/api/RESTRICTIONS.md`."]
+
+        head = text.split(begin)[0]
+        tail = text.split(end)[1]
+        skill.write_text(head + begin + "\n" + "\n".join(rows) + "\n" + end + tail,
+                         encoding="utf-8", newline="\n")
+        return True
+
     def validate(self, findings: Path) -> list[str]:
         """A restriction pointing at a symbol that no longer exists is the failure
         that actually bites: Blizzard removes a function and the guidance keeps
@@ -577,6 +630,9 @@ def main() -> int:
     parser.add_argument("--restrictions", type=Path, default=Path("research/restrictions.yaml"))
     parser.add_argument("--restrictions-json", type=Path, default=Path("data/restrictions.json"))
     parser.add_argument("--findings", type=Path, default=Path("research/findings.md"))
+    parser.add_argument("--skill-table", type=Path,
+                        default=Path("skills/restrictions/SKILL.md"),
+                        help="skill file whose generated restrictions table to refresh")
     parser.add_argument("--surface", type=Path, default=None,
                         help="a capture containing globalFunctions/namespaces, used to "
                              "stub symbols the client has but Blizzard does not document")
@@ -606,6 +662,9 @@ def main() -> int:
     builder.build()
     builder.write_restrictions_page()
     info = builder.write_build_info(args.capture)
+
+    if builder.update_skill_table(args.skill_table):
+        print(f"  restrictions table refreshed in {args.skill_table}")
 
     problems = builder.validate(args.findings)
     unused = [e["id"] for e in restrictions.entries

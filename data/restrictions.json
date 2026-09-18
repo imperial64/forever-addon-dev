@@ -26,6 +26,7 @@
    "gate": "C_Secrets.ShouldAurasBeSecret",
    "id": "aura-secrecy",
    "kind": "category",
+   "label": "C_UnitAuras (all reads)",
    "namespaces": [
     "C_UnitAuras"
    ],
@@ -77,6 +78,7 @@
    "gate": "C_Secrets.ShouldUnitStatsBeSecret",
    "id": "unit-stats-secrecy",
    "kind": "category",
+   "label": "Unit stats",
    "scope": "in-combat",
    "summary": "Unit stats become secret in combat.",
    "verdict": "secret"
@@ -89,6 +91,7 @@
    "gate": "C_Secrets.ShouldUnitThreatValuesBeSecret",
    "id": "threat-values-secrecy",
    "kind": "category",
+   "label": "Threat values",
    "scope": "in-combat",
    "summary": "Threat VALUES are secret in combat, but threat STATE is not.\n",
    "verdict": "secret"
@@ -100,6 +103,7 @@
    ],
    "id": "readable-in-combat",
    "kind": "note",
+   "label": "Identity, max health, casts, threat state",
    "scope": "in-combat",
    "summary": "Unit identity, max health, spell casts and threat state stay readable in combat.\n",
    "verdict": "permitted"
@@ -189,6 +193,7 @@
    ],
    "id": "savedvariables-not-read-back",
    "kind": "behaviour",
+   "label": "SavedVariables",
    "scope": "always",
    "summary": "The client writes SavedVariables and never reads them back.\n",
    "verdict": "broken",
@@ -217,6 +222,7 @@
    ],
    "id": "secret-value-contagion",
    "kind": "behaviour",
+   "label": "Any secret value",
    "scope": "always",
    "summary": "tostring() on a secret value returns a SECRET STRING. The taint survives conversion.\n",
    "verdict": "caution",
@@ -230,6 +236,7 @@
    ],
    "id": "unknown-event-registration-throws",
    "kind": "behaviour",
+   "label": "RegisterEvent",
    "scope": "always",
    "summary": "RegisterEvent on an event this client does not have RAISES, aborting the rest of the file.\n",
    "verdict": "caution",

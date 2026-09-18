@@ -61,6 +61,7 @@ entries:
 
   # -- Value secrecy --------------------------------------------------------
   - id: aura-secrecy
+    label: "C_UnitAuras (all reads)"
     kind: category
     gate: C_Secrets.ShouldAurasBeSecret
     namespaces: [C_UnitAuras]
@@ -114,6 +115,7 @@ entries:
     evidence: [P.18]
 
   - id: unit-stats-secrecy
+    label: "Unit stats"
     kind: category
     gate: C_Secrets.ShouldUnitStatsBeSecret
     verdict: secret
@@ -122,6 +124,7 @@ entries:
     evidence: [P.18]
 
   - id: threat-values-secrecy
+    label: "Threat values"
     kind: category
     gate: C_Secrets.ShouldUnitThreatValuesBeSecret
     verdict: secret
@@ -136,6 +139,7 @@ entries:
     evidence: [P.18]
 
   - id: readable-in-combat
+    label: "Identity, max health, casts, threat state"
     kind: note
     verdict: permitted
     scope: in-combat
@@ -224,6 +228,7 @@ entries:
     evidence: [P.15, P.17]
 
   - id: savedvariables-not-read-back
+    label: "SavedVariables"
     kind: behaviour
     verdict: broken
     scope: always
@@ -254,6 +259,7 @@ entries:
     evidence: [P.10, P.18]
 
   - id: secret-value-contagion
+    label: "Any secret value"
     kind: behaviour
     verdict: caution
     scope: always
@@ -272,6 +278,7 @@ entries:
     evidence: [P.2]
 
   - id: unknown-event-registration-throws
+    label: "RegisterEvent"
     kind: behaviour
     verdict: caution
     scope: always
