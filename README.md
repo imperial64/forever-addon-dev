@@ -18,8 +18,8 @@ The plugin answers three questions:
 ## Install
 
 ```
-/plugin marketplace add <this repo>
-/plugin install forever-addon-dev
+/plugin marketplace add imperial64/forever-addon-dev
+/plugin install forever-addon-dev@forever-addon-dev
 ```
 
 ## What makes the restriction list worth having

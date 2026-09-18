@@ -11,7 +11,9 @@
       "source": "./",
       "description": "Build WoW Forever addons against measured ground truth: the client's own API documentation, plus a restriction list established by probing a live client.",
       "version": "0.1.0",
-      "license": "MIT"
+      "license": "MIT",
+      "homepage": "https://github.com/imperial64/forever-addon-dev",
+      "repository": "https://github.com/imperial64/forever-addon-dev"
     }
   ]
 }

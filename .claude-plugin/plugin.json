@@ -13,5 +13,7 @@
     "addon",
     "lua",
     "api-reference"
-  ]
+  ],
+  "homepage": "https://github.com/imperial64/forever-addon-dev",
+  "repository": "https://github.com/imperial64/forever-addon-dev"
 }
