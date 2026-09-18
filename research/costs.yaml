@@ -1,0 +1,135 @@
+# What calls cost on WoW Forever.
+#
+# The companion to research/restrictions.yaml, and the same kind of file: the
+# single hand-maintained source, read by the generator, which emits
+#
+#   1. a cost banner on every affected page in reference/api/
+#   2. data/costs.json
+#   3. reference/api/COSTS.md
+#   4. cross-link validation - every symbol named here must resolve to a
+#      generated page, and every evidence anchor must exist in findings
+#
+# so those views cannot drift from this file. Edit costs HERE, never in the
+# generated tree.
+#
+# Why this is separate from restrictions.yaml rather than a `kind` inside it.
+# A restriction is what the client REFUSES: it is a policy decision, it is the
+# same on every machine, and it stays true until Blizzard changes it. A cost is
+# what a permitted call PRICES: it is a measurement, it moves with the hardware
+# and the build, and nothing refuses anything. Mixing them would make the
+# restriction list answer two different questions, and would let a number
+# nobody re-measured sit under a heading that promises measured policy.
+#
+# The practical consequence of that difference is the staleness rule below.
+# Restriction data is stable and verified by a probe this repo ships. Cost data
+# is pinned to one build on one machine, and NOTHING in this repo re-measures
+# it: `regenerate` rebuilds the API surface from your client and leaves these
+# numbers exactly as they were. Treat them as an order of magnitude, and
+# re-measure before building on an exact figure.
+
+meta:
+  measured_on: 2026-09-18
+  client: "1.60.1"
+  build: "69913"
+  interface: 16001
+  measured_by: AmbianceCost
+  evidence_doc: research/findings.md
+  capture: research/captures/AmbianceCost_2026-09-18_215313_cost-bench.lua
+  machine: "RTX 5080, 1920x1080, D3D12, gxMaximize=1 (maximized windowed)"
+  combat: "out of combat in all runs"
+  method: >
+    debugprofilestart/debugprofilestop around an adaptively sized loop; loop
+    overhead measured separately and subtracted; each call benched on its own
+    frame. Allocation measured with the collector stopped, so that a collection
+    inside the loop cannot read as a negative delta and report "allocates
+    nothing".
+  instrument: >
+    AmbianceCost, an addon in a separate repository. It is not shipped here and
+    /fprobe does not reproduce any of this; the capture is checked in so the
+    numbers can be re-derived rather than taken on trust.
+  staleness: >
+    Pinned to build 69913 on one machine. Nothing in this repo re-measures
+    these, so a new build invalidates them silently. Time figures are guidance
+    about proportion; the allocation figures are the ones that constrain a
+    design.
+  # Units, so a reader never has to guess which column is which:
+  #   time_us - microseconds per call, [min, max] across `runs` runs
+  #   bytes   - bytes allocated per call, as measured with the collector stopped
+  units:
+    time: microseconds per call
+    bytes: bytes allocated per call
+
+entries:
+  - id: player-map-position
+    label: "Reading player position"
+    symbols: [C_Map.GetPlayerMapPosition]
+    runs: 5
+    measurements:
+      - label: bare call
+        time_us: [4.38, 5.71]
+        bytes: 1864
+      - label: plus GetXY() to get two numbers
+        time_us: [4.91, 7.91]
+    summary: >
+      Allocates 1864 bytes on EVERY call. The allocation is the constraint here,
+      not the time.
+    detail: >
+      The call returns a position object exposing GetXY() rather than two
+      numbers, and building that object costs 1864 bytes - byte-identical across
+      all five runs, so this is the shape of the object rather than measurement
+      noise. Unpacking it with GetXY() costs time but no further allocation
+      worth recording; the 1864 bytes is the object the call hands back. Polled every frame that is roughly 218 KB/s of garbage at 120 fps
+      and 500 KB/s at 274; on a 10 Hz accumulator it is about 18 KB/s. Nothing
+      refuses this call and the time is negligible against a frame; the garbage
+      is what would show up as a stutter under the collector. Behaviour inside
+      an instance was NOT measured - retail returns nil there.
+    guidance: >
+      Poll position on an accumulator rather than per frame, and guard for a nil
+      return.
+    evidence: [Q.2]
+
+  - id: best-map-for-unit
+    label: "Resolving the current map"
+    symbols: [C_Map.GetBestMapForUnit]
+    runs: 5
+    measurements:
+      - label: the call
+        time_us: [0.610, 0.636]
+        bytes: 0
+    summary: >
+      Cheap - seven to nine times cheaper than the position read.
+    detail: >
+      Returns a numeric uiMapID. Its cost is not what would make a position
+      poller expensive; player-map-position is. It is still a map-tree lookup
+      rather than a field read, so it does not belong inside a per-frame path
+      even at this price.
+    guidance: >
+      Resolve it on a zone-change event and hold the id, rather than re-asking
+      inside the poll.
+    evidence: [Q.3]
+
+  - id: cvar-write
+    label: "Writing a CVar"
+    symbols: [C_CVar.SetCVar, SetCVar]
+    runs: 5
+    measurements:
+      - label: value changed
+        time_us: [0.786, 0.823]
+      - label: value unchanged
+        time_us: [0.304, 0.316]
+    summary: >
+      Sub-microsecond, so a CVar write is affordable at frame rate. A changed
+      value costs about 2.6x a no-op write.
+    detail: >
+      Measured through C_CVar.SetCVar on Brightness. That a changed value costs
+      more says the client does real work on change - and that the work is still
+      under a microsecond, about 0.02% of a frame at 274 fps. This is the number
+      under the P.22 conclusion that driving brightness from OnUpdate is a cheap
+      live post-process rather than a device restart; P.22 measured a ceiling
+      (442 writes over four seconds with no frame spike), this is the cost.
+      Whether a write lands AT ALL in combat is a restriction question and is
+      still unmeasured - see graphics-cvars-writable in the restriction list.
+    guidance: >
+      Do not cache a CVar value to avoid the write; a redundant write is cheaper
+      than most of the work you would do to avoid it.
+    evidence: [Q.4]

@@ -1,0 +1,108 @@
+{
+ "entries": [
+  {
+   "detail": "The call returns a position object exposing GetXY() rather than two numbers, and building that object costs 1864 bytes - byte-identical across all five runs, so this is the shape of the object rather than measurement noise. Unpacking it with GetXY() costs time but no further allocation worth recording; the 1864 bytes is the object the call hands back. Polled every frame that is roughly 218 KB/s of garbage at 120 fps and 500 KB/s at 274; on a 10 Hz accumulator it is about 18 KB/s. Nothing refuses this call and the time is negligible against a frame; the garbage is what would show up as a stutter under the collector. Behaviour inside an instance was NOT measured - retail returns nil there.\n",
+   "evidence": [
+    "Q.2"
+   ],
+   "guidance": "Poll position on an accumulator rather than per frame, and guard for a nil return.\n",
+   "id": "player-map-position",
+   "label": "Reading player position",
+   "measurements": [
+    {
+     "bytes": 1864,
+     "label": "bare call",
+     "time_us": [
+      4.38,
+      5.71
+     ]
+    },
+    {
+     "label": "plus GetXY() to get two numbers",
+     "time_us": [
+      4.91,
+      7.91
+     ]
+    }
+   ],
+   "runs": 5,
+   "summary": "Allocates 1864 bytes on EVERY call. The allocation is the constraint here, not the time.\n",
+   "symbols": [
+    "C_Map.GetPlayerMapPosition"
+   ]
+  },
+  {
+   "detail": "Returns a numeric uiMapID. Its cost is not what would make a position poller expensive; player-map-position is. It is still a map-tree lookup rather than a field read, so it does not belong inside a per-frame path even at this price.\n",
+   "evidence": [
+    "Q.3"
+   ],
+   "guidance": "Resolve it on a zone-change event and hold the id, rather than re-asking inside the poll.\n",
+   "id": "best-map-for-unit",
+   "label": "Resolving the current map",
+   "measurements": [
+    {
+     "bytes": 0,
+     "label": "the call",
+     "time_us": [
+      0.61,
+      0.636
+     ]
+    }
+   ],
+   "runs": 5,
+   "summary": "Cheap - seven to nine times cheaper than the position read.\n",
+   "symbols": [
+    "C_Map.GetBestMapForUnit"
+   ]
+  },
+  {
+   "detail": "Measured through C_CVar.SetCVar on Brightness. That a changed value costs more says the client does real work on change - and that the work is still under a microsecond, about 0.02% of a frame at 274 fps. This is the number under the P.22 conclusion that driving brightness from OnUpdate is a cheap live post-process rather than a device restart; P.22 measured a ceiling (442 writes over four seconds with no frame spike), this is the cost. Whether a write lands AT ALL in combat is a restriction question and is still unmeasured - see graphics-cvars-writable in the restriction list.\n",
+   "evidence": [
+    "Q.4"
+   ],
+   "guidance": "Do not cache a CVar value to avoid the write; a redundant write is cheaper than most of the work you would do to avoid it.\n",
+   "id": "cvar-write",
+   "label": "Writing a CVar",
+   "measurements": [
+    {
+     "label": "value changed",
+     "time_us": [
+      0.786,
+      0.823
+     ]
+    },
+    {
+     "label": "value unchanged",
+     "time_us": [
+      0.304,
+      0.316
+     ]
+    }
+   ],
+   "runs": 5,
+   "summary": "Sub-microsecond, so a CVar write is affordable at frame rate. A changed value costs about 2.6x a no-op write.\n",
+   "symbols": [
+    "C_CVar.SetCVar",
+    "SetCVar"
+   ]
+  }
+ ],
+ "meta": {
+  "build": "69913",
+  "capture": "research/captures/AmbianceCost_2026-09-18_215313_cost-bench.lua",
+  "client": "1.60.1",
+  "combat": "out of combat in all runs",
+  "evidence_doc": "research/findings.md",
+  "instrument": "AmbianceCost, an addon in a separate repository. It is not shipped here and /fprobe does not reproduce any of this; the capture is checked in so the numbers can be re-derived rather than taken on trust.\n",
+  "interface": 16001,
+  "machine": "RTX 5080, 1920x1080, D3D12, gxMaximize=1 (maximized windowed)",
+  "measured_by": "AmbianceCost",
+  "measured_on": "2026-09-18",
+  "method": "debugprofilestart/debugprofilestop around an adaptively sized loop; loop overhead measured separately and subtracted; each call benched on its own frame. Allocation measured with the collector stopped, so that a collection inside the loop cannot read as a negative delta and report \"allocates nothing\".\n",
+  "staleness": "Pinned to build 69913 on one machine. Nothing in this repo re-measures these, so a new build invalidates them silently. Time figures are guidance about proportion; the allocation figures are the ones that constrain a design.\n",
+  "units": {
+   "bytes": "bytes allocated per call",
+   "time": "microseconds per call"
+  }
+ }
+}

@@ -64,6 +64,17 @@ the date, and what was run. The probe that produced it is in `addons/ForeverProb
 raw captures are in `research/captures/`, so any claim can be re-derived rather than taken
 on trust.
 
+Cost data is kept out of this directory entirely. What a *permitted* call prices is in
+`reference/api/COSTS.md`, generated from `research/costs.yaml`, because a cost is a
+measurement on one machine rather than a policy the client enforces — and it goes stale
+faster than anything here.
+
+One section is measured by a **second instrument**: `research/findings.md` §Q is a
+microbenchmark from an addon in another repository, covering what calls cost rather than
+what the client permits. Its capture is checked in with the others so the numbers can still
+be re-derived, but the addon that produced it is not here and `/fprobe` does not reproduce
+it. Cost figures are therefore pinned to build 69913 in a way the policy findings are not.
+
 The machine-readable copy is `data/restrictions.json`, generated from
 `research/restrictions.yaml` — which is the single hand-maintained source for all of this.
 

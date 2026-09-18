@@ -74,9 +74,10 @@ does not document. Without it those pages are missing, and a missing page stops 
 
 - `reference/api/BUILD.md` names the new build and says `client build <n>` rather than
   `unknown`. Unknown means the capture predates the dumper recording it — re-dump.
-- The generator prints any restriction that no longer resolves. **Read those.** A symbol
-  named in `research/restrictions.yaml` that has vanished from the client is the failure
-  that actually matters: guidance that keeps recommending a function Blizzard removed.
+- The generator prints any restriction or cost that no longer resolves. **Read those.** A
+  symbol named in `research/restrictions.yaml` or `research/costs.yaml` that has vanished
+  from the client is the failure that actually matters: guidance that keeps recommending a
+  function Blizzard removed.
 - `git diff --stat reference/api` **is the patch delta.** Generation is deterministic and
   no per-symbol page carries a timestamp, so every changed file is a real API change
   between the two builds. That diff is worth reading.
@@ -100,3 +101,17 @@ first, because this build does not read SavedVariables back.
 New findings go into `research/restrictions.yaml`, which regenerates the banners, the
 JSON, `reference/api/RESTRICTIONS.md` and the table inside the restrictions skill. Never
 edit those by hand — they are generated, and the generated tree carries a header saying so.
+
+## Cost data does not regenerate either, and is the staler half
+
+`research/costs.yaml` holds what a *permitted* call costs — per-call time and allocation —
+and feeds the `COST` banners, `data/costs.json` and `reference/api/COSTS.md` by the same
+contract. Regenerating against a new build **carries those numbers forward untouched**,
+because they came from a microbenchmark rather than from the client's documentation.
+
+That is the one place this reference can go quietly wrong: a restriction that stops being
+true usually shows up as a symbol that no longer resolves, and the generator says so. A cost
+that stops being true looks exactly like a cost that is still true. So when you regenerate
+against a build that moved, treat everything in `COSTS.md` as unverified until it is
+re-measured, and say so rather than quoting it as current. No probe subcommand measures
+these today; `research/findings.md` §Q records how they were taken.

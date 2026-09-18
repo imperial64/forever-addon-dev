@@ -171,8 +171,11 @@ Before writing against any function, two habits worth keeping:
 Longer form, written for someone who has not read the research:
 
 - `reference/guides/getting-started.md` — first addon, .toc, installing, enabling
-- `reference/guides/pitfalls.md` — the five above, in detail, plus the three failure shapes
+- `reference/guides/pitfalls.md` — the five above in detail, plus the CVar enable-flag trap
+  and the three failure shapes
 - `reference/guides/savedvariables.md` — persistence, and moving data in and out
+- `reference/guides/performance.md` — measured per-call costs, and the two traps in
+  measuring them yourself
 
 ## Two recipes worth knowing before you design
 
@@ -182,6 +185,14 @@ Longer form, written for someone who has not read the research:
   read, it is throttled, and a throttled call returns an *empty market* rather than an
   error — so any addon that calls it has to track its own scan timing. `research/findings.md`
   P.15–P.17.
+- **Reading player position is a garbage problem, not a time problem.**
+  `C_Map.GetPlayerMapPosition` returns an object with `GetXY()` and allocates **1864 bytes
+  per call** — about 218 KB/s polled every frame at 120 fps, against 18 KB/s on a 10 Hz
+  accumulator. Time is not the constraint; nothing measured here costs more than a few
+  microseconds. Two traps in measuring it yourself: `OnUpdate` `elapsed` is quantised to
+  1 ms on this client, so it cannot profile anything smaller, and an allocation measurement
+  needs `collectgarbage("stop")` first or a collection mid-loop reads as "allocates
+  nothing". `reference/guides/performance.md`, `research/findings.md` Q.2-Q.6.
 - **Moving data in and out of the client.** The inbound channel is a generated `.lua` file
   the `.toc` lists and the client executes at load; the outbound channel is SavedVariables
   read from disk; the cost is a manual `/reload` per refresh, because `ReloadUI()` is

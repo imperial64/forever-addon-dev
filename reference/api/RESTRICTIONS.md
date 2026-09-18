@@ -2,7 +2,7 @@
 
 # Restrictions
 
-Measured on client 1.60.1 build 69913 (interface 16001) with ForeverProbe.
+Measured on client 1.60.1 build 69913 (interface 16001) with ForeverProbe (P); AmbianceCost (Q).
 
 Everything here was measured against a running client. Blizzard's own documentation says what a function takes; this says whether the client will let an addon call it and whether the value can be read.
 
@@ -11,7 +11,9 @@ Everything here was measured against a running client. Blizzard's own documentat
 | `C_ChatInfo.SendAddonMessage`, `C_ChatInfo.SendAddonMessageLogged` | **CAUTION** | always | AreOutgoingAddonChatMessagesRestricted() returns true, in and out of combat. |
 | `C_AssistedCombat.IsAvailable`, `C_AssistedCombat.GetRotationSpells` | **PERMITTED** | always | C_AssistedCombat exists but reports itself unavailable. |
 | `COMBAT_LOG_EVENT`, `COMBAT_LOG_EVENT_UNFILTERED` | **FORBIDDEN** | always | Addons may not register for the combat log, in either form. |
+| `C_CVar.GetCVar`, `GetCVar` | **CAUTION** | always | A CVar's VALUE does not tell you whether it is in effect. The enable flag is a separate CVar. |
 | `C_CVar.SetCVar`, `SetCVar` | **PERMITTED** | always | Display brightness and contrast ARE addon-writable, live, at frame rate. |
+| `onupdate-elapsed-quantised` | **CAUTION** | always | The elapsed argument to an OnUpdate script is quantised to 1 ms. |
 | `ReloadUI` | **FORBIDDEN** | always | An addon cannot reload the UI. A human must type /reload. |
 | `C_AuctionHouse.ReplicateItems` | **FAILS SILENTLY** | always | A throttled full scan returns an EMPTY MARKET, not an error. |
 | `retail-graphics-cvar-names-absent` | **CAUTION** | always | gxBrightness, gxContrast and gxGamma do NOT exist on this client. |
@@ -82,15 +84,35 @@ ShouldCooldownsBeSecret() and ShouldActionCooldownBeSecret() are both false out 
 
 _Evidence: §P.18 in `research/findings.md`._
 
+## cvar-enable-flag-pairing
+
+A CVar's VALUE does not tell you whether it is in effect. The enable flag is a separate CVar.
+
+Measured with the client running uncapped at 273.7 fps: maxFPS read 120 and targetFPS read 60, while useMaxFPS and useTargetFPS both read 0. A slider CVar retains its last position whether or not the limit is applied, so an addon reading maxFPS alone concludes the client is capped at 120 when it is running at more than twice that - with no error, because nothing failed. The same shape is recorded for HDRBrightness/useHDRBrightness and HDRPeakBrightness/useHDRPeakBrightness in P.22. Two instances is a pattern to check for, NOT a proven convention: no enumeration was done to establish that every <Name> carries a use<Name>. Reads only - whether an addon can WRITE useMaxFPS was not measured.
+
+**Workaround.** Before trusting a CVar's value, look for a paired use<Name> and read it with GetCVarBool. ConsoleGetAllCommands() enumerates the real names, which is how the graphics CVars in P.22 were found; do not assume a flag exists because a neighbouring CVar has one.
+
+_Evidence: §Q.1, §P.22 in `research/findings.md`._
+
 ## graphics-cvars-writable
 
 Display brightness and contrast ARE addon-writable, live, at frame rate.
 
-Brightness, Contrast and Gamma carry no lock flags - GetCVarInfo reports isLockedFromUser, isSecure and isReadOnly all false. Writes land through both C_CVar.SetCVar and the undocumented global SetCVar, identically, and read back exactly. A write is a cheap live post-process, not a device restart: a four-second sweep writing every frame from OnUpdate managed 442 writes over 443 frames at 111 fps, worst frame gap 31 ms. Brightness and Contrast are on a 0-100 scale (default 50), Gamma centres on 1.0. Measured in maximized windowed mode at 1920x1080, so this is not fullscreen-only. NOT measured in combat: SetCVar is not a protected function and none of these carry lock flags, so a block is unlikely, but P.20 has already shown this client's action gating does not always match retail.
+Brightness, Contrast and Gamma carry no lock flags - GetCVarInfo reports isLockedFromUser, isSecure and isReadOnly all false. Writes land through both C_CVar.SetCVar and the undocumented global SetCVar, identically, and read back exactly. A write is a cheap live post-process, not a device restart: a four-second sweep writing every frame from OnUpdate managed 442 writes over 443 frames at 111 fps, worst frame gap 31 ms. That is a ceiling rather than a cost; the per-call figures are in research/costs.yaml under cvar-write. Brightness and Contrast are on a 0-100 scale (default 50), Gamma centres on 1.0. Measured in maximized windowed mode at 1920x1080, so this is not fullscreen-only. NOT measured in combat: SetCVar is not a protected function and none of these carry lock flags, so a block is unlikely, but P.20 has already shown this client's action gating does not always match retail.
 
 **Workaround.** Until /fprobe video has been run mid-fight, freeze on PLAYER_REGEN_DISABLED and resume on PLAYER_REGEN_ENABLED rather than assuming the write lands in combat.
 
 _Evidence: §P.22 in `research/findings.md`._
+
+## onupdate-elapsed-quantised
+
+The elapsed argument to an OnUpdate script is quantised to 1 ms.
+
+Across 15 phases covering 19,692 frames, every retained frame-gap statistic is a whole number of milliseconds and every accumulated phase duration lands on an exact multiple of 1 ms. Frame-rate-independent easing on elapsed is unaffected - the quantisation is far below the time constants involved - but an addon that profiles itself by accumulating elapsed produces noise for anything costing under about a millisecond, and the noise looks like data.
+
+**Workaround.** Use debugprofilestart/debugprofilestop, which are present and working on this client and have microsecond resolution.
+
+_Evidence: §Q.5 in `research/findings.md`._
 
 ## readable-in-combat
 

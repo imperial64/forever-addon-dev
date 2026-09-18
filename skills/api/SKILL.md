@@ -55,6 +55,9 @@ Grep: "itemKey" in reference/api/namespaces/
   them. `UnitAura` → `C_UnitAuras.GetAuraDataByIndex`, `QueryAuctionItems` →
   `C_AuctionHouse.SendBrowseQuery`. Forever removed the Classic-era globals wholesale, so
   this is the most common reason a lookup fails.
+- `reference/api/COSTS.md` — what a permitted call prices, for the handful where the
+  number changes a design. A page carrying a `COST` banner has been benchmarked; a page
+  without one has not been, which is not the same as being free.
 - `reference/api/namespaces/_index.md` — every namespace with its counts, for "which area
   even owns this".
 - `reference/api/INDEX.md` — every symbol with its path. The fallback, not the first move:
