@@ -1522,6 +1522,186 @@ local function printReport()
     db.delta = { combatOnly = combatOnly, flatBan = flatBan, maskedReads = masked }
 end
 
+-- Blizzard's own API documentation ------------------------------------------
+-- The whole plugin plan hangs on this one question: does Forever ship
+-- Blizzard_APIDocumentationGenerated, and may an addon load it?
+--
+-- If yes, every function signature - argument names, types, nilable flags,
+-- return types, events, enums and structures - comes out of the client itself,
+-- and stays correct across beta patches for free. If no, the fallback is hand
+-- curation from retail sources, which is inference rather than measurement and
+-- against this repo's whole point.
+--
+-- APIDocumentation_LoadUI is PRESENT in our global dump. That is not the same as
+-- being allowed to call it - RegisterEvent was present and refused (findings
+-- section P.1) - so the call is attributed like any other action test.
+--
+-- This command measures and reports. It deliberately does NOT dump everything:
+-- the size of one system is what decides whether the real dump has to be
+-- chunked, and guessing that would mean writing the dumper twice.
+
+local function keysOf(t, limit)
+    if type(t) ~= "table" then return plain(t) end
+    local keys = {}
+    for k in pairs(t) do keys[#keys + 1] = plain(k) end
+    table.sort(keys)
+    local n = #keys
+    if limit and n > limit then
+        local cut = {}
+        for i = 1, limit do cut[i] = keys[i] end
+        keys = cut
+        keys[#keys + 1] = ("...(%d total)"):format(n)
+    end
+    return table.concat(keys, ", ")
+end
+
+local function countField(system, field)
+    local v = system and system[field]
+    if type(v) ~= "table" then return 0 end
+    return #v
+end
+
+local function probeApiDocs()
+    out("|cff44ddffAPI DOCUMENTATION|r")
+    local api = {}
+
+    if not APIDocumentation_LoadUI then
+        out("  |cffff4444APIDocumentation_LoadUI ABSENT|r - this client has no doc system")
+        api.loaderPresent = false
+        db.apiDocsProbe = api
+        return
+    end
+    api.loaderPresent = true
+
+    -- Presence is not permission. Attribute the call so a refusal is recorded as
+    -- a refusal rather than as a mystery.
+    activeTest = "APIDocumentation_LoadUI"
+    local okLoad, loadErr = pcall(APIDocumentation_LoadUI)
+    activeTest = nil
+    local blocked = blocksFor("APIDocumentation_LoadUI")
+    api.loadOk = okLoad
+    api.loadErr = (not okLoad) and plain(loadErr) or nil
+    api.blockEvents = (#blocked > 0) and blocked or nil
+
+    if #blocked > 0 then
+        out("  |cffff4444FORBIDDEN|r - " .. plain(blocked[1]))
+        out("  Addons may not load the documentation. The plugin needs the fallback.")
+        db.apiDocsProbe = api
+        return
+    end
+    if not okLoad then
+        out("  |cffff4444load ERR|r " .. plain(loadErr))
+        db.apiDocsProbe = api
+        return
+    end
+
+    local doc = APIDocumentation
+    if type(doc) ~= "table" then
+        out("  |cffff4444loaded, but no APIDocumentation global|r - the addon is a stub")
+        api.globalPresent = false
+        db.apiDocsProbe = api
+        return
+    end
+    api.globalPresent = true
+    api.docKeys = keysOf(doc, 25)
+    out("  |cff44ff44loaded|r. APIDocumentation keys: " .. plain(api.docKeys):sub(1, 200))
+
+    local systems = doc.systems
+    if type(systems) ~= "table" then
+        out("  |cffffaa00no .systems array|r - walk APIDocumentation keys above instead")
+        db.apiDocsProbe = api
+        return
+    end
+
+    -- Totals, and the breakdown by system Type. "ScriptObject" is how Blizzard
+    -- classifies widget/frame methods; if that count is zero then the generated
+    -- docs cover the C API only, and the plugin must not claim to document
+    -- Frame:SetPoint and friends.
+    local nFunctions, nEvents, nTables = 0, 0, 0
+    local byType, namespaced = {}, 0
+    for _, sys in ipairs(systems) do
+        nFunctions = nFunctions + countField(sys, "Functions")
+        nEvents    = nEvents    + countField(sys, "Events")
+        nTables    = nTables    + countField(sys, "Tables")
+        local t = plain(sys.Type or "nil")
+        byType[t] = (byType[t] or 0) + 1
+        if sys.Namespace then namespaced = namespaced + 1 end
+    end
+    api.systemCount, api.functionCount = #systems, nFunctions
+    api.eventCount, api.tableCount = nEvents, nTables
+    api.namespacedSystems = namespaced
+    api.systemsByType = byType
+
+    out(("  systems %d (%d namespaced) | functions %d | events %d | tables %d")
+        :format(#systems, namespaced, nFunctions, nEvents, nTables))
+    local typeParts = {}
+    for t, n in pairs(byType) do typeParts[#typeParts + 1] = t .. "=" .. n end
+    table.sort(typeParts)
+    out("  system types: " .. table.concat(typeParts, " "))
+    if not byType["ScriptObject"] then
+        out("  |cffffaa00no ScriptObject systems|r - widget/frame methods are NOT documented here")
+    end
+
+    -- The shape of one function, read off rather than assumed. The generator is
+    -- written against whatever this prints, not against retail's schema.
+    local sample, sampleSystem
+    for _, sys in ipairs(systems) do
+        local fns = sys.Functions
+        if type(fns) == "table" and fns[1] then sample, sampleSystem = fns[1], sys
+            break
+        end
+    end
+    if sample then
+        api.sampleSystem = plain(sampleSystem.Name)
+        api.sampleNamespace = plain(sampleSystem.Namespace)
+        api.sampleFunction = plain(sample.Name)
+        api.sampleKeys = keysOf(sample, 20)
+        out(("  sample %s.%s"):format(plain(sampleSystem.Namespace or "_G"), plain(sample.Name)))
+        out("    keys: " .. plain(api.sampleKeys):sub(1, 220))
+        if type(sample.Arguments) == "table" and sample.Arguments[1] then
+            api.sampleArgKeys = keysOf(sample.Arguments[1], 12)
+            api.sampleArg = shapeOf(sample.Arguments[1], 0)
+            out("    arg[1]: " .. plain(api.sampleArg):sub(1, 200))
+        end
+        if type(sample.Returns) == "table" and sample.Returns[1] then
+            api.sampleReturn = shapeOf(sample.Returns[1], 0)
+            out("    ret[1]: " .. plain(api.sampleReturn):sub(1, 200))
+        end
+        -- Tier 1 of the plugin's restriction data: Blizzard's own flag.
+        api.sampleHasRestrictions = plain(sample.HasRestrictions)
+        local restricted = 0
+        for _, sys in ipairs(systems) do
+            for _, fn in ipairs(sys.Functions or {}) do
+                if fn.HasRestrictions then restricted = restricted + 1 end
+            end
+        end
+        api.restrictedFunctionCount = restricted
+        out(("    functions flagged HasRestrictions: %d"):format(restricted))
+    else
+        out("  |cffffaa00no function entries found|r")
+    end
+
+    -- Size. This is the number that decides whether the dumper chunks per system
+    -- or writes in one pass - the largest SavedVariables flush this repo has
+    -- managed is 303 KB, and retail's doc set is several MB.
+    if C_EncodingUtil and C_EncodingUtil.SerializeJSON and sampleSystem then
+        local okJson, json = pcall(C_EncodingUtil.SerializeJSON, sampleSystem)
+        if okJson and type(json) == "string" then
+            api.sampleSystemBytes = #json
+            api.estimatedTotalBytes = #json * #systems
+            out(("  one system serializes to %d bytes -> rough total %.1f MB across %d systems")
+                :format(#json, (#json * #systems) / 1048576, #systems))
+        else
+            api.jsonErr = plain(json)
+            out("  |cffffaa00SerializeJSON failed|r " .. plain(json):sub(1, 120))
+            out("  the dumper will need the raw Lua table fallback")
+        end
+    end
+
+    db.apiDocsProbe = api
+    out("  recorded. |cffffffff/reload|r then collect-savedvars.ps1")
+end
+
 -- Driver ----------------------------------------------------------------------
 SLASH_FPROBE1 = "/fprobe"
 SlashCmdList.FPROBE = function(arg)
@@ -1530,6 +1710,7 @@ SlashCmdList.FPROBE = function(arg)
     if cmd == "report" then return printReport() end
     if cmd == "blocked" then return printBlocked() end
     if cmd == "events" then return probeEvents() end
+    if cmd == "docs" then return probeApiDocs() end
     if cmd == "bridge" then return printBridge() end
     if cmd == "ah" then
         if sub == "scan" then return ahReplicateScan() end
