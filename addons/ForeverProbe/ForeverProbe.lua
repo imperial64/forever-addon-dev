@@ -153,10 +153,17 @@ end)
 local clog = { count = 0, inCombatCount = 0, eventFired = 0, samples = {}, subevents = {} }
 
 local clogFrame = CreateFrame("Frame")
-clog.registered = safeRegister(clogFrame, "COMBAT_LOG_EVENT_UNFILTERED")
--- CombatLogGetCurrentEventInfo is absent on the measured beta build, so the event
--- can fire with nothing on the other side to read it. Record the distinction:
--- "event never fires" and "event fires but is unreadable" are different answers.
+-- NOT registered at load, deliberately. Measured on our own client 2026-09-18:
+-- RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED") fires ADDON_ACTION_FORBIDDEN, out
+-- of combat, at load. The answer is in, and repeating it every login only trains
+-- the player to click Disable on a dialog that is actually a result.
+-- Re-check it deliberately with /fprobe events.
+clog.registered = false
+clog.registrationForbidden = "measured 2026-09-18: ADDON_ACTION_FORBIDDEN at load, out of combat"
+-- CombatLogGetCurrentEventInfo is absent on this build as well, so the restriction
+-- holds at two independent levels: an addon may not subscribe, and even if it did
+-- there is no reader. Record the distinction - "never fires", "fires but
+-- unreadable" and "may not listen" are three different answers.
 clog.readerPresent = CombatLogGetCurrentEventInfo ~= nil
 clogFrame:SetScript("OnEvent", function()
     clog.eventFired = (clog.eventFired or 0) + 1
@@ -988,6 +995,54 @@ local function printBridge()
     out("  wrote token " .. db.bridge.tokenWrittenThisSession .. " - it should reappear after /reload")
 end
 
+-- Which events may an addon listen to at all? -------------------------------
+-- COMBAT_LOG_EVENT_UNFILTERED is refused outright (measured). That single fact
+-- does not say whether the rule is "no combat log" or "no combat information",
+-- and those imply very different games. This walks the neighbourhood and
+-- attributes each refusal, unregistering as it goes so nothing is left listening.
+--
+-- Opt-in, because every refusal pops a dialog the player must dismiss.
+local EVENT_PROBE = {
+    -- the combat log itself, both forms
+    "COMBAT_LOG_EVENT_UNFILTERED", "COMBAT_LOG_EVENT",
+    -- combat state, which both live plans do not need but which bounds the rule
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "UNIT_COMBAT",
+    -- unit information the doctrine names
+    "UNIT_AURA", "UNIT_HEALTH", "UNIT_POWER_UPDATE", "UNIT_SPELLCAST_SUCCEEDED",
+    "UNIT_SPELLCAST_START", "UNIT_THREAT_LIST_UPDATE",
+    -- the two live plans' own events, which had better be fine
+    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_THROTTLED_SYSTEM_READY",
+    "CHAT_MSG_ADDON", "PLAYER_MONEY", "BAG_UPDATE",
+}
+
+local function probeEvents()
+    out("|cff44ddffEVENT SUBSCRIPTION probe|r - each refusal pops a dialog; press Ignore")
+    local probeFrame = CreateFrame("Frame")
+    local allowed, refused, missing = {}, {}, {}
+    for _, event in ipairs(EVENT_PROBE) do
+        local before = #blockLog
+        local ok = safeRegister(probeFrame, event)
+        if registerBlocked[event] then
+            refused[#refused + 1] = event
+        elseif not ok then
+            missing[#missing + 1] = event
+        else
+            allowed[#allowed + 1] = event
+            pcall(probeFrame.UnregisterEvent, probeFrame, event)
+        end
+        if #blockLog > before then registerBlocked[event] = registerBlocked[event] or "blocked" end
+    end
+    table.sort(allowed); table.sort(refused); table.sort(missing)
+    out("  |cff44ff44may listen:|r  " .. (table.concat(allowed, ", "):sub(1, 300)))
+    out("  |cffff4444REFUSED:|r    " .. (#refused > 0 and table.concat(refused, ", ") or "none"))
+    out("  |cffffaa00not on client:|r " .. (#missing > 0 and table.concat(missing, ", ") or "none"))
+    if #refused > 0 then
+        out("  The refused set is the shape of the rule: combat log only, or combat")
+        out("  information generally. Both live plans care only that their own events pass.")
+    end
+    db.eventProbe = { allowed = allowed, refused = refused, missing = missing }
+end
+
 local function printBlocked()
     out("|cff44ddffBLOCKED / FORBIDDEN actions captured|r")
     if #blockLog == 0 then
@@ -1224,8 +1279,8 @@ local function runActionTests()
     db.actions[label] = results
     db.blockLog = blockLog
     db.combatLog = clog
-    out(("combat log: registered=%s reader=%s fired=%d readable=%d inCombat=%d subevents=%d")
-        :format(tostring(clog.registered), tostring(clog.readerPresent),
+    out(("combat log: FORBIDDEN to register (measured). reader=%s fired=%d readable=%d inCombat=%d subevents=%d")
+        :format(tostring(clog.readerPresent),
                 clog.eventFired or 0, clog.count, clog.inCombatCount, (function()
             local n = 0; for _ in pairs(clog.subevents) do n = n + 1 end; return n
         end)()))
@@ -1314,6 +1369,7 @@ SlashCmdList.FPROBE = function(arg)
     cmd, sub = cmd or "", sub or ""
     if cmd == "report" then return printReport() end
     if cmd == "blocked" then return printBlocked() end
+    if cmd == "events" then return probeEvents() end
     if cmd == "bridge" then return printBridge() end
     if cmd == "ah" then
         if sub == "scan" then return ahReplicateScan() end

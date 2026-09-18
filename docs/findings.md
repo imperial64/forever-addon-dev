@@ -1,15 +1,15 @@
 # Findings — WoW Forever addon capabilities
 
-Last updated 2026-09-18. §0 is measured against the live beta client — a third-party
-capture, fetched and queried here, which supersedes every press source below it. Our own
-probe output supersedes §0 in turn, and does not exist yet.
+Last updated 2026-09-18. §P is our own probe, run on the beta client, and outranks
+everything. §0 is a third-party capture of the same build, fetched and queried here, which
+outranks every press source below it.
 
 Companion document: `auction-addon-architecture.md` — how existing auction addons acquire,
 store, price and act on market data, and the four constraints that decide whether the
 economy plan is buildable. Read it before designing anything Auction House related.
 
-Confidence labels, strongest first: **[MEASURED]** read off a capture of the running
-client · **[PRIMARY]** fetched and read directly · **[REPORTED]** credible secondary
+Confidence labels, strongest first: **[PROBE]** measured by ForeverProbe on our own
+client · **[MEASURED]** read off someone else's capture of the running client · **[PRIMARY]** fetched and read directly · **[REPORTED]** credible secondary
 source, fetched · **[UNVERIFIED]** surfaced in search, not independently confirmed ·
 **[EXCLUDED]** checked and found irrelevant or unreliable.
 
@@ -28,6 +28,76 @@ and expected to be reused across projects — so it is worth building even thoug
 the goal. Guild management was dropped to avoid splitting focus, not because anything
 blocks it; the guild APIs are almost certainly fine, which is exactly why the question is
 not interesting.
+
+---
+
+## P. Measured here, on our own client (2026-09-18)
+
+**[PROBE — ForeverProbe, run by Efe on beta build 1.60.1.69893, character in Elwynn
+Forest, out of combat]** This outranks everything below it, including §0. It is the first
+result in this document that came from our own client rather than someone else's capture
+or someone's reporting.
+
+### P.1 An addon may not register `COMBAT_LOG_EVENT_UNFILTERED` at all
+
+At load, before any command was typed, the client raised the forbidden-action dialog
+("ForeverProbe has been blocked from an action only available to the Blizzard UI") and
+fired:
+
+```
+ADDON_ACTION_FORBIDDEN func=UNKNOWN() during: RegisterEvent:COMBAT_LOG_EVENT_UNFILTERED
+```
+
+**This answers open question 4, and not in the shape anyone expected.** The doctrine (§3)
+says addons "cannot parse combat events in real time", which everybody — this document
+included — read as the event firing with fields stripped or masked. It is stronger than
+that: the addon is refused the *subscription*. There is nothing to parse because there is
+nothing to receive.
+
+The restriction holds at two independent levels. `CombatLogGetCurrentEventInfo` is also
+absent from this build entirely (§0.5), so even an addon that somehow held a subscription
+would have no reader for it.
+
+**Three things worth being precise about:**
+
+1. **This fired out of combat.** At load, standing in Elwynn Forest, with no target and no
+   combat anywhere near. So this particular restriction is **always-on, not combat-scoped**
+   — which is a genuine correction to how §0.3 framed the question. "Is the black box
+   combat-scoped?" is now two questions: the *event subscription* is unconditionally
+   forbidden, while the `C_Secrets` *value* gates may still turn on and off with combat.
+   Different mechanisms, measured separately. `/fprobe report` still has to answer the
+   second.
+2. **Nothing was raised.** `RegisterEvent` returned normally and the frame simply never
+   received the event. A `pcall` around it reports success. This is exactly the trap
+   `CLAUDE.md` warns about, found in a place we had not thought to look — not a masked
+   return value, but a refusal at the subscription level.
+3. **`func=UNKNOWN()`** — the client did not name the function in the event payload. The
+   attribution comes from the probe tagging each registration, not from the client.
+
+### P.2 Consequences
+
+- **Neither live plan is touched.** The economy addon and the bridge read auction data,
+  money, bags and addon messages. None of them subscribe to the combat log.
+- **The rotation helper stays closed** (§0.4, decided 2026-09-18). This would have been an
+  independent kill for it, had it still been open.
+- **`CleanCombatLog` (§5) is answered.** That developer is testing whether Forever permits
+  `COMBAT_LOG_EVENT_UNFILTERED`. It does not permit even listening. No need to keep
+  watching the repo for this.
+- **Blizzard's own damage meter is the only route to combat data**, which is consistent
+  with Jones saying they are shipping one (§1) and with `C_DamageMeter` being present
+  (§0.3).
+
+### P.3 Still to measure here
+
+`/fprobe events` walks the neighbourhood of the refusal and attributes each result, so the
+next run says whether the rule is "no combat log" or "no combat information": it tries
+`COMBAT_LOG_EVENT` as well as the unfiltered form, combat state events, the unit events
+the doctrine names, and — as the collateral-damage check — the events both live plans
+actually need (`AUCTION_HOUSE_SHOW`, `AUCTION_HOUSE_THROTTLED_SYSTEM_READY`,
+`CHAT_MSG_ADDON`, `PLAYER_MONEY`, `BAG_UPDATE`).
+
+The probe no longer registers the combat log at load. The answer is in, and repeating it
+every login only trains the player to dismiss a dialog that is a result.
 
 ---
 
@@ -274,9 +344,11 @@ allow-list published.
 warcraft: forever", a developer actively testing whether Forever permits
 `COMBAT_LOG_EVENT_UNFILTERED`.
 
-Worth tracking. This repo's commits will answer the black-box question before Blizzard
-documents anything. If the combat log still fires with full fields in Forever, the
-restriction is narrower than §1 implies.
+**Answered 2026-09-18 by our own probe — see §P.1.** Forever does not permit an addon to
+register `COMBAT_LOG_EVENT_UNFILTERED` at all, out of combat or otherwise, and
+`CombatLogGetCurrentEventInfo` is absent from the build. Nothing to track here any more;
+the question this repo existed to answer is closed, and closed harder than "fires with
+fewer fields".
 
 ---
 
@@ -385,11 +457,18 @@ presence rows are now confirmations rather than discoveries.
    has since late 2024, and TSM's entire architecture depends on that feed. This gates
    what *kind* of economy addon is possible, independently of question 1.
    `auction-addon-architecture.md` §7.
-3. Is the black box combat-only or always-on? Now cheap to answer: `C_Secrets` exposes
-   the gates directly and `/fprobe report` diffs them across combat states (§0.3). Every
-   gate is unit/spell/combat-scoped, so the expected answer is combat-only and the two
-   live plans are clear — this is the confirmation, not the discovery.
-4. Does `COMBAT_LOG_EVENT_UNFILTERED` still fire with full fields?
+3. Is the black box combat-only or always-on? **This is now two questions**, because §P.1
+   showed the restriction operates at two levels. Event *subscription* is unconditionally
+   forbidden — measured out of combat, at load. Whether the `C_Secrets` *value* gates are
+   combat-scoped is still open, and `/fprobe report` diffs them across combat states
+   (§0.3). Every gate is named for a unit, spell or combat concept, so the live plans are
+   still expected to be clear — but "the black box is combat-scoped" is too simple a
+   summary to keep repeating.
+4. **Answered 2026-09-18 (§P.1): the question does not apply.** An addon may not register
+   for the event at all — `ADDON_ACTION_FORBIDDEN`, at load, out of combat — and there is
+   no `CombatLogGetCurrentEventInfo` to read it with. What is left is the *boundary*:
+   whether the rule is "no combat log" or "no combat information". `/fprobe events`
+   answers that on the next run.
 5. What is actually inside "certain restrictions"? Only a published list or the beta
    client answers this.
 
@@ -398,3 +477,6 @@ per Tim Jones (§1) — hedged, but on the record. §0.3 shows the machinery tha
 it, and shows it is scoped to units, spells and combat.
 
 **Answered 2026-09-18:** which AH API, and what crosses the client boundary — §0.1, §0.2.
+
+**Answered 2026-09-18, from our own client:** addons may not subscribe to the combat log,
+and that restriction is not combat-scoped — §P.1.

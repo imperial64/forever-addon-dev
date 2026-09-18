@@ -71,9 +71,11 @@ What is still open, in order:
    generated-`.lua` channel is the mechanism, but on the beta the client writes
    SavedVariables and never reads them back, and `ReloadUI()` is protected. The outbound
    half can still be fine — that is what `collect-savedvars.ps1` decides.
-3. Is the box closed **only in combat**, or at all times? Now cheap: `C_Secrets` exposes
-   the gates and `/fprobe report` diffs them across combat states. Expected answer is
-   combat-only, so this is a confirmation and a collateral-damage check.
+3. Is the box closed **only in combat**, or at all times? Now known to be two separate
+   mechanisms. Event subscription is unconditionally forbidden — measured out of combat,
+   at load (`docs/findings.md` §P.1). Whether the `C_Secrets` value gates are combat-scoped
+   is still open; `/fprobe report` diffs them across combat states. Neither reaches what
+   the live plans read.
 
 `ForeverProbe` exists to answer these from our own client. Prioritise its out-of-combat
 run: that alone resolves both live plans. Presence is already known from §0 — what the
@@ -89,6 +91,10 @@ probe adds is permission, returned values, and runtime gating.
 - **A blocked action does not always raise a Lua error.** It often fires
   `ADDON_ACTION_BLOCKED` or `ADDON_ACTION_FORBIDDEN` instead. Any test using `pcall` alone
   will report a false "allowed". The probe captures both events.
+- **This applies to `RegisterEvent` too, which is where it actually bit us.** Measured
+  2026-09-18: registering `COMBAT_LOG_EVENT_UNFILTERED` is forbidden, returns normally,
+  and the frame simply never receives the event. A refusal can be a refusal to *listen*,
+  not just a masked value — check `/fprobe blocked` after any run.
 - **A black box does not error either.** Restricted reads return `nil`, `0`, or masked
   values while the function stays present. Compare returned *values* across combat states,
   never just whether the call succeeded.
@@ -119,6 +125,10 @@ Probe usage in-game:
 - `/fprobe ah throttle` — what the throttle actually turned out to be. Stay logged in
   after a scan; the client announces it and the probe prints the measured gap
 - `/fprobe bridge` — inbound `BridgeData.lua` and outbound SavedVariables flush
+- `/fprobe blocked` — every `ADDON_ACTION_BLOCKED`/`FORBIDDEN` captured, attributed to the
+  call that caused it. Run it after any forbidden-action popup
+- `/fprobe events` — which events an addon may subscribe to at all. Each refusal pops a
+  dialog; press Ignore
 - `/fprobe combat` — re-run the tests while actually in combat (pull a mob first)
 - `/fprobe report` — print the out-of-combat vs in-combat delta
 
