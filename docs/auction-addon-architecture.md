@@ -338,10 +338,15 @@ supply it. The probe is now a measuring instrument for four numbers:
 
 | Number | How the probe gets it | Retail baseline to compare against |
 |---|---|---|
-| `ReplicateItems` throttle | `/fprobe ah scan`, stay logged in, `AUCTION_HOUSE_THROTTLED_SYSTEM_READY` fires and the gap is printed | 900s account-wide (§3) |
-| Per-query browse cap | `/fprobe ah browse`, which walks `RequestMoreBrowseResults` on a timer until `HasFullBrowseResults` or the round cap, recording the gain per round | undocumented; the practical reason addons stopped scanning |
-| Owner attribution | replicate tuple sampled 500 rows deep, string-field indices recorded rather than assumed | `nil` for everyone but you since 9.0.2 (§3) |
-| Scan cost | time to first update, time to last, peak events per 0.1s bucket | ~2000 update events per frame; disconnects above ~80k auctions (§3) |
+| `ReplicateItems` throttle | **MEASURED: real, >162s and <=1047s, and SILENT — a throttled call returns an empty list, not an error** (`findings.md` §P.17) | 900s account-wide (§3), which fits the bracket |
+| Per-query browse cap | **MEASURED: no cap reached. 500 per page, complete 680-key market in 3 rounds / 3.0s, unthrottled** (§P.15) | undocumented; the practical reason addons stopped scanning |
+| Owner attribution | **MEASURED: `nil`, 0 of 500 rows** — same as retail, no seller attribution | `nil` for everyone but you since 9.0.2 (§3) |
+| Scan cost | **MEASURED: ~14,400 auctions in 3.0s in ONE event, peak 1 event per 0.1s bucket** | ~2000 update events per frame; disconnects above ~80k auctions (§3) |
+
+All four are now measured. The design consequence is in §P.16: browse is the data source
+and it is unthrottled, `ReplicateItems` is an optional deep read, and any addon using the
+latter must track its own last-scan time because the client reports the throttle as an
+empty market rather than as a refusal.
 
 Everything above is a read, fired out of combat, and nothing in it posts, bids, buys or
 cancels. Per §6 the auction restrictions that do exist are execute-side and predate the

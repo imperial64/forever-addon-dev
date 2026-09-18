@@ -380,6 +380,51 @@ does not yet generalise is the timing. Re-measure at launch.
 
 ---
 
+### P.17 The `ReplicateItems` throttle: real, bracketed, and silent
+
+Three scans, each stamped with absolute time, because this build cannot remember anything
+across a `/reload`:
+
+| Scan | Time | Gap since previous | Result |
+|---|---|---|---|
+| 1 | 15:25:20 | — | 14,389 auctions in 3.0s |
+| 2 | 15:42:47 | 1047s | 14,323 auctions in 2.7s |
+| 3 | 15:45:29 | **162s** | **0 items, 0 events** |
+
+**The throttle exists: greater than 162 seconds, at most 1047 seconds.** Retail's
+documented 900 sits inside that bracket and is the obvious candidate, but 900 is not
+measured here — only the bracket is.
+
+Scan 2 is worth calling out as a near-miss. It succeeded, which looked at first like
+evidence the throttle was gone; it was not. The gap was 1047 seconds, *outside* retail's
+window, so a 900-second throttle predicts exactly that success. Scan 3, fired deliberately
+inside the window, is the one that carries the information.
+
+Narrowing the bracket further would take a scan roughly every fifteen minutes for an hour,
+and **it would not change a single design decision**, because the browse path (§P.15) is
+unthrottled and returns the complete item-key market in three seconds. `ReplicateItems` is
+the optional deep read, not the data source. Left bracketed deliberately.
+
+**The failure mode is the actionable part.** A throttled `ReplicateItems`:
+
+- returns `true` from the call — `callOk = true`
+- fires **no** `REPLICATE_ITEM_LIST_UPDATE` at all
+- leaves `GetNumReplicateItems()` at 0
+
+In other words a throttled scan is **indistinguishable from an empty auction house**.
+There is no error, no event, and no API that reports the throttle —
+`IsThrottledMessageSystemReady` describes the message system and read `true` throughout
+(§P.15). Any addon using this path **must track its own last-scan time and refuse to call
+inside its own window**, because the client will not tell it. Hitting the throttle silently
+returns "the market is empty", which a naive addon would happily write over its price
+history.
+
+The 66-auction drop between scans 1 and 2 — 14,389 to 14,323 over seventeen minutes — is
+incidental but useful: it is the live turnover rate on a beta realm, and a first hint at
+how quickly a cached snapshot goes stale.
+
+---
+
 ### P.13 Consequences of P.1
 
 - **Neither live plan is touched.** The economy addon and the bridge read auction data,
@@ -749,13 +794,13 @@ presence rows are now confirmations rather than discoveries.
 
 ## Open questions, in priority order
 
-1. **Answered 2026-09-18 — three of the four numbers measured (§P.15).** Browse returns
-   the complete item-key market in 3 seconds over 3 rounds, unthrottled and repeatable
-   (500 per page, 680 keys total). `ReplicateItems` returns 14,389 auctions in 3 seconds
-   in a single event, with no client stall. Owner names are `nil`, so listings cannot be
-   attributed. **Only the `ReplicateItems` throttle is left**, and it can only be measured
-   by firing a second scan — the throttle event describes the message system, not the
-   15-minute replicate window. `auction-addon-architecture.md` §2, §3 and §9.
+1. **Closed 2026-09-18. All four numbers measured (§P.15, §P.17).** Browse returns the
+   complete item-key market in 3 seconds over 3 rounds, unthrottled and repeatable (500
+   per page, 680 keys). `ReplicateItems` returns ~14,400 auctions in 3 seconds in a single
+   event, no client stall, owner names `nil`. Its throttle is real and bracketed to
+   between 162 and 1047 seconds — and silent, returning an empty list rather than an
+   error. Deliberately not narrowed further: browse is unthrottled, so the exact figure
+   changes no design decision. `auction-addon-architecture.md` §2, §3 and §9.
 2. **Closed 2026-09-18 by measurement (§P.9).** Outbound works — the SavedVariables file
    is on disk and an external process can read it. Inbound works — the generated `.lua` is
    executed as addon code and the receiver runs. The client not reading its own saves back
