@@ -24,7 +24,7 @@ Two plans, down from four. Don't add a third.
 | Economy / TradeSkillMaster-style | **The goal — unblocked 2026-09-18** | None. Forever ships the full modern `C_AuctionHouse`; what is left is measuring throttle and caps |
 | Claude Code bridge | Tooling, built alongside | Partly. Sandbox intact, inbound `.lua` channel works, but `ReloadUI()` is protected so a human must `/reload` |
 | Guild management | **Scrapped** 2026-09-17 | None — dropped to keep focus, not blocked |
-| Rotation helper | **Shelved** 2026-09-17 | Read side restricted. `C_AssistedCombat` is present in the beta, which is a revival trigger — Efe's call, not Claude's |
+| Rotation helper | **Closed** 2026-09-18 | Read side restricted. `C_AssistedCombat` is present in the beta; Efe was asked and declined to reopen on it. Do not raise it again |
 
 The economy addon is what this project is for. The bridge is **general-purpose tooling for
 talking to Claude Code from inside a running client**, not a WoW feature — it is expected
@@ -35,10 +35,11 @@ WoW notifications look nice".
 Guild management is scrapped: nothing blocks it, which is precisely why it was not worth
 the divided attention. Do not probe for it, design it, or reopen it without Efe asking.
 
-The rotation helper is not an active plan: do not design, scaffold, or spec against it. It
-gets exactly one probe kill-check (`docs/findings.md` §7) and comes back only if the black
-box turns out to be readable out of combat — and even then only as a pre-pull planning
-display, not a live recommender.
+The rotation helper is not an active plan: do not design, scaffold, or spec against it.
+As of 2026-09-18 it is closed rather than merely shelved — `C_AssistedCombat` turned out to
+be present in the beta, which was its stated revival trigger, and Efe declined to reopen on
+it. The probe records what that API returns because the record should be accurate. Nothing
+else follows. Do not raise it again without Efe raising it first.
 
 ## The central question
 
@@ -61,10 +62,11 @@ list has been published, but the Midnight→Forever link is no longer a press in
 
 What is still open, in order:
 
-1. The Auction House **numbers**: real scan throttle, result caps, and whether
-   `ReplicateItems` still carries owner names. The API question itself is answered —
-   modern `C_AuctionHouse`, 85 functions, no legacy API. `/fprobe ah scan` is the only
-   thing that answers the rest.
+1. The Auction House **numbers** — the active piece of work. Real scan throttle, the
+   per-query browse cap, whether `ReplicateItems` still carries owner names, and how long
+   a full scan takes. The API question itself is answered: modern `C_AuctionHouse`, 85
+   functions, no legacy API. `/fprobe ah browse` is free and repeatable; `/fprobe ah scan`
+   costs the throttle; `/fprobe ah throttle` reports what the throttle turned out to be.
 2. Does the bridge's round trip survive this build? The sandbox is intact and the inbound
    generated-`.lua` channel is the mechanism, but on the beta the client writes
    SavedVariables and never reads them back, and `ReloadUI()` is protected. The outbound
@@ -108,8 +110,14 @@ edit addons/ForeverProbe/  ->  scripts/install-addon.ps1  ->  play, run /fprobe
 Probe usage in-game:
 
 - `/fprobe` — static API surface scan plus action and read tests, out of combat
-- `/fprobe ah` — Auction House detail; run it standing at an auction house
+- `/fprobe ah` — Auction House detail, shapes and throttle state; run it standing at an
+  auction house
+- `/fprobe ah browse [rounds]` — the cheap measurement: fires one browse query and walks
+  `RequestMoreBrowseResults`, timing each round, to find the per-query cap. Costs nothing
+  and can be repeated
 - `/fprobe ah scan` — fire a full `ReplicateItems` scan. Burns the 15-minute throttle
+- `/fprobe ah throttle` — what the throttle actually turned out to be. Stay logged in
+  after a scan; the client announces it and the probe prints the measured gap
 - `/fprobe bridge` — inbound `BridgeData.lua` and outbound SavedVariables flush
 - `/fprobe combat` — re-run the tests while actually in combat (pull a mob first)
 - `/fprobe report` — print the out-of-combat vs in-combat delta

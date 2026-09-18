@@ -34,6 +34,21 @@ CLAUDE.md              project context and working rules
 .\scripts\collect-savedvars.ps1      # pull the results into data/
 ```
 
+**The Auction House run, which is the open piece of work.** Stand at an auction house with
+the window open:
+
+```
+/fprobe ah            presence, shapes, throttle state
+/fprobe ah browse     one browse query, walked to its cap. Free, repeatable
+/fprobe ah scan       full ReplicateItems scan. Burns the 15 minute throttle
+                      -> stay logged in; the throttle-cleared line prints itself
+/fprobe ah throttle   what the throttle actually turned out to be
+/reload               flush SavedVariables
+```
+
+That sequence closes the four numbers in `docs/auction-addon-architecture.md` §9, which is
+all that stands between this repo and building the economy addon.
+
 The out-of-combat run is the one that matters now: it prints an `AH` verdict (which Auction
 House API, if any) and a `BRIDGE` verdict (which channels exist across the client
 boundary), which between them decide both live plans without the combat pass.

@@ -459,12 +459,23 @@ local function sampleReplicate(limit)
     local ok, total = pcall(num)
     total = (ok and total) or 0
     local samples, withOwner, withoutOwner = {}, 0, 0
+    local stringFields = {}
     local last = total
     if limit < last then last = limit end
     for i = 0, last - 1 do
         local gotInfo, info = pcall(function() return packReturns(get(i)) end)
         if gotInfo then
+            -- 14/15 is the RETAIL tuple position for owner and ownerFullName. A
+            -- Classic+ client can return a different shape entirely, so the index
+            -- check is only a first guess: every string field is also recorded, and
+            -- the raw tuple is kept so the real shape can be read off afterwards
+            -- rather than trusted.
             local owner, ownerFull = info[14], info[15]
+            local strIdx = {}
+            for k = 1, info.n do
+                if type(info[k]) == "string" then strIdx[#strIdx + 1] = k end
+            end
+            stringFields[table.concat(strIdx, ",")] = (stringFields[table.concat(strIdx, ",")] or 0) + 1
             if owner ~= nil or ownerFull ~= nil then
                 withOwner = withOwner + 1
             else
@@ -481,7 +492,7 @@ local function sampleReplicate(limit)
             end
         end
     end
-    return total, samples, withOwner, withoutOwner
+    return total, samples, withOwner, withoutOwner, stringFields
 end
 
 local function finishReplicateScan()
@@ -489,9 +500,10 @@ local function finishReplicateScan()
     ahScan.done = true
     ahScanFrame:UnregisterEvent("REPLICATE_ITEM_LIST_UPDATE")
 
-    local total, samples, withOwner, withoutOwner = sampleReplicate(200)
+    local total, samples, withOwner, withoutOwner, stringFields = sampleReplicate(500)
     ahScan.total, ahScan.samples = total, samples
     ahScan.ownersPresent, ahScan.ownersNil = withOwner, withoutOwner
+    ahScan.stringFieldLayouts = stringFields
 
     db.auctionHouse = db.auctionHouse or {}
     db.auctionHouse.scan = ahScan
@@ -499,10 +511,16 @@ local function finishReplicateScan()
     if total == 0 and ahScan.updates == 0 then
         out("  |cffff4444no update event and 0 items|r - throttled, unsupported, or the AH window was shut")
     else
-        out(("  |cff44ff44replicate scan|r %d auctions, %d update events, first response %.1fs")
-            :format(total, ahScan.updates, ahScan.elapsed or -1))
-        out(("  owner names: %d with, %d nil (retail returns nil for everyone but you since 9.0.2)")
+        out(("  |cff44ff44replicate scan|r %d auctions, %d update events, first response %.1fs, last %.1fs")
+            :format(total, ahScan.updates, ahScan.elapsed or -1, ahScan.lastUpdateAt or -1))
+        local peak = 0
+        for _, n in pairs(ahScan.perTenth or {}) do if n > peak then peak = n end end
+        out(("  peak %d update events in one 0.1s bucket (retail caps around 2000 per frame)"):format(peak))
+        out(("  owner names at retail index 14/15: %d with, %d nil (retail returns nil since 9.0.2)")
             :format(withOwner, withoutOwner))
+        for layout, n in pairs(stringFields) do
+            out(("  string fields at indices [%s] in %d rows"):format(layout, n))
+        end
         if samples[1] then
             out(("  shape: %d returns | %s"):format(samples[1].returns, samples[1].tuple:sub(1, 150)))
         end
@@ -512,6 +530,13 @@ end
 ahScanFrame:SetScript("OnEvent", function(_, event)
     if event ~= "REPLICATE_ITEM_LIST_UPDATE" or not ahScan or ahScan.done then return end
     ahScan.updates = ahScan.updates + 1
+    ahScan.lastUpdateAt = GetTime() - ahScan.startedAt
+    -- Retail caps REPLICATE_ITEM_LIST_UPDATE at roughly 2000 per frame. Bucketing
+    -- by frame time shows whether Forever does the same, which is the difference
+    -- between a scan that stalls the client and one that does not.
+    local bucket = math.floor(ahScan.lastUpdateAt * 10)
+    ahScan.perTenth = ahScan.perTenth or {}
+    ahScan.perTenth[bucket] = (ahScan.perTenth[bucket] or 0) + 1
     if ahScan.updates == 1 then ahScan.elapsed = GetTime() - ahScan.startedAt end
 end)
 
@@ -612,6 +637,255 @@ local function ahLiveReads()
     live.perPage = NUM_AUCTION_ITEMS_PER_PAGE
     db.auctionHouse = db.auctionHouse or {}
     db.auctionHouse.live = live
+end
+
+-- Auction House measurement --------------------------------------------------
+-- Presence is settled: docs/findings.md section 0.1 read the modern namespace off
+-- a capture of this exact build. What is NOT settled is every number, and the
+-- numbers are what decide the addon's data model:
+--
+--   * how much of the market one browse query can return, and at what cost
+--   * the real ReplicateItems throttle, which retail documents as 900s
+--   * whether replicate results still carry owner names (retail stripped them in
+--     9.0.2) - that decides whether the addon can attribute listings at all
+--   * how fast results arrive, which decides whether a scan is a background task
+--     or a thing the player waits for
+--
+-- None of this can be inferred from a function list. All of it is a read.
+-- Nothing here posts, bids, buys or cancels.
+
+local AH_EVENTS = {
+    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
+    "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED", "AUCTION_HOUSE_BROWSE_RESULTS_ADDED",
+    "AUCTION_HOUSE_BROWSE_FAILURE", "AUCTION_HOUSE_THROTTLED_SYSTEM_READY",
+    "COMMODITY_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_UPDATED",
+}
+
+local ahEvents = CreateFrame("Frame")
+local ahEventSupport, ahEventCount = {}, {}
+for _, e in ipairs(AH_EVENTS) do
+    ahEventSupport[e] = safeRegister(ahEvents, e) and true or false
+end
+
+-- Browse measurement state. Deliberately a plain table rather than a closure so
+-- the whole thing lands in SavedVariables exactly as measured.
+local browse = nil
+
+local function browseCount()
+    local f = C_AuctionHouse and C_AuctionHouse.GetBrowseResults
+    if not f then return -1 end
+    local ok, r = pcall(f)
+    if not ok or type(r) ~= "table" then return -1 end
+    return #r
+end
+
+local function browseIsFull()
+    local f = C_AuctionHouse and C_AuctionHouse.HasFullBrowseResults
+    if not f then return nil end
+    local ok, v = pcall(f)
+    -- Not `ok and v or nil`: a legitimate false would collapse to nil there, and
+    -- "the client says the results are incomplete" is the single most important
+    -- answer this whole measurement produces.
+    if not ok then return nil end
+    return v
+end
+
+local function browseRound(reason)
+    if not browse or browse.done then return end
+    local n, full = browseCount(), browseIsFull()
+    browse.rounds[#browse.rounds + 1] = {
+        reason = reason,
+        at = GetTime() - browse.startedAt,
+        results = n,
+        gained = n - (browse.lastCount or 0),
+        full = tostring(full),
+    }
+    browse.lastCount = n
+    browse.full = full
+end
+
+ahEvents:SetScript("OnEvent", function(_, event)
+    ahEventCount[event] = (ahEventCount[event] or 0) + 1
+
+    -- The throttle, measured rather than assumed. Retail documents 900 seconds
+    -- account-wide between successful ReplicateItems calls; this records what
+    -- Forever actually does by timing the gap from the request to the client
+    -- saying it is ready again. Note this only survives a /reload if the client
+    -- reads SavedVariables back, which on this build it reportedly does not - so
+    -- do the scan and the wait in ONE session.
+    if event == "AUCTION_HOUSE_THROTTLED_SYSTEM_READY" then
+        db.auctionHouse = db.auctionHouse or {}
+        local t = db.auctionHouse.throttle or {}
+        t.readyAt = time()
+        local history = db.auctionHouse.scanHistory
+        local last = history and history[#history]
+        if last then
+            t.secondsSinceLastScan = t.readyAt - last
+            out(("|cff44ddffAH|r throttle cleared %d seconds after the last scan (retail: 900)")
+                :format(t.secondsSinceLastScan))
+        end
+        db.auctionHouse.throttle = t
+        return
+    end
+
+    if event == "AUCTION_HOUSE_BROWSE_FAILURE" then
+        if browse then browse.failed = true end
+        out("|cffff4444browse query FAILED|r")
+        return
+    end
+    if event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" or event == "AUCTION_HOUSE_BROWSE_RESULTS_ADDED" then
+        browseRound(event == "AUCTION_HOUSE_BROWSE_RESULTS_ADDED" and "added" or "updated")
+    end
+end)
+
+local function finishBrowse()
+    if not browse or browse.done then return end
+    browse.done = true
+    browse.elapsed = GetTime() - browse.startedAt
+    browse.total = browseCount()
+    browse.events = {}
+    for k, v in pairs(ahEventCount) do browse.events[k] = v end
+
+    db.auctionHouse = db.auctionHouse or {}
+    db.auctionHouse.browse = browse
+
+    out(("|cff44ff44browse|r %d results in %.1fs over %d rounds, full=%s%s")
+        :format(browse.total, browse.elapsed, #browse.rounds, tostring(browse.full),
+                browse.failed and " |cffff4444(a query failed)|r" or ""))
+    if browse.total >= 0 and browse.full == false then
+        out("  |cffffaa00not complete|r - this is a per-query cap, not the size of the market")
+    end
+    for i, r in ipairs(browse.rounds) do
+        if i <= 8 then
+            out(("    round %d %-7s %.1fs  %d results (+%d) full=%s")
+                :format(i, r.reason, r.at, r.results, r.gained, r.full))
+        end
+    end
+end
+
+-- Cheap, repeatable, and NOT the 15-minute throttle: an empty-filter browse is
+-- what every modern auction addon actually uses, so its cap and cadence matter
+-- more to the design than ReplicateItems does.
+local function ahBrowseMeasure(rounds)
+    if not (C_AuctionHouse and C_AuctionHouse.SendBrowseQuery) then
+        out("|cffff4444no C_AuctionHouse.SendBrowseQuery|r")
+        return
+    end
+    local open = (AuctionHouseFrame and AuctionHouseFrame:IsShown()) or false
+    if not open then
+        out("|cffffaa00auction house window is not open|r - open it first")
+        return
+    end
+
+    rounds = tonumber(rounds) or 6
+    browse = { startedAt = GetTime(), rounds = {}, lastCount = 0, requested = rounds }
+
+    activeTest = "SendBrowseQuery"
+    local ok, err = pcall(C_AuctionHouse.SendBrowseQuery, {
+        searchString = "", sorts = {}, filters = {}, itemClassFilters = {},
+    })
+    activeTest = nil
+    browse.callOk = ok
+    browse.callErr = (not ok) and tostring(err):sub(1, 200) or nil
+    local blocked = blocksFor("SendBrowseQuery")
+    browse.blockEvents = (#blocked > 0) and blocked or nil
+    if not ok then
+        out("|cffff4444SendBrowseQuery ERR|r " .. tostring(err):sub(1, 120))
+        return
+    end
+    out(("browse query sent, pulling %d more-result rounds..."):format(rounds))
+
+    -- Walk RequestMoreBrowseResults on a timer. Each round is spaced enough for
+    -- the server to answer, and the walk stops early once the client says the
+    -- results are complete - the round it stops on IS the per-query cap.
+    local i = 0
+    local function step()
+        i = i + 1
+        if not browse or browse.done then return end
+        if browse.full == true or i > rounds then return finishBrowse() end
+        if C_AuctionHouse.RequestMoreBrowseResults then
+            local okMore = pcall(C_AuctionHouse.RequestMoreBrowseResults)
+            if not okMore then return finishBrowse() end
+            browseRound("requested")
+        end
+        C_Timer.After(1.5, step)
+    end
+    C_Timer.After(1.5, step)
+end
+
+-- The one call that costs something. Retail: 15 minute account-wide throttle,
+-- anonymised since 9.0.2, and a per-frame event cap around 2000.
+local function ahThrottleReport()
+    db.auctionHouse = db.auctionHouse or {}
+    local t = db.auctionHouse.throttle or {}
+    local history = db.auctionHouse.scanHistory or {}
+    local last = history[#history]
+    out("|cff44ddffAH throttle|r")
+    out("  events supported: " .. (ahEventSupport["AUCTION_HOUSE_THROTTLED_SYSTEM_READY"]
+        and "AUCTION_HOUSE_THROTTLED_SYSTEM_READY yes" or "|cffffaa00no THROTTLED_SYSTEM_READY event|r"))
+    if C_AuctionHouse and C_AuctionHouse.IsThrottledMessageSystemReady then
+        local ok, ready = pcall(C_AuctionHouse.IsThrottledMessageSystemReady)
+        out("  ready right now:  " .. tostring(ok and ready))
+    end
+    if last then
+        out(("  last scan:        %d seconds ago"):format(time() - last))
+    else
+        out("  last scan:        none this session")
+    end
+    if t.secondsSinceLastScan then
+        out(("  |cff44ff44measured throttle: %d seconds|r (retail is 900)"):format(t.secondsSinceLastScan))
+    else
+        out("  measured throttle: not yet - run /fprobe ah scan, stay logged in, and watch for the")
+        out("  'throttle cleared' line. It prints itself when the client says the system is ready.")
+    end
+    for _, e in ipairs(AH_EVENTS) do
+        if not ahEventSupport[e] then out("  |cffffaa00unsupported event:|r " .. e) end
+    end
+    db.auctionHouse.eventCounts = ahEventCount
+    db.auctionHouse.eventSupport = ahEventSupport
+end
+
+-- Shapes that decide how the addon stores what it reads. All cheap reads off
+-- whatever the client already has cached.
+local function ahShapes()
+    local shapes = {}
+    local function record(name, fn)
+        local ok, v = pcall(function() return fn() end)
+        if not ok then shapes[name] = "ERR: " .. tostring(v):sub(1, 80); return end
+        if type(v) == "table" then
+            local parts = {}
+            for k, val in pairs(v) do
+                parts[#parts + 1] = tostring(k) .. "=" .. tostring(val)
+                if #parts >= 12 then break end
+            end
+            shapes[name] = table.concat(parts, " "):sub(1, 300)
+        else
+            shapes[name] = tostring(v)
+        end
+        out(("  %-22s %s"):format(name, tostring(shapes[name]):sub(1, 60)))
+    end
+
+    -- Time-left bands are the whole basis of "is this listing about to expire",
+    -- and a Classic+ title could easily ship different bands from retail's four.
+    if C_AuctionHouse and C_AuctionHouse.GetTimeLeftBandInfo then
+        for band = 1, 5 do
+            record("timeLeftBand" .. band, function() return C_AuctionHouse.GetTimeLeftBandInfo(band) end)
+        end
+    end
+    -- Item keys are the join key for every price record the addon will ever keep.
+    if C_AuctionHouse and C_AuctionHouse.GetItemKeyFromItem then
+        record("itemKeyFromItem(2589)", function() return C_AuctionHouse.GetItemKeyFromItem(2589) end)
+    end
+    if C_AuctionHouse and C_AuctionHouse.GetAvailablePostCount then
+        record("availablePostCount", function() return C_AuctionHouse.GetAvailablePostCount(2589) end)
+    end
+    if C_AuctionHouse and C_AuctionHouse.GetItemCommodityStatus then
+        record("commodityStatus(2589)", function()
+            return C_AuctionHouse.GetItemCommodityStatus(C_AuctionHouse.GetItemKeyFromItem(2589))
+        end)
+    end
+    db.auctionHouse = db.auctionHouse or {}
+    db.auctionHouse.shapes = shapes
 end
 
 -- Bridge report ---------------------------------------------------------------
@@ -973,15 +1247,23 @@ end
 -- Driver ----------------------------------------------------------------------
 SLASH_FPROBE1 = "/fprobe"
 SlashCmdList.FPROBE = function(arg)
-    local cmd, sub = ((arg or ""):lower()):match("^%s*(%S*)%s*(%S*)")
+    local cmd, sub, extra = ((arg or ""):lower()):match("^%s*(%S*)%s*(%S*)%s*(%S*)")
     cmd, sub = cmd or "", sub or ""
     if cmd == "report" then return printReport() end
     if cmd == "bridge" then return printBridge() end
     if cmd == "ah" then
         if sub == "scan" then return ahReplicateScan() end
+        if sub == "browse" then return ahBrowseMeasure(extra) end
+        if sub == "throttle" then return ahThrottleReport() end
         probeAuctionHouse()
         ahLiveReads()
-        out("full scan (fires ReplicateItems, burns the 15 min throttle): |cffffffff/fprobe ah scan|r")
+        out("|cff44ddffshapes|r")
+        ahShapes()
+        ahThrottleReport()
+        out("measure the numbers:")
+        out("  |cffffffff/fprobe ah browse|r    cheap, repeatable - per-query cap and cadence")
+        out("  |cffffffff/fprobe ah scan|r      full ReplicateItems scan, burns the 15 min throttle")
+        out("  |cffffffff/fprobe ah throttle|r  what the throttle actually turned out to be")
         return
     end
     if cmd == "combat" then

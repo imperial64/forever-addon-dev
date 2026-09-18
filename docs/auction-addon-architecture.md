@@ -320,19 +320,34 @@ the better source and is what §2 uses.
 
 ## 9. What this changes for the probe
 
-`/fprobe` currently answers "is `C_AuctionHouse` present". That is no longer enough. It
-should also record:
+**Updated 2026-09-18.** The presence questions are closed — `findings.md` §0.1 read the
+modern namespace, the commodity split and the absence of the legacy API straight off a
+capture of the live beta client. What is left is arithmetic, and no function list can
+supply it. The probe is now a measuring instrument for four numbers:
 
-1. Which of the seven restricted functions exist, and whether their presence matches
-   retail's `HasRestrictions` set.
-2. Whether `ReplicateItems` / `GetNumReplicateItems` exist, and what the throttle is.
-3. Whether legacy `QueryAuctionItems` / `CanSendAuctionQuery` coexist, as they do in MoP
-   Classic.
-4. Whether `GetReplicateItemInfo` returns owner names, or `nil` as retail does since 9.0.2.
-5. Whether commodities exist at all — `GetItemCommodityStatus`,
-   `GetNumCommoditySearchResults`. A Classic+ game may have no commodity split.
-6. Confirmation that an addon-folder `.lua` file written by an external process is executed
-   at load (the §5 bridge), and whether SavedVariables still flush on `/reload`.
+| Number | How the probe gets it | Retail baseline to compare against |
+|---|---|---|
+| `ReplicateItems` throttle | `/fprobe ah scan`, stay logged in, `AUCTION_HOUSE_THROTTLED_SYSTEM_READY` fires and the gap is printed | 900s account-wide (§3) |
+| Per-query browse cap | `/fprobe ah browse`, which walks `RequestMoreBrowseResults` on a timer until `HasFullBrowseResults` or the round cap, recording the gain per round | undocumented; the practical reason addons stopped scanning |
+| Owner attribution | replicate tuple sampled 500 rows deep, string-field indices recorded rather than assumed | `nil` for everyone but you since 9.0.2 (§3) |
+| Scan cost | time to first update, time to last, peak events per 0.1s bucket | ~2000 update events per frame; disconnects above ~80k auctions (§3) |
 
-Items 1–5 are all out-of-combat reads. Nothing in the disarmament doctrine touches them;
-per §6, the auction restrictions that do exist are execute-side and predate it by years.
+Everything above is a read, fired out of combat, and nothing in it posts, bids, buys or
+cancels. Per §6 the auction restrictions that do exist are execute-side and predate the
+disarmament doctrine by years, so none of this is at risk from §0.3's secrecy gates.
+
+Two answers change the addon's design rather than merely informing it:
+
+- **If the browse cap is low and `ReplicateItems` is still 900s**, there is no live market
+  view from in-game scanning, exactly as §3 concluded for retail, and the addon is a
+  price-history tool fed by periodic snapshots — the TSM shape from §4 minus the desktop
+  app, since §7 says the out-of-game feed does not exist for Classic titles.
+- **If replicate rows still carry owner names**, the addon can attribute listings and
+  track individual competitors, which retail addons have not been able to do since 9.0.2.
+  That is a capability retail lost, and it would be the most interesting thing this
+  project has found.
+
+Still outstanding from the original list, and unchanged: confirmation that an addon-folder
+`.lua` file written by an external process is executed at load (the §5 bridge), and whether
+SavedVariables flush on `/reload` — see `findings.md` §0.2, where this build reportedly
+writes them but never reads them back.

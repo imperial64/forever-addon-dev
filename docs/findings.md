@@ -20,7 +20,7 @@ source, fetched · **[UNVERIFIED]** surfaced in search, not independently confir
 | Economy / TSM-style | **The goal — and no longer blocked.** `C_AuctionHouse` ships in full (§0.1) | Measure the *numbers*: throttle, caps, owner fields. `/fprobe ah` then `/fprobe ah scan` |
 | Claude Code bridge | Tooling, built alongside. Viable but human-in-the-loop (§0.2) | Confirm the SavedVariables write and the `BridgeData.lua` inbound path on this build |
 | Guild management | **Scrapped** 2026-09-17 | None. Not a focus question; do not probe or design for it |
-| Rotation helper | **Shelved** — but `C_AssistedCombat` is present (§0.4) | Efe's call whether that revives it. Until then: no design, no scaffolding |
+| Rotation helper | **Closed** 2026-09-18. `C_AssistedCombat` is present (§0.4) and Efe declined to reopen on it | None. Do not design, scaffold or spec against it |
 
 Two plans, not four. The economy addon is the actual objective. The bridge is tooling for
 talking to Claude Code from inside a running client — general-purpose, not WoW-specific,
@@ -136,9 +136,12 @@ comparison, and even on a boolean test. Reads that look safe are not.
 listed as reviving the rotation helper: Blizzard's own rotation-assist API, in Forever,
 which would tell an addon what to cast next without the addon reading combat state at all.
 
-**Recorded, not acted on.** The rotation helper stays shelved, no design or scaffolding
-follows from this, and the probe only calls the two no-argument functions to record what
-they return. Reopening the plan is Efe's call, not a conclusion this document draws.
+**Decided 2026-09-18: the rotation helper is not reopened.** Efe's call, asked and
+answered. So this is the end of trigger 4 as a live question — `C_AssistedCombat` is
+recorded because the record should be accurate, not because anything follows from it. The
+probe calls its two no-argument functions and stores what they return; nothing else in
+this repo may design, scaffold or spec against it. Do not raise it again without Efe
+raising it first.
 
 ### 0.5 The Classic globals are gone
 
@@ -363,9 +366,16 @@ presence rows are now confirmations rather than discoveries.
 ## Open questions, in priority order
 
 1. **Answered 2026-09-18 (§0.1): modern `C_AuctionHouse`, all 85 functions, no legacy
-   API.** What replaces it as the top question is the numbers — scan throttle, result
-   caps, and whether owner names survive in `ReplicateItems`. Only `/fprobe ah scan`
-   answers those. `auction-addon-architecture.md` §2.
+   API.** The open question is now the *numbers*, and it is the only thing standing
+   between this project and building the thing it exists to build:
+   - the real `ReplicateItems` throttle (retail: 900s) — `/fprobe ah scan`, then wait
+     for the throttle-cleared line
+   - the per-query browse cap and how many `RequestMoreBrowseResults` rounds reach it —
+     `/fprobe ah browse`, which costs nothing and can be repeated
+   - whether replicate rows still carry owner names (retail stripped them in 9.0.2),
+     which decides whether listings can be attributed at all
+   - how long a full scan takes end to end, and whether it stalls the client
+   `auction-addon-architecture.md` §2 and §9.
 2. **Answered 2026-09-18 (§0.2), with two caveats.** The sandbox is intact, the inbound
    channel is the generated `.lua` file executed at load, and `C_EncodingUtil` gives both
    directions a real wire format. The caveats are the open work: SavedVariables are not
@@ -382,9 +392,6 @@ presence rows are now confirmations rather than discoveries.
 4. Does `COMBAT_LOG_EVENT_UNFILTERED` still fire with full fields?
 5. What is actually inside "certain restrictions"? Only a published list or the beta
    client answers this.
-
-6. Does `C_AssistedCombat` work for a player, and is it gated? It is present (§0.4) and
-   is a trigger-4 item. Measured only; reopening the rotation helper is Efe's call.
 
 **Answered 2026-09-17:** does Forever inherit the Midnight doctrine? Yes on the read side,
 per Tim Jones (§1) — hedged, but on the record. §0.3 shows the machinery that implements
