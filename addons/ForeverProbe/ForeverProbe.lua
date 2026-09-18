@@ -1437,6 +1437,14 @@ local function runActionTests()
     probeSecrecy(label)
 
     db.actions = db.actions or {}
+    -- The delta needs both passes, and this build never reads SavedVariables
+    -- back, so a /reload between them throws the baseline away. Say so at the
+    -- moment it matters rather than letting /fprobe report discover it.
+    if label == "incombat" and not db.actions.outofcombat then
+        out("|cffffaa00no out-of-combat baseline in this session|r - the delta needs both")
+        out("  passes with no /reload between them, because this build does not read")
+        out("  SavedVariables back. Order: /fprobe, pull something, /fprobe combat, /fprobe report.")
+    end
     db.actions[label] = results
     db.blockLog = blockLog
     db.combatLog = clog
@@ -1458,6 +1466,8 @@ local function printReport()
     if not a.outofcombat or not a.incombat then
         out("need both runs. have: " ..
             (a.outofcombat and "out-of-combat " or "") .. (a.incombat and "in-combat" or "neither"))
+        out("  Both must happen in ONE session: this build writes SavedVariables but never")
+        out("  reads them back, so a /reload discards whichever pass came first.")
         return
     end
     local flatBan, combatOnly = {}, {}

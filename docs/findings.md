@@ -425,6 +425,100 @@ how quickly a cached snapshot goes stale.
 
 ---
 
+### P.18 The combat delta: the gates really do flip, except one
+
+**[PROBE — `/fprobe combat`, run in combat on build 69913, 2026-09-18]**
+
+`C_Secrets` gates, out of combat versus in combat:
+
+| Gate | Out of combat | In combat |
+|---|---|---|
+| `ShouldAurasBeSecret()` | false | **true** |
+| `ShouldCooldownsBeSecret()` | false | **true** |
+| `ShouldActionCooldownBeSecret(1)` | false | **true** |
+| `ShouldUnitStatsBeSecret()` | false | **true** |
+| `ShouldUnitPowerBeSecret("player")` | **true** | **true** |
+| `ShouldUnitIdentityBeSecret("player")` | false | false |
+| `ShouldUnitHealthMaxBeSecret("player")` | false | false |
+| `HasSecretRestrictions()` | true | true |
+| `C_RestrictedActions.GetAddOnRestrictionState()` | 0 | **2** |
+| `C_RestrictedActions.IsAddOnRestrictionActive()` | false | **true** |
+| `C_CombatLog.IsCombatLogRestricted()` | true | true |
+| `AreOutgoingAddonChatMessagesRestricted()` | true | true |
+
+**So the black box is genuinely combat-scoped.** Auras, cooldowns, action cooldowns and
+unit stats are all readable while nothing is happening and become secret the moment combat
+starts. That is the answer §0.3 predicted and §P.3 cast doubt on, and both were partly
+right: the mechanism is a combat-scoped gate, and one category ignores the gate entirely.
+
+**The exception is `UnitPower`, which is secret in both states.** It is the one thing
+Blizzard's published doctrine explicitly promises stays readable — "all class secondary
+resources remain fully non-secret" — and it is the one thing that is never readable here.
+Either the doctrine does not describe this client, or this is a beta bug. It has now been
+measured twice, in both combat states, by gate and by value.
+
+**A fourth restriction mechanism, and this one is queryable.**
+`C_RestrictedActions.GetAddOnRestrictionState()` moves 0 → 2 and
+`IsAddOnRestrictionActive()` moves false → true on entering combat. That is a global
+switch distinct from the per-category `C_Secrets` gates, and unlike the combat log it can
+be *asked*. An addon can check whether it is currently restricted before attempting work,
+rather than discovering it through a masked value.
+
+### P.19 What the reads actually do when the gate is closed
+
+| Read | Out of combat | In combat |
+|---|---|---|
+| `playerAura1` | `Seal of Righteousness` | **throws** |
+| `targetAura1` | — | **throws** |
+| `playerPower` | `<SECRET>` | `<SECRET>` |
+| `targetHealth` | — | `<SECRET>` |
+| `targetCasting` | — | `nil` |
+| `spellCooldownStart` | `nil` | `nil` |
+
+Auras do not return a secret value — they **raise**, and the error names the mechanism:
+
+```
+GetAuraDataByIndex(): Auras cannot be accessed when secret while tainted by 'ForeverProbe'
+```
+
+"while tainted by" is the important half. The restriction is scoped to *tainted execution*,
+not to the data: Blizzard's own UI reads the same auras in the same combat. An addon is
+refused because the call stack is the addon's.
+
+Three different refusal shapes now, and an addon has to handle all of them: a **throw**
+(auras), a **secret value** that survives `tostring()` and detonates later (power, health),
+and a plain **`nil`** (cast info, cooldown start). Only the first is visible without care.
+
+### P.20 Actions: three of five are combat-scoped
+
+| Action | Out of combat | In combat |
+|---|---|---|
+| `CastSpellByName` | allowed | allowed |
+| `UseAction(1)` | **FORBIDDEN** | **FORBIDDEN** |
+| `EditMacro` | allowed | **BLOCKED** |
+| `SetOverrideBindingClick` | allowed | **BLOCKED** |
+| `SecureBtn:SetAttribute` | allowed | **allowed** |
+
+`EditMacro` and `SetOverrideBindingClick` are blocked only in combat, which is retail's
+long-standing behaviour and unremarkable. `UseAction` is forbidden in both states, which is
+not.
+
+`SecureActionButton:SetAttribute` succeeding **in combat** is the surprising one — retail
+protects exactly that, and it is the mechanism every action-bar addon depends on. Recorded
+as measured: the call raised no error and fired no block event. Worth re-testing before
+anything is built on it, because "no error and no block event" is weaker evidence than
+"the attribute took effect", and this client has already shown that a refusal can be
+silent.
+
+### P.21 A workflow constraint worth writing down
+
+`/fprobe report` needs both runs, and this build never reads SavedVariables back, so the
+out-of-combat run does not survive a `/reload`. **Both passes have to happen in one
+session**: `/fprobe`, then pull something, then `/fprobe combat`, then `/fprobe report`.
+The delta above was reconstructed across captures by hand instead.
+
+---
+
 ### P.13 Consequences of P.1
 
 - **Neither live plan is touched.** The economy addon and the bridge read auction data,
@@ -811,17 +905,16 @@ presence rows are now confirmations rather than discoveries.
    has since late 2024, and TSM's entire architecture depends on that feed. This gates
    what *kind* of economy addon is possible, independently of question 1.
    `auction-addon-architecture.md` §7.
-3. Is the black box combat-only or always-on? **The combat-scoped reading is now failing
-   twice over, out of combat, on our own client.** Event subscription to the combat log is
-   unconditionally forbidden (§P.1); `HasSecretRestrictions()` is true and
-   `UnitPower("player")` returns a secret value while standing in a field doing nothing
-   (§P.3) — the latter directly contradicting §3's promise that class resources stay
-   readable. Auras and cooldowns, the two things §3 names as removed, read as not secret
-   out of combat. What remains is to get a clean gate table now that the argument arity is
-   handled, and to run the in-combat pass for the delta. Neither live plan reads any of
-   it, which is the only reason this is still a curiosity rather than a problem.
-   **The collateral-damage check has passed** (§P.12): every event both live plans need is
-   allowed, and nothing they read is gated.
+3. **Answered 2026-09-18 (§P.18): the black box is combat-scoped, with one exception.**
+   Auras, cooldowns, action cooldowns and unit stats are readable out of combat and become
+   secret on entering it — the gates flip, measured both ways. `UnitPower` is the
+   exception: secret in both states, which is exactly what §3 promises stays readable.
+   Two restrictions are unconditional rather than combat-scoped: combat-log subscription
+   (§P.1) and outgoing addon messages. And there is a fourth mechanism, queryable unlike
+   the rest — `C_RestrictedActions.GetAddOnRestrictionState()` moves 0 → 2 in combat, so
+   an addon can ask whether it is restricted instead of inferring it.
+   **The collateral-damage check passed** (§P.12): every event both live plans need is
+   allowed, and nothing they read is gated in either state.
 4. **Closed 2026-09-18 (§P.1, §P.12).** An addon may not register for the combat log at
    all — both `COMBAT_LOG_EVENT` and `COMBAT_LOG_EVENT_UNFILTERED` are refused, out of
    combat, and there is no `CombatLogGetCurrentEventInfo` to read either with. The
