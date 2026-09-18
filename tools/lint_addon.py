@@ -187,7 +187,7 @@ def lint_file(path: Path, rules: Rules) -> list[Finding]:
                 _report_entry(add, number, qualified, entry, rules)
             elif namespace in rules.namespaces and qualified not in rules.symbols:
                 add(number, "not-on-this-client", "error",
-                    f"`{qualified}` is not on this client. Check reference/api/ALIASES.md.")
+                    f"`{qualified}` is not on this client. Check reference/guides/aliases.md.")
 
         for name in _BARE.findall(source):
             entry = rules.by_symbol.get(name)

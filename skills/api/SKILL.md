@@ -51,7 +51,7 @@ Grep: "itemKey" in reference/api/namespaces/
 
 **4. Still nothing → check the aliases, then the namespace index.**
 
-- `reference/api/ALIASES.md` — the Classic globals people reach for and what replaced
+- `reference/guides/aliases.md` — the Classic globals people reach for and what replaced
   them. `UnitAura` → `C_UnitAuras.GetAuraDataByIndex`, `QueryAuctionItems` →
   `C_AuctionHouse.SendBrowseQuery`. Forever removed the Classic-era globals wholesale, so
   this is the most common reason a lookup fails.
@@ -70,7 +70,7 @@ about it — those pages say so explicitly and carry no invented signature. So y
 have to wonder whether a lookup failed or the function is absent.
 
 If a page is missing, say the symbol does not exist on build 1.60.1.69913, and check
-`ALIASES.md` for what replaced it.
+`reference/guides/aliases.md` for what replaced it.
 
 ## Reading a page
 

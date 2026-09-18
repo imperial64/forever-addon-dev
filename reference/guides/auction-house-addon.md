@@ -2,7 +2,7 @@
 
 Forever ships the **full modern `C_AuctionHouse`** — 85 functions, commodities included —
 and none of the Classic-era auction API. An economy addon here is a Retail port, not a
-Classic one. `reference/api/ALIASES.md` maps the old names.
+Classic one. `reference/guides/aliases.md` maps the old names.
 
 The design advice below is measured on a beta realm with 14,389 auctions. The *shape*
 generalises; the timings may not. Re-measure at launch.

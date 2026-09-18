@@ -2,7 +2,7 @@
 
 Forever runs **Retail's API on interface 16001**. If you have written a Retail addon, most
 of what you know applies. If you have written a Classic addon, be careful: the Classic-era
-globals are gone, and `reference/api/ALIASES.md` maps the common ones to their
+globals are gone, and `reference/guides/aliases.md` maps the common ones to their
 replacements.
 
 ## Where addons live
