@@ -24,6 +24,12 @@ is whatever the client enforces.
   single hand-maintained source: the generator emits page banners, `data/restrictions.json`
   and `reference/api/RESTRICTIONS.md` from it, so they cannot drift. **Edit restrictions
   here, never in the generated tree.**
+- `research/costs.yaml` — what a *permitted* call costs, same shape and same contract:
+  page banners, `data/costs.json` and `reference/api/COSTS.md` are generated from it.
+  Separate from the restriction list on purpose. A restriction is policy and is the same on
+  every machine; a cost is a measurement on one machine on one build, and nothing here
+  re-measures it. Keeping them apart is what stops a stale number sitting under a heading
+  that promises measured policy.
 
 ## What this repo produces
 
@@ -35,7 +41,7 @@ is whatever the client enforces.
 | `tools/` | The generator, the linter, the SavedVariables parser. Python, so plugin users need no Lua runtime |
 | `addons/ForeverProbe/` | The probe — and the doc generator the `regenerate` skill drives |
 | `scripts/` | Install to the client, collect results back. PowerShell, because they touch a Windows WoW install |
-| `research/` | The measurement record the restriction data is drawn from |
+| `research/` | The measurement record the restriction and cost data are drawn from |
 
 **Generated versus hand-written is a directory boundary.** Everything under
 `reference/api/` carries a generated header and is rewritten wholesale; editing it by hand
@@ -59,6 +65,13 @@ Two measurements to redo in game when convenient: `SecureActionButton:SetAttribu
 apparently succeeding **in combat** (P.20 — flagged `caution`, retail protects it), and the
 three `C_Secrets` gates with no out-of-combat value because the chat line truncated
 (`UnitSpellCast`, `UnitThreatState`, `UnitThreatValues`).
+
+§Q is the one section no instrument in this repo can refresh. It is cost data measured by an
+addon in another repository, and `/fprobe` reproduces none of it, so a new build invalidates
+those numbers silently. The capture is checked in; a `/fprobe cost` subcommand would close
+the gap and has not been written. Two §Q items are also unverified reads: whether an addon
+can *write* `useMaxFPS` (Q.1 measured reads only), and what
+`C_Map.GetPlayerMapPosition` does inside an instance (Q.2).
 
 ## Working rules
 

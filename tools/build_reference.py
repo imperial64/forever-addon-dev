@@ -192,16 +192,114 @@ class Restrictions:
         return lines
 
 
+class Costs:
+    """The measured cost data, indexed the same way the restrictions are.
+
+    Deliberately a separate source from Restrictions rather than a `kind` inside
+    it. A restriction is what the client refuses - policy, identical on every
+    machine, true until Blizzard changes it. A cost is what a permitted call
+    prices - a measurement, tied to one build on one machine, with nothing
+    refusing anything. They answer different questions and go stale at different
+    rates, so they are kept apart and the banner says which one the reader is
+    looking at.
+    """
+
+    def __init__(self, path: Path | None, findings_link: str = "research/findings.md") -> None:
+        self.findings_link = findings_link
+        self.meta: dict[str, Any] = {}
+        self.entries: list[dict[str, Any]] = []
+        self.by_symbol: dict[str, list[dict[str, Any]]] = {}
+        if not path or not path.exists():
+            return
+        if yaml is None:
+            print("PyYAML not installed; cost banners will be omitted", file=sys.stderr)
+            return
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        self.meta = data.get("meta") or {}
+        self.entries = data.get("entries") or []
+        for entry in self.entries:
+            for symbol in entry.get("symbols") or []:
+                self.by_symbol.setdefault(symbol, []).append(entry)
+
+    def for_function(self, qualified: str) -> list[dict[str, Any]]:
+        # No namespace fallback, unlike Restrictions: a restriction can govern a
+        # whole namespace, but a cost is always a measurement of one call.
+        return list(self.by_symbol.get(qualified, []))
+
+    @staticmethod
+    def span(values: list[Any]) -> str:
+        """Render a [min, max] range with both ends at the same precision.
+
+        YAML parses 0.610 to the float 0.61, which would publish a measurement
+        as one significant figure shorter than it was taken. Padding to the
+        widest end of the range puts the precision back without asking the
+        source file to quote its numbers as strings."""
+        if not values:
+            return ""
+        places = max((len(str(v).split(".")[1]) if "." in str(v) else 0) for v in values)
+        return " - ".join(f"{float(v):.{places}f}" if places else str(v) for v in values)
+
+    @staticmethod
+    def figures(entry: dict[str, Any]) -> str:
+        """One line of numbers, for the banner. The table form is in COSTS.md."""
+        parts: list[str] = []
+        for measurement in entry.get("measurements") or []:
+            timing = measurement.get("time_us") or []
+            bits: list[str] = []
+            if timing:
+                bits.append(f"{Costs.span(timing)} µs")
+            allocated = measurement.get("bytes")
+            if allocated:
+                bits.append(f"{allocated} bytes")
+            elif allocated == 0:
+                bits.append("no measurable allocation")
+            label = measurement.get("label")
+            joined = ", ".join(bits)
+            parts.append(f"{label}: {joined}" if label and len(entry.get("measurements") or []) > 1
+                         else joined)
+        return "; ".join(p for p in parts if p)
+
+    def banner(self, entries: list[dict[str, Any]], depth: int = 4) -> list[str]:
+        lines: list[str] = []
+        build = self.meta.get("build", "")
+        measured = self.meta.get("measured_on", "")
+        for entry in entries:
+            runs = entry.get("runs")
+            figures = self.figures(entry)
+            lines.append(
+                "> **COST — measured, not a restriction.** "
+                + (figures + ". " if figures else "")
+                + " ".join((entry.get("summary") or "").split())
+            )
+            lines.append(
+                f"> Measured {measured} on build {build}"
+                + (f", n={runs}" if runs else "")
+                + ", on one machine, and NOT re-measured by `regenerate`."
+                + (f" Evidence: {', '.join(chr(167) + str(e) for e in entry['evidence'])} in"
+                   f" [findings]({'../' * depth}{self.findings_link})."
+                   if entry.get("evidence") else "")
+            )
+            guidance = entry.get("guidance")
+            if guidance:
+                lines.append("> ")
+                lines.append("> _Guidance:_ " + " ".join(guidance.split()))
+            lines.append("")
+        return lines
+
+
 class ReferenceBuilder:
     def __init__(self, out_dir: Path, docs: dict[str, Any],
-                 restrictions: Restrictions | None = None) -> None:
+                 restrictions: Restrictions | None = None,
+                 costs: Costs | None = None) -> None:
         self.out = out_dir
         self.docs = docs
         self.systems: dict[str, Any] = docs["systems"]
         self.restrictions = restrictions or Restrictions(None)
+        self.costs = costs or Costs(None)
         self.written = 0
         self.index: list[tuple[str, str]] = []  # (symbol, path) for the names index
         self.annotated: set[str] = set()
+        self.costed: set[str] = set()
         self.surface: dict[str, Any] = {}
         self.stubs = 0
 
@@ -253,6 +351,14 @@ class ReferenceBuilder:
                 " gated on a hardware event or refuses to run from a script.",
                 "",
             ]
+
+        # Cost goes below both, because "may I call this" is the question that
+        # decides whether "what does it cost" is worth reading.
+        priced = self.costs.for_function(qualified)
+        if priced:
+            lines += self.costs.banner(priced, self._depth(directory))
+            for entry in priced:
+                self.costed.add(entry["id"])
 
         lines += ["```lua", _signature(function, qualified), "```", ""]
 
@@ -398,6 +504,11 @@ class ReferenceBuilder:
             lines += self.restrictions.banner(measured, self._depth(path.parent))
             for entry in measured:
                 self.annotated.add(entry["id"])
+        priced = self.costs.for_function(qualified)
+        if priced:
+            lines += self.costs.banner(priced, self._depth(path.parent))
+            for entry in priced:
+                self.costed.add(entry["id"])
         lines += [
             "> **Present on this client, but not documented by Blizzard.**"
             " It exists in the client's global table and can be called; Blizzard's"
@@ -499,6 +610,79 @@ class ReferenceBuilder:
             lines.append("")
         self._write(self.out / "RESTRICTIONS.md", lines)
 
+    def write_costs_page(self) -> None:
+        """The cost half of the same promise RESTRICTIONS.md makes: one page that
+        answers "what does this price" without a tour of the tree."""
+        entries = self.costs.entries
+        if not entries:
+            return
+        meta = self.costs.meta
+        lines = [
+            self._header(), "", "# Costs", "",
+            f"What permitted calls cost on client {meta.get('client')} build"
+            f" {meta.get('build')}, measured with {meta.get('measured_by')}.", "",
+            "**Nothing here is a restriction.** Every call on this page is allowed;"
+            " what is recorded is what it prices. For what the client refuses, see"
+            " `RESTRICTIONS.md`.", "",
+        ]
+        staleness = meta.get("staleness")
+        if staleness:
+            lines += ["> **These go stale differently from the rest of this reference.** "
+                      + " ".join(staleness.split()), ""]
+        lines += [
+            "| Field | Value |", "|---|---|",
+            f"| Measured | {meta.get('measured_on')} |",
+            f"| Machine | {meta.get('machine')} |",
+            f"| Combat state | {meta.get('combat')} |",
+            f"| Capture | `{meta.get('capture')}` |",
+            "",
+            "Method: " + " ".join((meta.get("method") or "").split()), "",
+            "Instrument: " + " ".join((meta.get("instrument") or "").split()), "",
+            "| Call | Measured | Time (µs/call) | Allocation (bytes/call) |",
+            "|---|---|---|---|",
+        ]
+        for entry in sorted(entries, key=lambda e: e["id"]):
+            symbols = ", ".join(f"`{s}`" for s in entry.get("symbols") or [])
+            for measurement in entry.get("measurements") or []:
+                timing = measurement.get("time_us") or []
+                time_text = Costs.span(timing).replace(" - ", " – ") if timing else "—"
+                allocated = measurement.get("bytes")
+                alloc_text = ("none measurable" if allocated == 0
+                              else f"**{allocated}**" if allocated else "—")
+                lines.append(f"| {symbols} | {measurement.get('label') or ''} |"
+                             f" {time_text} | {alloc_text} |")
+                symbols = ""  # only label the first row of a multi-row entry
+        lines += [
+            "",
+            "An em dash in the allocation column means the figure was not"
+            " separately measured for that row, not that the call allocates"
+            " nothing; `none measurable` is the measured zero.",
+            "",
+        ]
+        for entry in sorted(entries, key=lambda e: e["id"]):
+            lines += [f"## {entry['id']}", ""]
+            label = entry.get("label")
+            if label:
+                lines += [f"_{label}_", ""]
+            lines.append(" ".join((entry.get("summary") or "").split()))
+            figures = Costs.figures(entry)
+            runs = entry.get("runs")
+            if figures:
+                lines += ["", f"**Measured.** {figures}"
+                              + (f" (n={runs})" if runs else "") + "."]
+            detail = entry.get("detail")
+            if detail:
+                lines += ["", " ".join(detail.split())]
+            guidance = entry.get("guidance")
+            if guidance:
+                lines += ["", "**Guidance.** " + " ".join(guidance.split())]
+            evidence = entry.get("evidence") or []
+            if evidence:
+                refs = ", ".join(f"§{e}" for e in evidence)
+                lines += ["", f"_Evidence: {refs} in `research/findings.md`._"]
+            lines.append("")
+        self._write(self.out / "COSTS.md", lines)
+
     def update_skill_table(self, skill: Path) -> bool:
         """Rewrite the generated block inside the restrictions skill.
 
@@ -582,6 +766,21 @@ class ReferenceBuilder:
                         problems.append(
                             f"{entry['id']}: evidence anchor {anchor!r} not found in {findings}"
                         )
+
+        # Same two failures, same consequences, for the cost data: a number
+        # attached to a function that no longer exists is worse than no number.
+        for entry in self.costs.entries:
+            for symbol in entry.get("symbols") or []:
+                if symbol not in known:
+                    problems.append(f"cost {entry['id']}: symbol {symbol!r} has no generated page")
+            if not entry.get("measurements"):
+                problems.append(f"cost {entry['id']}: no measurements")
+            if headings:
+                for anchor in entry.get("evidence") or []:
+                    if not re.search(rf"^#+\s*{re.escape(str(anchor))}[\s.]", headings, re.M):
+                        problems.append(
+                            f"cost {entry['id']}: evidence anchor {anchor!r} not found in {findings}"
+                        )
         return problems
 
     def write_build_info(self, capture: Path) -> dict[str, Any]:
@@ -629,6 +828,10 @@ def main() -> int:
                         help="remove the output tree first, so deletions show in the diff")
     parser.add_argument("--restrictions", type=Path, default=Path("research/restrictions.yaml"))
     parser.add_argument("--restrictions-json", type=Path, default=Path("data/restrictions.json"))
+    parser.add_argument("--costs", type=Path, default=Path("research/costs.yaml"),
+                        help="measured per-call costs; separate from restrictions "
+                             "because a cost is not a refusal and goes stale faster")
+    parser.add_argument("--costs-json", type=Path, default=Path("data/costs.json"))
     parser.add_argument("--findings", type=Path, default=Path("research/findings.md"))
     parser.add_argument("--skill-table", type=Path,
                         default=Path("skills/restrictions/SKILL.md"),
@@ -664,8 +867,10 @@ def main() -> int:
             return 1
         shutil.rmtree(args.out)
 
-    restrictions = Restrictions(args.restrictions, findings_link=str(args.findings).replace("\\", "/"))
-    builder = ReferenceBuilder(args.out, docs, restrictions)
+    findings_link = str(args.findings).replace("\\", "/")
+    restrictions = Restrictions(args.restrictions, findings_link=findings_link)
+    costs = Costs(args.costs, findings_link=findings_link)
+    builder = ReferenceBuilder(args.out, docs, restrictions, costs)
     if args.surface:
         surface_db = svlua.parse_file(str(args.surface)).get("ForeverProbeDB") or {}
         builder.surface = {
@@ -674,6 +879,7 @@ def main() -> int:
         }
     builder.build()
     builder.write_restrictions_page()
+    builder.write_costs_page()
     info = builder.write_build_info(args.capture)
 
     if builder.update_skill_table(args.skill_table):
@@ -686,6 +892,9 @@ def main() -> int:
               and not e.get("no_api_page")]
     for entry_id in unused:
         problems.append(f"{entry_id}: matched no generated page")
+    for entry in costs.entries:
+        if entry["id"] not in builder.costed and entry.get("symbols"):
+            problems.append(f"cost {entry['id']}: matched no generated page")
 
     if restrictions.entries:
         args.restrictions_json.parent.mkdir(parents=True, exist_ok=True)
@@ -693,6 +902,12 @@ def main() -> int:
             # default=str because YAML parses a bare 2026-09-18 into a date
             # object, and the linter wants a string it can print.
             json.dump({"meta": restrictions.meta, "entries": restrictions.entries},
+                      handle, indent=1, ensure_ascii=False, sort_keys=True, default=str)
+
+    if costs.entries:
+        args.costs_json.parent.mkdir(parents=True, exist_ok=True)
+        with args.costs_json.open("w", encoding="utf-8", newline="\n") as handle:
+            json.dump({"meta": costs.meta, "entries": costs.entries},
                       handle, indent=1, ensure_ascii=False, sort_keys=True, default=str)
 
     args.json.parent.mkdir(parents=True, exist_ok=True)
@@ -709,6 +924,9 @@ def main() -> int:
     if restrictions.entries:
         print(f"  {len(restrictions.entries)} restrictions, "
               f"{len(builder.annotated)} matched pages -> {args.restrictions_json}")
+    if costs.entries:
+        print(f"  {len(costs.entries)} costs, "
+              f"{len(builder.costed)} matched pages -> {args.costs_json}")
     if not (docs.get("client") or {}).get("build"):
         print("  WARNING: capture does not record its client build; re-dump to fix")
     for problem in problems:

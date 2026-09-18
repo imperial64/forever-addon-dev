@@ -77,6 +77,18 @@ The Legacy talent panel is `ToggleLegacySystemUI`.
 Blizzard ships `C_DamageMeter` for damage numbers. This is the one gap with no addon-side
 replacement.
 
+## Map and position
+
+| You typed | Use instead |
+|---|---|
+| `GetPlayerMapPosition` | `C_Map.GetPlayerMapPosition` (returns an object, not `x, y`) |
+| `GetCurrentMapAreaID`, `SetMapToCurrentZone` | `C_Map.GetBestMapForUnit` |
+
+The return is the difference that bites: `C_Map.GetPlayerMapPosition` hands back a position
+object and you call `:GetXY()` on it, so a Classic-style `local x, y = ...` silently gets
+the object and nil. It also allocates 1864 bytes per call — see `guides/performance.md`
+before polling it.
+
 ## Addons and files
 
 | You typed | Use instead |

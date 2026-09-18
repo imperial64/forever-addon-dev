@@ -9,6 +9,15 @@ Probe output lands here via scripts/collect-savedvars.ps1. Timestamped so runs c
   logout, and the fix landed between the two. Its gate values read ERR for anything taking
   arguments; the corrected table is in research/findings.md section P.10.
 
+- `AmbianceCost_2026-09-18_215313_cost-bench.lua` - **not ForeverProbe output.** A
+  microbenchmark capture from `AmbianceCost`, an addon in a separate repository, handed over
+  on 2026-09-18 and checked in so that the numbers in research/findings.md section Q can be
+  re-derived rather than taken on trust. Same client, build 1.60.1.69913, out of combat,
+  five runs. Nothing in this repo produces or refreshes it, and `/fprobe` does not reproduce
+  it. Note that the `phases` table inside it is **not evidence** and is not cited anywhere:
+  the phases run once in a fixed order with no warm-up discard, so drift lands on the later
+  ones. Section Q.7 records why.
+
 That any capture exists at all is itself a finding: the client writes SavedVariables even
 though it never reads them back, so the outbound direction works while the round trip inside
 the client does not. See findings section P.9.

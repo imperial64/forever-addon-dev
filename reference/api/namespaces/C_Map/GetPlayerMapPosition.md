@@ -2,6 +2,11 @@
 
 # C_Map.GetPlayerMapPosition
 
+> **COST — measured, not a restriction.** bare call: 4.38 - 5.71 µs, 1864 bytes; plus GetXY() to get two numbers: 4.91 - 7.91 µs. Allocates 1864 bytes on EVERY call. The allocation is the constraint here, not the time.
+> Measured 2026-09-18 on build 69913, n=5, on one machine, and NOT re-measured by `regenerate`. Evidence: §Q.2 in [findings](../../../../research/findings.md).
+> 
+> _Guidance:_ Poll position on an accumulator rather than per frame, and guard for a nil return.
+
 ```lua
 position = C_Map.GetPlayerMapPosition(uiMapID, unitToken)
 ```

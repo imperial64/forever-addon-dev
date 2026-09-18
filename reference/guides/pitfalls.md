@@ -1,7 +1,7 @@
-# Five things that will bite you
+# Six things that will bite you
 
-Each of these cost real debugging time while building the probe this reference was
-measured with. They are in the order you are likely to hit them.
+Each of these cost real debugging time against a live client. They are in the order you are
+likely to hit them.
 
 ## 1. An unknown event aborts the whole file
 
@@ -65,6 +65,26 @@ if select(4, GetBuildInfo()) >= 100000 then  -- "modern client"
 Forever answers **16001**, so that test is false and the addon takes its Classic code path
 or refuses to start — while running on a client whose API is Retail's. If you are porting
 something, find this idiom first. The linter flags it.
+
+## 6. A CVar's value does not tell you whether it is in effect
+
+The slider value and the enable flag are **separate CVars**. Measured with the client
+running uncapped at 273.7 fps:
+
+```
+maxFPS    = 120      useMaxFPS    = 0
+targetFPS = 60       useTargetFPS = 0
+```
+
+`maxFPS` keeps the last slider position whether or not the limit is applied, so an addon
+reading it alone concludes the client is capped at 120 while it is running at more than
+twice that — and nothing errors, because nothing failed. `HDRBrightness`/`useHDRBrightness`
+pairs the same way.
+
+Two known instances is a pattern to check for, not a proven rule: read the paired
+`use<Name>` with `GetCVarBool` before trusting a value, and use `ConsoleGetAllCommands()` to
+find out whether a flag exists rather than assuming one does. See `research/findings.md`
+§Q.1.
 
 ## Three shapes of failure
 
