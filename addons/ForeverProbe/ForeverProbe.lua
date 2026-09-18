@@ -1702,6 +1702,190 @@ local function probeApiDocs()
     out("  recorded. |cffffffff/reload|r then collect-savedvars.ps1")
 end
 
+-- The dumper ----------------------------------------------------------------
+-- Measured 2026-09-18 on build 69913: the documentation loads, and it is bigger
+-- than the plan assumed - 408 systems, 6,577 functions, 1,802 events, 792
+-- tables, with 81 ScriptObject systems, which means widget and frame methods are
+-- documented too.
+--
+-- Two things the measurement changed.
+--
+-- 1. Doc entries are MIXIN OBJECTS, not plain data. Every entry carries two
+--    dozen methods (GetFullName, GetArgumentString, IsOptional, ...) alongside
+--    its fields, which is why C_EncodingUtil.SerializeJSON refused the live
+--    objects with "attempted to serialize a function value". So this builds a
+--    plain PROJECTION first - data fields only, nothing callable - and lets the
+--    client's own SavedVariables writer serialize that. Fewer moving parts than
+--    JSON-inside-Lua, and the desktop side already reads these files with luajit.
+--
+-- 2. Those mixins expose Blizzard's own renderers. Capturing GetArgumentString,
+--    GetReturnString and GetFullName next to the structured fields costs almost
+--    nothing and gives the generator a cross-check: if our reconstructed
+--    signature disagrees with Blizzard's own rendering of the same entry, one of
+--    them is wrong and we want to know rather than ship it.
+--
+-- Blizzard's prose Documentation fields are deliberately NOT captured. Signatures
+-- and type names are close to facts; the prose is Blizzard's writing, extracted
+-- from a copyrighted client, and this repo is going public.
+
+-- Only scalars are stored. Anything else - a table, a function, a secret - is
+-- dropped rather than guessed at, so a field that survives into the projection is
+-- a field that is genuinely a value.
+local function scalar(v)
+    local t = type(v)
+    if t ~= "string" and t ~= "number" and t ~= "boolean" then return nil end
+    if issecretvalue and issecretvalue(v) then return nil end
+    return v
+end
+
+local function callString(obj, method)
+    local fn = obj and obj[method]
+    if type(fn) ~= "function" then return nil end
+    local ok, s = pcall(fn, obj)
+    return ok and scalar(s) or nil
+end
+
+-- Arguments, returns and event payload fields all share this shape.
+local function projectField(f)
+    if type(f) ~= "table" then return nil end
+    return {
+        Name = scalar(f.Name),
+        Type = scalar(f.Type),
+        InnerType = scalar(f.InnerType),
+        Nilable = scalar(f.Nilable),
+        Default = scalar(f.Default),
+        Mixin = scalar(f.Mixin),
+        StrideIndex = scalar(f.StrideIndex),
+        Documentation = nil, -- deliberate, see header
+    }
+end
+
+local function projectList(list, fn)
+    if type(list) ~= "table" then return nil end
+    local out, n = {}, 0
+    for i = 1, #list do
+        local v = fn(list[i])
+        if v then n = n + 1; out[n] = v end
+    end
+    if n == 0 then return nil end
+    return out
+end
+
+local function projectFunction(f)
+    if type(f) ~= "table" then return nil end
+    return {
+        Name = scalar(f.Name),
+        Type = scalar(f.Type),
+        HasRestrictions = scalar(f.HasRestrictions),
+        Arguments = projectList(f.Arguments, projectField),
+        Returns = projectList(f.Returns, projectField),
+        -- Blizzard's own rendering, kept as the cross-check described above.
+        FullName = callString(f, "GetFullName"),
+        ArgumentString = callString(f, "GetArgumentString"),
+        ReturnString = callString(f, "GetReturnString"),
+    }
+end
+
+local function projectEvent(e)
+    if type(e) ~= "table" then return nil end
+    return {
+        Name = scalar(e.Name),
+        LiteralName = scalar(e.LiteralName),
+        Type = scalar(e.Type),
+        Payload = projectList(e.Payload, projectField),
+        FullName = callString(e, "GetFullName"),
+    }
+end
+
+local function projectTable(t)
+    if type(t) ~= "table" then return nil end
+    return {
+        Name = scalar(t.Name),
+        Type = scalar(t.Type),          -- Enumeration / Structure / Constants
+        NumValues = scalar(t.NumValues),
+        MinValue = scalar(t.MinValue),
+        MaxValue = scalar(t.MaxValue),
+        Fields = projectList(t.Fields, projectField),
+        Values = projectList(t.Values, function(v)
+            if type(v) ~= "table" then return nil end
+            return { Name = scalar(v.Name), EnumValue = scalar(v.EnumValue) }
+        end),
+    }
+end
+
+local function projectSystem(sys)
+    if type(sys) ~= "table" then return nil end
+    return {
+        Name = scalar(sys.Name),
+        Namespace = scalar(sys.Namespace),
+        Type = scalar(sys.Type),        -- System / ScriptObject
+        Functions = projectList(sys.Functions, projectFunction),
+        Events = projectList(sys.Events, projectEvent),
+        Tables = projectList(sys.Tables, projectTable),
+    }
+end
+
+-- /fprobe docs dump [start] [count]
+--
+-- The range arguments exist because the biggest SavedVariables flush this repo
+-- has ever managed is 303 KB and this projection will be several megabytes. If
+-- the whole thing will not write, it can be taken in passes; each pass merges
+-- into what is already there rather than replacing it.
+local function dumpApiDocs(startAt, count)
+    if not APIDocumentation then
+        local ok = pcall(APIDocumentation_LoadUI)
+        if not ok or not APIDocumentation then
+            out("|cffff4444documentation not loaded|r - run /fprobe docs first")
+            return
+        end
+    end
+    local systems = APIDocumentation.systems
+    if type(systems) ~= "table" then
+        out("|cffff4444no .systems array|r")
+        return
+    end
+
+    startAt = math.max(1, tonumber(startAt) or 1)
+    local last = #systems
+    if count then last = math.min(last, startAt + math.max(1, tonumber(count) or 0) - 1) end
+
+    db.apiDocs = db.apiDocs or {}
+    local store = db.apiDocs
+    store.build = db.build or nil
+    store.systems = store.systems or {}
+    store.capturedAt = date and date("%Y-%m-%d %H:%M:%S") or time()
+
+    local nSys, nFn, nEv, nTb, failed = 0, 0, 0, 0, 0
+    for i = startAt, last do
+        local ok, projected = pcall(projectSystem, systems[i])
+        if ok and projected and projected.Name then
+            -- Keyed by full name so repeated or partial runs merge cleanly
+            -- instead of duplicating - this build cannot read SavedVariables back,
+            -- so a pass has to be self-contained within one session.
+            local key = projected.Namespace or projected.Name
+            if projected.Type == "ScriptObject" then key = "ScriptObject:" .. projected.Name end
+            store.systems[key] = projected
+            nSys = nSys + 1
+            nFn = nFn + #(projected.Functions or {})
+            nEv = nEv + #(projected.Events or {})
+            nTb = nTb + #(projected.Tables or {})
+        else
+            failed = failed + 1
+        end
+        if (i - startAt) % 100 == 99 then
+            out(("  ...%d/%d systems"):format(i - startAt + 1, last - startAt + 1))
+        end
+    end
+
+    store.counts = { systems = nSys, functions = nFn, events = nEv, tables = nTb, failed = failed }
+    out(("|cff44ff44dumped|r systems %d..%d -> %d systems, %d functions, %d events, %d tables%s")
+        :format(startAt, last, nSys, nFn, nEv, nTb,
+                failed > 0 and (" |cffffaa00(" .. failed .. " failed)|r") or ""))
+    out("  |cffffffff/reload|r to flush, then collect-savedvars.ps1")
+    out("  If the file is truncated or the flush hangs, take it in passes:")
+    out("  |cffffffff/fprobe docs dump 1 100|r, /reload, collect, then 101 100, and so on.")
+end
+
 -- Driver ----------------------------------------------------------------------
 SLASH_FPROBE1 = "/fprobe"
 SlashCmdList.FPROBE = function(arg)
@@ -1710,7 +1894,15 @@ SlashCmdList.FPROBE = function(arg)
     if cmd == "report" then return printReport() end
     if cmd == "blocked" then return printBlocked() end
     if cmd == "events" then return probeEvents() end
-    if cmd == "docs" then return probeApiDocs() end
+    if cmd == "docs" then
+        if sub == "dump" then
+            -- The two range numbers come off the raw argument, because the
+            -- three-token parse above only reaches as far as `extra`.
+            local a, b = (arg or ""):match("docs%s+dump%s+(%d*)%s*(%d*)")
+            return dumpApiDocs(tonumber(a), tonumber(b))
+        end
+        return probeApiDocs()
+    end
     if cmd == "bridge" then return printBridge() end
     if cmd == "ah" then
         if sub == "scan" then return ahReplicateScan() end

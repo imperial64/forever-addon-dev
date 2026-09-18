@@ -52,6 +52,18 @@ foreach ($f in $found) {
     Copy-Item $f.FullName $target -Force
     $kb = [math]::Round($f.Length / 1KB, 1)
     Write-Host "Collected $($f.FullName) ($kb KB)" -ForegroundColor Green
+    if ($f.Length -gt 1MB) {
+        # The API documentation dump is the only thing here that runs to megabytes.
+        # A truncated flush is the failure mode worth catching now rather than
+        # halfway through the generator, so check the file actually closed.
+        $tail = Get-Content $f.FullName -Tail 3 | Out-String
+        if ($tail -notmatch '\}') {
+            Write-Host "  WARNING: file does not end in a closing brace - the flush may be truncated." -ForegroundColor Red
+            Write-Host "  Re-dump in passes: /fprobe docs dump 1 100, /reload, collect, then 101 100." -ForegroundColor Red
+        } else {
+            Write-Host "  Large capture, closes cleanly." -ForegroundColor Green
+        }
+    }
     Write-Host "       -> $target" -ForegroundColor Green
 }
 
@@ -60,7 +72,7 @@ Write-Host "Quick look at what was captured:" -ForegroundColor Cyan
 $content = Get-Content $target -Raw
 foreach ($key in @("tocversion", "maskedReads", "flatBan", "combatOnly", "secrecyDelta",
                    "C_AuctionHouse", "C_AssistedCombat", "C_Secrets", "C_EncodingUtil",
-                   "registerFailures")) {
+                   "registerFailures", "apiDocs", "apiDocsProbe")) {
     $hit = if ($content -match [regex]::Escape($key)) { "present" } else { "not found" }
     Write-Host ("  {0,-18} {1}" -f $key, $hit)
 }
