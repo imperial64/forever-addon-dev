@@ -128,6 +128,16 @@ Probe usage in-game:
 - `/fprobe ah throttle` — what the throttle actually turned out to be. Stay logged in
   after a scan; the client announces it and the probe prints the measured gap
 - `/fprobe bridge` — inbound `BridgeData.lua` and outbound SavedVariables flush
+- `/fprobe video` — the brightness/contrast CVars: whether they exist under the retail
+  names, whether `GetCVarInfo` reports them locked, secure or read-only, whether a write
+  survives a readback, and which display mode the measurement was taken in. Enumerates the
+  real names out of `ConsoleGetAllCommands` rather than trusting the retail ones. Every
+  value it touches is restored. Run it again in combat for the other half
+- `/fprobe video ramp [cvar]` — sweep one of them down and back over four seconds. This is
+  the measurement that decides whether a smooth ease is possible: it writes every frame
+  from `OnUpdate` and reports the frame gaps, so a device restart per write shows up as a
+  spike. Whether the *screen* changed is yours to report — a write that is accepted and
+  ignored looks identical from Lua
 - `/fprobe blocked` — every `ADDON_ACTION_BLOCKED`/`FORBIDDEN` captured, attributed to the
   call that caused it. Run it after any forbidden-action popup
 - `/fprobe events` — which events an addon may subscribe to at all. Each refusal pops a

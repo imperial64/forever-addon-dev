@@ -25,6 +25,7 @@
 --   /fprobe ah       Auction House detail, standing at an auction house
 --   /fprobe ah scan  fire a full ReplicateItems scan (burns the 15 min throttle)
 --   /fprobe bridge   inbound BridgeData.lua and outbound SavedVariables flush
+--   /fprobe video    brightness/contrast CVars - may an addon write them at all
 --
 -- Results persist to WTF/Account/<ACCT>/SavedVariables/ForeverProbe.lua on
 -- /reload or logout.
@@ -1347,16 +1348,19 @@ local function runActionTests()
         try("CastSpellByName", function() CastSpellByName(probeSpell or "Attack") end)
     end
     if UseAction then
+        -- lint-allow: forbidden-call - the point of this test is to measure the refusal
         try("UseAction(slot1)", function() UseAction(1) end)
     end
     if RunMacroText then
         try("RunMacroText(/cast)", function() RunMacroText("/cast " .. (probeSpell or "Attack")) end)
     end
     if EditMacro then
+        -- lint-allow: blocked-in-combat - measuring whether it is blocked is the test
         try("EditMacro", function() EditMacro(1, nil, nil, "/cast " .. (probeSpell or "Attack")) end)
     end
     if SetOverrideBindingClick then
         try("SetOverrideBindingClick", function()
+            -- lint-allow: blocked-in-combat - measuring whether it is blocked is the test
             SetOverrideBindingClick(watcher, true, "F12", "ForeverProbeSecureBtn")
         end)
     end
@@ -1402,9 +1406,11 @@ local function runActionTests()
         if type(r) == "table" then return r.startTime end
         return r
     end)
+    -- lint-allow: secret-read - reading a secret and recording that it IS secret
     readTest("playerPower", function() return UnitPower("player") end)
     readTest("playerAura1", function()
         if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+            -- lint-allow: secret-read - reading a secret and recording that it IS secret
             local a = C_UnitAuras.GetAuraDataByIndex("player", 1, "HELPFUL")
             return a and (a.name or a.spellId) or "nil"
         elseif UnitAura then
@@ -1416,6 +1422,7 @@ local function runActionTests()
     readTest("targetAura1", function()
         if not UnitExists or not UnitExists("target") then return "NO TARGET" end
         if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+            -- lint-allow: secret-read - reading a secret and recording that it IS secret
             local a = C_UnitAuras.GetAuraDataByIndex("target", 1, "HARMFUL")
             return a and (a.name or a.spellId) or "nil"
         elseif UnitAura then
@@ -1999,6 +2006,383 @@ local function dumpApiDocs(startAt, count)
     out("  |cffffffff/fprobe docs dump 1 100|r, /reload, collect, then 101 100, and so on.")
 end
 
+-- Video CVar probe ------------------------------------------------------------
+-- Can an addon drive display brightness and contrast? Four parts, and they fail
+-- in different ways:
+--
+--   1. do the CVars exist on this build, and will the client let an addon write
+--      them
+--   2. does a write take effect LIVE, or does each one cost a device restart
+--   3. do they work windowed, or only in exclusive fullscreen
+--   4. are writes blocked in combat
+--
+-- The retail names are a STARTING GUESS, not the answer. ConsoleGetAllCommands is
+-- present on this build, so the real names get enumerated rather than assumed -
+-- the same mistake as citing a source without fetching it.
+--
+-- (2) is the one that decides whether a smooth ease is possible, and no Lua read
+-- reports what the monitor is doing. So /fprobe video ramp drives a sweep from
+-- OnUpdate and counts the frames it got: a live post-process leaves the frame
+-- deltas flat, while a device restart per write craters them. That shows up in
+-- the numbers as well as on the screen, which turns half of a "ask the human"
+-- question into a measurement.
+--
+-- (3) cannot be measured from Lua either, so the display-mode CVars are recorded
+-- alongside the result. A capture that does not say which mode it was taken in
+-- cannot answer the question afterwards.
+local VIDEO_CVAR_GUESSES = { "gxBrightness", "gxContrast", "gxGamma" }
+local DISPLAY_MODE_CVARS = {
+    "gxMaximize", "gxWindow", "gxFullscreenResolution", "gxWindowedResolution", "gxMonitor",
+}
+
+local function videoCVarSnapshot(name)
+    local snap = { name = name }
+    if not (C_CVar and C_CVar.GetCVarInfo) then
+        snap.err = "C_CVar.GetCVarInfo absent"
+        return snap
+    end
+    local ok, value, default, srvAcct, srvChar, locked, secure, readOnly =
+        pcall(C_CVar.GetCVarInfo, name)
+    if not ok then
+        snap.err = plain(value):sub(1, 120)
+        return snap
+    end
+    if value == nil then
+        snap.present = false
+        return snap
+    end
+    snap.present = true
+    snap.value = plain(value)
+    snap.default = plain(default)
+    snap.storedServerAccount = srvAcct and true or false
+    snap.storedServerCharacter = srvChar and true or false
+    snap.lockedFromUser = locked and true or false
+    snap.secure = secure and true or false
+    snap.readOnly = readOnly and true or false
+    -- The three flags that decide, before any write is attempted, whether an addon
+    -- is allowed to touch it.
+    snap.writable = not (snap.lockedFromUser or snap.secure or snap.readOnly)
+    return snap
+end
+
+local function discoverVideoCVars()
+    local result = { matches = {} }
+    if not ConsoleGetAllCommands then
+        result.err = "ConsoleGetAllCommands absent on this client"
+        return result
+    end
+    local ok, list = pcall(ConsoleGetAllCommands)
+    if not ok then
+        result.err = plain(list):sub(1, 120)
+        return result
+    end
+    if type(list) ~= "table" then
+        result.err = "returned " .. type(list) .. ", not a table"
+        return result
+    end
+    result.total = #list
+    for i = 1, #list do
+        local entry, cmd = list[i], nil
+        if type(entry) == "table" then
+            -- Shape is unknown on this build, so record it once rather than
+            -- guessing at the field name in silence.
+            if not result.entryShape then
+                local keys = {}
+                for k in pairs(entry) do keys[#keys + 1] = plain(k) end
+                table.sort(keys)
+                result.entryShape = table.concat(keys, ",")
+            end
+            cmd = entry.command or entry.name or entry.commandName
+        elseif type(entry) == "string" then
+            cmd = entry
+        end
+        if type(cmd) == "string" then
+            local lower = cmd:lower()
+            if lower:find("bright", 1, true) or lower:find("contrast", 1, true)
+                or lower:find("gamma", 1, true) then
+                result.matches[#result.matches + 1] = cmd
+            end
+        end
+    end
+    table.sort(result.matches)
+    return result
+end
+
+-- Nudge a CVar, read it back, put it back. The readback is the whole point: a
+-- write that is accepted and ignored returns success and changes nothing, which
+-- is the silent no this project keeps walking into.
+local function videoWriteTest(snap, setter, setterName)
+    local test = { via = setterName }
+    local base = tonumber(snap.value)
+    if base == nil then
+        test.skipped = "current value is not numeric: " .. tostring(snap.value)
+        return test
+    end
+    -- Small, always reversible, and away from zero so a proportional nudge moves.
+    local target = (base > 0.05) and (base * 0.9) or (base + 0.1)
+    test.from, test.target = base, target
+
+    local tag = setterName .. "(" .. snap.name .. ")"
+    activeTest = tag
+    local ok, ret = pcall(setter, snap.name, ("%.4f"):format(target))
+    activeTest = nil
+    test.callOk = ok
+    if ok then test.returned = plain(ret) else test.err = plain(ret):sub(1, 200) end
+
+    local blocked = blocksFor(tag)
+    if #blocked > 0 then test.blockEvents = blocked end
+
+    -- Read back BEFORE restoring, or the measurement is gone.
+    local okRead, readBack = pcall(C_CVar.GetCVar, snap.name)
+    test.readBack = okRead and plain(readBack) or ("read failed: " .. plain(readBack))
+    local n = okRead and tonumber(readBack) or nil
+    test.tookEffect = (n ~= nil) and (math.abs(n - target) < 0.005) or false
+
+    -- Restore unconditionally, including when the write looked like it failed. A
+    -- partial success must not leave the player's screen where the probe put it.
+    pcall(setter, snap.name, snap.value)
+    local okAfter, after = pcall(C_CVar.GetCVar, snap.name)
+    test.restoredTo = okAfter and plain(after) or "<restore readback failed>"
+
+    test.allowed = ok and (#blocked == 0) and test.tookEffect
+    return test
+end
+
+local function probeVideo()
+    local inCombat = InCombatLockdown and InCombatLockdown() or false
+    local video = {
+        inCombat = inCombat,
+        setterPresent = {
+            ["C_CVar.SetCVar"] = (C_CVar and C_CVar.SetCVar) and true or false,
+            ["SetCVar"] = SetCVar and true or false,
+        },
+        cvars = {}, displayMode = {}, writes = {},
+    }
+
+    out(("|cff44ddffvideo CVars|r  %s"):format(
+        inCombat and "|cffffaa00IN COMBAT|r" or "out of combat"))
+
+    -- 1. What are the names actually called on this client.
+    local disc = discoverVideoCVars()
+    video.discovery = disc
+    if disc.err then
+        out(("  console enumeration unavailable - %s"):format(disc.err))
+        out("  falling back to the retail names, which are a guess on this build")
+    else
+        out(("  console commands matching bright/contrast/gamma: %d of %d")
+            :format(#disc.matches, disc.total or 0))
+        if #disc.matches > 0 then
+            out("    " .. table.concat(disc.matches, ", "):sub(1, 240))
+        end
+    end
+
+    -- Guesses first so their absence is recorded as a result, then anything the
+    -- enumeration turned up that the guesses missed.
+    local names, seen = {}, {}
+    for _, n in ipairs(VIDEO_CVAR_GUESSES) do
+        names[#names + 1] = n
+        seen[n:lower()] = true
+    end
+    for _, n in ipairs(disc.matches) do
+        if not seen[n:lower()] then
+            names[#names + 1] = n
+            seen[n:lower()] = true
+        end
+    end
+
+    -- 2. Presence and the permission flags.
+    for _, name in ipairs(names) do
+        local snap = videoCVarSnapshot(name)
+        video.cvars[name] = snap
+        if snap.err then
+            out(("  %-26s |cffff4444%s|r"):format(name, snap.err))
+        elseif not snap.present then
+            out(("  %-26s |cffff4444ABSENT on this client|r"):format(name))
+        else
+            local flags = {}
+            if snap.lockedFromUser then flags[#flags + 1] = "lockedFromUser" end
+            if snap.secure then flags[#flags + 1] = "secure" end
+            if snap.readOnly then flags[#flags + 1] = "readOnly" end
+            out(("  %-26s = %-10s default %-10s %s"):format(
+                name, snap.value, snap.default,
+                (#flags > 0) and ("|cffffaa00" .. table.concat(flags, ",") .. "|r")
+                              or "|cff44ff44no lock flags|r"))
+        end
+    end
+
+    -- 3. Does a write land. Both setters, because the documented namespaced one
+    --    and the undocumented global one are not guaranteed to be protected the
+    --    same way, and this costs one extra call to find out.
+    local setters = {}
+    if C_CVar and C_CVar.SetCVar then setters[#setters + 1] = { "C_CVar.SetCVar", C_CVar.SetCVar } end
+    if SetCVar then setters[#setters + 1] = { "SetCVar", SetCVar } end
+    if #setters == 0 then
+        out("  |cffff4444no SetCVar on this client at all|r")
+    end
+    for _, name in ipairs(names) do
+        local snap = video.cvars[name]
+        if snap and snap.present and tonumber(snap.value) then
+            for _, s in ipairs(setters) do
+                local test = videoWriteTest(snap, s[2], s[1])
+                video.writes[name .. " via " .. s[1]] = test
+                if test.skipped then
+                    out(("  write %-20s %-16s skipped - %s"):format(name, s[1], test.skipped))
+                else
+                    out(("  write %-20s %-16s %s  %.4f -> readback %s%s"):format(
+                        name, s[1],
+                        test.allowed and "|cff44ff44TOOK EFFECT|r" or "|cffff4444NO EFFECT|r",
+                        test.target, tostring(test.readBack),
+                        test.blockEvents and (" [" .. test.blockEvents[1] .. "]")
+                            or (test.err and (" - " .. test.err:sub(1, 50)) or "")))
+                end
+            end
+        end
+    end
+
+    -- 4. Which display mode this was measured in. Not an answer, but without it
+    --    the fullscreen-only question cannot be settled from the capture later.
+    for _, name in ipairs(DISPLAY_MODE_CVARS) do
+        local ok, v = pcall(C_CVar.GetCVar, name)
+        video.displayMode[name] = ok and plain(v) or "<read failed>"
+    end
+    if C_VideoOptions and C_VideoOptions.GetCurrentGameWindowSize then
+        local ok, size = pcall(C_VideoOptions.GetCurrentGameWindowSize)
+        if ok and type(size) == "table" then
+            video.displayMode.windowSize = plain(size.x) .. "x" .. plain(size.y)
+        end
+    end
+    local modeBits = {}
+    for _, name in ipairs(DISPLAY_MODE_CVARS) do
+        local v = video.displayMode[name]
+        if v and v ~= "" and v ~= "<read failed>" then
+            modeBits[#modeBits + 1] = name .. "=" .. v
+        end
+    end
+    out("  display mode: " .. (table.concat(modeBits, "  "):sub(1, 220)))
+    if video.displayMode.windowSize then
+        out("  window size:  " .. video.displayMode.windowSize)
+    end
+
+    db.video = db.video or {}
+    db.video[inCombat and "inCombat" or "outOfCombat"] = video
+
+    out("next:")
+    out("  |cffffffff/fprobe video ramp|r     sweep it and watch the screen - does it apply LIVE")
+    out("  |cffffffff/fprobe video|r in combat  the combat half of the answer")
+    out("  |cffffffff/fprobe blocked|r         if a forbidden-action popup appeared")
+    return video
+end
+
+-- The live-apply measurement. Sweeps one CVar down and back from OnUpdate,
+-- writing every frame, then reports how many frames it actually got. A cheap
+-- post-process leaves the frame gaps flat; a device restart per write shows up as
+-- a spike. Whether the SCREEN changed is still the player's to report - the
+-- client will not tell us, and "accepted and ignored" looks identical from Lua.
+local RAMP_SECONDS, RAMP_DEPTH = 4.0, 0.40
+local rampFrame
+
+local function videoRamp(nameArg)
+    if rampFrame and rampFrame.running then
+        return out("|cffffaa00a ramp is already running|r")
+    end
+    local setter = (C_CVar and C_CVar.SetCVar) or SetCVar
+    if not setter then return out("|cffff4444no SetCVar on this client|r") end
+
+    -- The slash handler lowercases the whole argument, so resolve back to the
+    -- canonical spelling rather than passing a lowercased name through.
+    local wanted = (nameArg and nameArg ~= "") and nameArg or nil
+    local candidates = {}
+    for _, n in ipairs(VIDEO_CVAR_GUESSES) do candidates[#candidates + 1] = n end
+    for _, n in ipairs(discoverVideoCVars().matches) do candidates[#candidates + 1] = n end
+
+    local target, snap
+    for _, n in ipairs(candidates) do
+        local s = videoCVarSnapshot(n)
+        if wanted then
+            if n:lower() == wanted then
+                target, snap = n, s
+                break
+            end
+        elseif s.present and s.writable and tonumber(s.value) then
+            target, snap = n, s
+            break
+        end
+    end
+    if not target then
+        return out(wanted
+            and ("|cffff4444no CVar matching '" .. wanted .. "' - run /fprobe video first|r")
+            or "|cffff4444no writable brightness/contrast CVar found - run /fprobe video first|r")
+    end
+    local base = tonumber(snap.value)
+    if not base then
+        return out(("|cffff4444%s is not numeric: %s|r"):format(target, tostring(snap.value)))
+    end
+
+    rampFrame = rampFrame or CreateFrame("Frame")
+    local amplitude = base * RAMP_DEPTH
+    local stats = {
+        cvar = target, base = base, amplitude = amplitude, inCombat = InCombatLockdown
+            and InCombatLockdown() or false,
+        frames = 0, writes = 0, writeFailures = 0, elapsed = 0,
+        maxDelta = 0, minDelta = 999,
+    }
+
+    local function restore()
+        rampFrame.running = false
+        rampFrame:SetScript("OnUpdate", nil)
+        pcall(setter, target, snap.value)
+    end
+
+    out(("|cff44ddfframp|r %s  %.4f -> %.4f -> %.4f over %.0fs - |cffffffffwatch the screen|r")
+        :format(target, base, base - amplitude, base, RAMP_SECONDS))
+
+    rampFrame.running = true
+    rampFrame:SetScript("OnUpdate", function(_, delta)
+        stats.frames = stats.frames + 1
+        stats.elapsed = stats.elapsed + delta
+        if delta > stats.maxDelta then stats.maxDelta = delta end
+        if delta < stats.minDelta then stats.minDelta = delta end
+
+        if stats.elapsed >= RAMP_SECONDS then
+            restore()
+            db.video = db.video or {}
+            db.video.ramp = stats
+            local fps = stats.frames / math.max(stats.elapsed, 0.001)
+            out(("  %d frames in %.2fs (%.0f/s), %d writes, %d failures")
+                :format(stats.frames, stats.elapsed, fps, stats.writes, stats.writeFailures))
+            out(("  frame gap min %.1f ms, max %.1f ms")
+                :format(stats.minDelta * 1000, stats.maxDelta * 1000))
+            if stats.maxDelta > 0.1 then
+                out("  |cffffaa00frame gap spiked - each write looks expensive (device restart?)|r")
+            else
+                out("  |cff44ff44no frame-gap spike - cheap enough to drive a per-frame ease|r")
+            end
+            out("  |cffffffffDid the screen actually change?|r If nothing happened at all, the")
+            out("  write was accepted and ignored - that is a silent no, and it is a result.")
+            return
+        end
+
+        -- sin(0..pi) gives 0 -> 1 -> 0, so it ends exactly where it started even
+        -- if the restore below were to fail.
+        local f = math.sin(stats.elapsed / RAMP_SECONDS * math.pi)
+        local ok = pcall(setter, target, ("%.4f"):format(base - amplitude * f))
+        if ok then stats.writes = stats.writes + 1 else stats.writeFailures = stats.writeFailures + 1 end
+    end)
+
+    -- Belt and braces. If OnUpdate stops firing mid-sweep - which is exactly what
+    -- a device restart per write might do - the player is left sitting at a
+    -- darkened screen with no way back.
+    if C_Timer and C_Timer.After then
+        C_Timer.After(RAMP_SECONDS + 2, function()
+            if rampFrame and rampFrame.running then
+                restore()
+                out("|cffffaa00ramp did not finish on its own - value restored|r")
+                out("  OnUpdate stalled mid-sweep, which is itself the answer to 'is it live'.")
+            end
+        end)
+    end
+end
+
 -- Driver ----------------------------------------------------------------------
 SLASH_FPROBE1 = "/fprobe"
 SlashCmdList.FPROBE = function(arg)
@@ -2018,6 +2402,10 @@ SlashCmdList.FPROBE = function(arg)
         return probeApiDocs()
     end
     if cmd == "bridge" then return printBridge() end
+    if cmd == "video" then
+        if sub == "ramp" then return videoRamp(extra) end
+        return probeVideo()
+    end
     if cmd == "ah" then
         if sub == "scan" then return ahReplicateScan() end
         if sub == "browse" then return ahBrowseMeasure(extra) end

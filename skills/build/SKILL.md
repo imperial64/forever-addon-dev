@@ -137,6 +137,27 @@ screen, and `/reload`.
 
 ## Checking your work
 
+```bash
+python tools/lint_addon.py path/to/YourAddon/
+```
+
+Checks source against the measured ground truth: calls to functions this client lacks,
+subscriptions to refused events, reads that come back secret, protected actions, the
+`tostring()`-on-a-secret trap, unguarded `RegisterEvent`, and the version-check trap. Each
+finding cites the evidence section it comes from.
+
+It is a **regex linter, not a Lua parser** — it cannot follow aliases, table lookups or
+dynamic calls, so a clean run is not a proof of correctness. It says so on every run.
+
+If your addon does something restricted deliberately, suppress it with a reason:
+
+```lua
+UseAction(1)  -- lint-allow: forbidden-call - measuring the refusal on purpose
+```
+
+A suppression with no reason is itself reported, because it is indistinguishable from a
+mistake.
+
 Before writing against any function, two habits worth keeping:
 
 1. **Check it exists on this build** — the api skill. A missing reference page means the

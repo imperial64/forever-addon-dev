@@ -184,7 +184,7 @@ sideband that §0.2 listed as a candidate.
 
 Measured 2026-09-18 on our own client, and this settles the second live plan.
 
-**Outbound works.** `WTF/Account/130656239#1/SavedVariables/ForeverProbe.lua` exists on
+**Outbound works.** `WTF/Account/<account>/SavedVariables/ForeverProbe.lua` exists on
 disk, 303 KB, written on logout. Everything the probe recorded — the full global dump, the
 namespace map, the secrecy gates, the auction surface — came back out of the client in a
 file an external process can read. That is the entire outbound requirement.
