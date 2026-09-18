@@ -30,6 +30,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+try:
+    import yaml
+except ImportError:  # pragma: no cover - the reference still builds without it
+    yaml = None
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import svlua  # noqa: E402
 
@@ -105,13 +110,100 @@ def _signature(function: dict[str, Any], qualified: str) -> str:
     return f"{rets} = {call}" if rets else call
 
 
+VERDICT_LABEL = {
+    "forbidden": "FORBIDDEN",
+    "blocked": "BLOCKED IN COMBAT",
+    "secret": "SECRET",
+    "silent": "FAILS SILENTLY",
+    "broken": "BROKEN ON THIS BUILD",
+    "caution": "CAUTION",
+    "permitted": "PERMITTED",
+}
+
+
+class Restrictions:
+    """The measured restriction data, indexed for lookup during generation.
+
+    This is the part of the reference nobody else has: Blizzard's documentation
+    says a function exists and what it takes, and says nothing about whether the
+    client will actually let an addon call it, or whether the value it returns can
+    be read. Both are measured, and both belong on the page rather than in a
+    document the reader has to know to go and find.
+    """
+
+    def __init__(self, path: Path | None, findings_link: str = "docs/findings.md") -> None:
+        # Where the evidence document lives relative to the repo root. Kept
+        # configurable because the restructure moves it to research/.
+        self.findings_link = findings_link
+        self.meta: dict[str, Any] = {}
+        self.entries: list[dict[str, Any]] = []
+        self.by_symbol: dict[str, list[dict[str, Any]]] = {}
+        self.by_namespace: dict[str, list[dict[str, Any]]] = {}
+        self.by_event: dict[str, list[dict[str, Any]]] = {}
+        if not path or not path.exists():
+            return
+        if yaml is None:
+            print("PyYAML not installed; restriction banners will be omitted",
+                  file=sys.stderr)
+            return
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        self.meta = data.get("meta") or {}
+        self.entries = data.get("entries") or []
+        for entry in self.entries:
+            for symbol in entry.get("symbols") or []:
+                self.by_symbol.setdefault(symbol, []).append(entry)
+            for namespace in entry.get("namespaces") or []:
+                self.by_namespace.setdefault(namespace, []).append(entry)
+            for event in entry.get("events") or []:
+                self.by_event.setdefault(event, []).append(entry)
+
+    def for_function(self, qualified: str, namespace: str | None) -> list[dict[str, Any]]:
+        found = list(self.by_symbol.get(qualified, []))
+        if namespace:
+            found += [e for e in self.by_namespace.get(namespace, []) if e not in found]
+        return found
+
+    def banner(self, entries: list[dict[str, Any]], depth: int = 4) -> list[str]:
+        lines: list[str] = []
+        for entry in entries:
+            verdict = entry.get("verdict", "caution")
+            label = VERDICT_LABEL.get(verdict, verdict.upper())
+            scope = entry.get("scope", "always")
+            scope_text = "in combat only" if scope == "in-combat" else "at all times"
+            measured = self.meta.get("measured_on", "")
+            build = self.meta.get("build", "")
+            lines.append(
+                f"> **{label} — measured, {scope_text}.** "
+                + " ".join((entry.get("summary") or "").split())
+            )
+            evidence = entry.get("evidence") or []
+            if evidence:
+                refs = ", ".join(f"§{e}" for e in evidence)
+                up = "../" * depth
+                lines.append(
+                    f"> Measured {measured} on build {build}. Evidence: {refs} in"
+                    f" [findings]({up}{self.findings_link})."
+                )
+            workaround = entry.get("workaround")
+            if workaround:
+                lines.append("> ")
+                lines.append("> _Workaround:_ " + " ".join(workaround.split()))
+            lines.append("")
+        return lines
+
+
 class ReferenceBuilder:
-    def __init__(self, out_dir: Path, docs: dict[str, Any]) -> None:
+    def __init__(self, out_dir: Path, docs: dict[str, Any],
+                 restrictions: Restrictions | None = None) -> None:
         self.out = out_dir
         self.docs = docs
         self.systems: dict[str, Any] = docs["systems"]
+        self.restrictions = restrictions or Restrictions(None)
         self.written = 0
         self.index: list[tuple[str, str]] = []  # (symbol, path) for the names index
+        self.annotated: set[str] = set()
+        self.surface: dict[str, Any] = {}
+        self.stubs = 0
 
     # -- page emission -----------------------------------------------------
     def _write(self, path: Path, lines: list[str]) -> None:
@@ -120,6 +212,18 @@ class ReferenceBuilder:
         # newline="\n" so a regenerate on Windows is not a whole-tree diff
         path.write_text(body, encoding="utf-8", newline="\n")
         self.written += 1
+
+    def _depth(self, directory: Path) -> int:
+        """How many `../` it takes to get from a page in `directory` back to the
+        repo root: the depth of the reference root plus the page's depth inside
+        it. Callers pass the page's own directory and nothing else - an off-by-one
+        here silently produces links that 404 from some pages and work from
+        others, which is worse than one that is wrong everywhere."""
+        try:
+            relative = directory.resolve().relative_to(self.out.resolve())
+        except ValueError:
+            return len(self.out.parts)
+        return len(self.out.parts) + len(relative.parts)
 
     def _header(self) -> str:
         client = self.docs.get("client") or {}
@@ -133,6 +237,14 @@ class ReferenceBuilder:
                       directory: Path, qualified: str) -> None:
         name = function.get("Name") or "unknown"
         lines = [self._header(), "", f"# {qualified}", ""]
+
+        # Our measured restrictions go ABOVE Blizzard's own flag: the flag says
+        # the call is gated, ours says what the client actually did.
+        measured = self.restrictions.for_function(qualified, owner.get("Namespace"))
+        if measured:
+            lines += self.restrictions.banner(measured, self._depth(directory))
+            for entry in measured:
+                self.annotated.add(entry["id"])
 
         if function.get("HasRestrictions"):
             lines += [
@@ -171,6 +283,11 @@ class ReferenceBuilder:
         literal = event.get("LiteralName") or event.get("Name") or "unknown"
         directory = self.out / "events" / _bucket(literal)
         lines = [self._header(), "", f"# {literal}", ""]
+        measured = self.restrictions.by_event.get(literal, [])
+        if measured:
+            lines += self.restrictions.banner(measured, self._depth(directory))
+            for entry in measured:
+                self.annotated.add(entry["id"])
         payload = event.get("Payload")
         lines += ["**Payload**", ""]
         lines += _field_rows(payload) if payload else ["_No payload._"]
@@ -233,7 +350,65 @@ class ReferenceBuilder:
             for table in system.get("Tables") or []:
                 self.table_page(table, system)
 
+        # Deliberately after the documented pass, so a stub never shadows a real
+        # page.
+        self.write_stubs()
         self.write_indexes()
+
+    def write_stubs(self) -> None:
+        """Pages for symbols the client HAS but Blizzard does not document.
+
+        This is not padding. The validation pass found that UseAction, ReloadUI
+        and the binding setters - four of the most restricted functions on this
+        client - appear nowhere in Blizzard's own documentation. Without stubs,
+        the restriction data would have had nowhere to land, and a missing file
+        would have been ambiguous between "not on this build" and "we failed to
+        find it".
+
+        With stubs, a missing file means exactly one thing: the symbol is not in
+        this client. That is worth several thousand small files.
+        """
+        if not self.surface:
+            return
+        documented = {symbol for symbol, _ in self.index}
+        stubs = 0
+        for name in sorted(self.surface.get("globals", [])):
+            if name in documented:
+                continue
+            target = self.out / "globals" / _bucket(name)
+            self._stub_page(target / f"{_safe_name(name)}.md", name, None)
+            self.index.append((name, f"globals/{_bucket(name)}/{_safe_name(name)}.md"))
+            stubs += 1
+        for namespace, members in sorted(self.surface.get("namespaces", {}).items()):
+            for member in sorted(members):
+                qualified = f"{namespace}.{member}"
+                if qualified in documented:
+                    continue
+                target = self.out / "namespaces" / _safe_name(namespace)
+                self._stub_page(target / f"{_safe_name(member)}.md", qualified, namespace)
+                self.index.append(
+                    (qualified, f"namespaces/{_safe_name(namespace)}/{_safe_name(member)}.md"))
+                stubs += 1
+        self.stubs = stubs
+
+    def _stub_page(self, path: Path, qualified: str, namespace: str | None) -> None:
+        lines = [self._header(), "", f"# {qualified}", ""]
+        measured = self.restrictions.for_function(qualified, namespace)
+        if measured:
+            lines += self.restrictions.banner(measured, self._depth(path.parent))
+            for entry in measured:
+                self.annotated.add(entry["id"])
+        lines += [
+            "> **Present on this client, but not documented by Blizzard.**"
+            " It exists in the client's global table and can be called; Blizzard's"
+            " own API documentation carries no signature for it, so none is shown"
+            " here rather than one being invented.",
+            "",
+            "Source: ForeverProbe global surface dump.",
+        ]
+        if namespace:
+            lines.append(f"Namespace: `{namespace}`")
+        self._write(path, lines)
 
     def write_indexes(self) -> None:
         # Namespace index: which namespace owns what, for the "I don't know the
@@ -275,6 +450,86 @@ class ReferenceBuilder:
         for symbol, path in sorted(set(self.index)):
             index_lines.append(f"- `{symbol}` → {path}")
         self._write(self.out / "INDEX.md", index_lines)
+
+    def write_restrictions_page(self) -> None:
+        """One page carrying every restriction, so the question can be answered
+        in a single read rather than a tour of the tree."""
+        entries = self.restrictions.entries
+        if not entries:
+            return
+        meta = self.restrictions.meta
+        lines = [
+            self._header(), "", "# Restrictions", "",
+            f"Measured on client {meta.get('client')} build {meta.get('build')}"
+            f" (interface {meta.get('interface')}) with {meta.get('measured_by')}.", "",
+            "Everything here was measured against a running client. Blizzard's own"
+            " documentation says what a function takes; this says whether the client"
+            " will let an addon call it and whether the value can be read.", "",
+            "| Applies to | Verdict | Scope | Summary |",
+            "|---|---|---|---|",
+        ]
+        for entry in sorted(entries, key=lambda e: (e.get("scope", ""), e["id"])):
+            targets = (entry.get("symbols") or entry.get("events")
+                       or entry.get("namespaces") or [entry.get("gate") or entry["id"]])
+            target_text = ", ".join(f"`{t}`" for t in targets[:3])
+            if len(targets) > 3:
+                target_text += f" +{len(targets) - 3}"
+            lines.append(
+                "| {target} | **{verdict}** | {scope} | {summary} |".format(
+                    target=target_text,
+                    verdict=VERDICT_LABEL.get(entry.get("verdict", ""), entry.get("verdict", "")),
+                    scope=entry.get("scope", ""),
+                    summary=" ".join((entry.get("summary") or "").split()),
+                )
+            )
+        lines.append("")
+        for entry in sorted(entries, key=lambda e: e["id"]):
+            lines += [f"## {entry['id']}", ""]
+            lines.append(" ".join((entry.get("summary") or "").split()))
+            detail = entry.get("detail")
+            if detail:
+                lines += ["", " ".join(detail.split())]
+            workaround = entry.get("workaround")
+            if workaround:
+                lines += ["", "**Workaround.** " + " ".join(workaround.split())]
+            evidence = entry.get("evidence") or []
+            if evidence:
+                refs = ", ".join(f"§{e}" for e in evidence)
+                lines += ["", f"_Evidence: {refs} in `research/findings.md`._"]
+            lines.append("")
+        self._write(self.out / "RESTRICTIONS.md", lines)
+
+    def validate(self, findings: Path) -> list[str]:
+        """A restriction pointing at a symbol that no longer exists is the failure
+        that actually bites: Blizzard removes a function and the guidance keeps
+        recommending it. Same for an evidence anchor that has been renamed."""
+        problems: list[str] = []
+        known = {symbol for symbol, _ in self.index}
+        headings = ""
+        if findings.exists():
+            headings = findings.read_text(encoding="utf-8", errors="replace")
+
+        for entry in self.restrictions.entries:
+            if not entry.get("no_api_page"):
+                for symbol in entry.get("symbols") or []:
+                    if symbol not in known:
+                        problems.append(
+                            f"{entry['id']}: symbol {symbol!r} has no generated page"
+                            " (mark no_api_page if that is expected)"
+                        )
+            for namespace in entry.get("namespaces") or []:
+                if not any(s.startswith(namespace + ".") for s in known):
+                    problems.append(f"{entry['id']}: namespace {namespace!r} generated nothing")
+            for event in entry.get("events") or []:
+                if event not in known:
+                    problems.append(f"{entry['id']}: event {event!r} has no generated page")
+            if headings:
+                for anchor in entry.get("evidence") or []:
+                    if not re.search(rf"^#+\s*{re.escape(str(anchor))}[\s.]", headings, re.M):
+                        problems.append(
+                            f"{entry['id']}: evidence anchor {anchor!r} not found in {findings}"
+                        )
+        return problems
 
     def write_build_info(self, capture: Path) -> dict[str, Any]:
         client = self.docs.get("client") or {}
@@ -319,6 +574,14 @@ def main() -> int:
                         help="normalized machine-readable copy")
     parser.add_argument("--clean", action="store_true",
                         help="remove the output tree first, so deletions show in the diff")
+    parser.add_argument("--restrictions", type=Path, default=Path("research/restrictions.yaml"))
+    parser.add_argument("--restrictions-json", type=Path, default=Path("data/restrictions.json"))
+    parser.add_argument("--findings", type=Path, default=Path("docs/findings.md"))
+    parser.add_argument("--surface", type=Path, default=None,
+                        help="a capture containing globalFunctions/namespaces, used to "
+                             "stub symbols the client has but Blizzard does not document")
+    parser.add_argument("--strict", action="store_true",
+                        help="fail if any restriction fails to resolve")
     args = parser.parse_args()
 
     data = svlua.parse_file(str(args.capture))
@@ -332,9 +595,33 @@ def main() -> int:
     if args.clean and args.out.exists():
         shutil.rmtree(args.out)
 
-    builder = ReferenceBuilder(args.out, docs)
+    restrictions = Restrictions(args.restrictions, findings_link=str(args.findings).replace("\\", "/"))
+    builder = ReferenceBuilder(args.out, docs, restrictions)
+    if args.surface:
+        surface_db = svlua.parse_file(str(args.surface)).get("ForeverProbeDB") or {}
+        builder.surface = {
+            "globals": surface_db.get("globalFunctions") or [],
+            "namespaces": surface_db.get("namespaces") or {},
+        }
     builder.build()
+    builder.write_restrictions_page()
     info = builder.write_build_info(args.capture)
+
+    problems = builder.validate(args.findings)
+    unused = [e["id"] for e in restrictions.entries
+              if e["id"] not in builder.annotated
+              and (e.get("symbols") or e.get("namespaces") or e.get("events"))
+              and not e.get("no_api_page")]
+    for entry_id in unused:
+        problems.append(f"{entry_id}: matched no generated page")
+
+    if restrictions.entries:
+        args.restrictions_json.parent.mkdir(parents=True, exist_ok=True)
+        with args.restrictions_json.open("w", encoding="utf-8", newline="\n") as handle:
+            # default=str because YAML parses a bare 2026-09-18 into a date
+            # object, and the linter wants a string it can print.
+            json.dump({"meta": restrictions.meta, "entries": restrictions.entries},
+                      handle, indent=1, ensure_ascii=False, sort_keys=True, default=str)
 
     args.json.parent.mkdir(parents=True, exist_ok=True)
     with args.json.open("w", encoding="utf-8", newline="\n") as handle:
@@ -344,9 +631,18 @@ def main() -> int:
     print(f"{builder.written} pages -> {args.out}")
     print(f"  {info['systems']} systems, {info['functions']} functions, "
           f"{info['events']} events, {info['tables']} tables")
+    if builder.stubs:
+        print(f"  {builder.stubs} undocumented symbols stubbed from the client surface")
     print(f"  machine-readable copy -> {args.json}")
+    if restrictions.entries:
+        print(f"  {len(restrictions.entries)} restrictions, "
+              f"{len(builder.annotated)} matched pages -> {args.restrictions_json}")
     if not (docs.get("client") or {}).get("build"):
         print("  WARNING: capture does not record its client build; re-dump to fix")
+    for problem in problems:
+        print(f"  RESTRICTION: {problem}", file=sys.stderr)
+    if problems and args.strict:
+        return 2
     return 0
 
 

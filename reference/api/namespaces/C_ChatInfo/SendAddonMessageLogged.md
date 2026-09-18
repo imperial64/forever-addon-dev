@@ -2,6 +2,9 @@
 
 # C_ChatInfo.SendAddonMessageLogged
 
+> **CAUTION — measured, at all times.** AreOutgoingAddonChatMessagesRestricted() returns true, in and out of combat.
+> Measured 2026-09-18 on build 69913. Evidence: §P.10, §P.18 in [findings](../../../../docs/findings.md).
+
 ```lua
 result = C_ChatInfo.SendAddonMessageLogged(prefix, message, chatType, target)
 ```

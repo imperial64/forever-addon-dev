@@ -2,6 +2,9 @@
 
 # C_AssistedCombat.IsAvailable
 
+> **PERMITTED — measured, at all times.** C_AssistedCombat exists but reports itself unavailable.
+> Measured 2026-09-18 on build 69913. Evidence: §0.4, §P.6 in [findings](../../../../docs/findings.md).
+
 ```lua
 isAvailable, failureReason = C_AssistedCombat.IsAvailable()
 ```

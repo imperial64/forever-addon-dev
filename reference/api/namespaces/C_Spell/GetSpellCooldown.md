@@ -2,6 +2,11 @@
 
 # C_Spell.GetSpellCooldown
 
+> **SECRET — measured, in combat only.** Spell and action cooldowns become secret in combat.
+> Measured 2026-09-18 on build 69913. Evidence: §P.18 in [findings](../../../../docs/findings.md).
+> 
+> _Workaround:_ The sanctioned path is C_Spell.GetSpellCooldownDuration -> LuaDurationObject -> Cooldown:SetCooldownFromDurationObject, which does not require addon code to read the number.
+
 ```lua
 spellCooldownInfo = C_Spell.GetSpellCooldown(spellIdentifier)
 ```

@@ -1,0 +1,263 @@
+{
+ "entries": [
+  {
+   "detail": "RegisterEvent fires ADDON_ACTION_FORBIDDEN and the frame never receives the event. Nothing is raised, so a pcall around the registration reports success. Measured at load, out of combat, standing in a field - this is not a combat-scoped rule. CombatLogGetCurrentEventInfo is absent from the client as well, so the restriction holds at two independent levels.\n",
+   "events": [
+    "COMBAT_LOG_EVENT",
+    "COMBAT_LOG_EVENT_UNFILTERED"
+   ],
+   "evidence": [
+    "P.1",
+    "P.12"
+   ],
+   "id": "combat-log-subscription",
+   "kind": "event",
+   "scope": "always",
+   "summary": "Addons may not register for the combat log, in either form.\n",
+   "verdict": "forbidden",
+   "workaround": "None for parsing. Blizzard ships C_DamageMeter for damage numbers. Every other event tried is permitted, including UNIT_AURA, UNIT_COMBAT and both PLAYER_REGEN events - the rule is \"no combat log\", not \"no combat information\".\n"
+  },
+  {
+   "detail": "While ShouldAurasBeSecret() is true, C_UnitAuras reads throw with \"Auras cannot be accessed when secret while tainted by '<addon>'\". Note \"while tainted by\": the restriction is scoped to the call stack, not the data - Blizzard's own UI reads the same auras in the same combat. Out of combat the gate is false and auras read normally, by name.\n",
+   "evidence": [
+    "P.18",
+    "P.19"
+   ],
+   "gate": "C_Secrets.ShouldAurasBeSecret",
+   "id": "aura-secrecy",
+   "kind": "category",
+   "namespaces": [
+    "C_UnitAuras"
+   ],
+   "scope": "in-combat",
+   "summary": "Aura reads RAISE in combat. They do not return nil.\n",
+   "verdict": "secret",
+   "workaround": "Read before the pull and hold the value, or hand a duration object to a Cooldown widget before combat starts and let it keep ticking.\n"
+  },
+  {
+   "detail": "ShouldUnitPowerBeSecret(\"player\") is true standing still with no target, and UnitPower(\"player\") returns a secret value in both combat states. This directly contradicts Blizzard's published doctrine, which promises that \"all class secondary resources remain fully non-secret\". Measured twice, in both states, by gate and by value. Either the doctrine does not describe this client or this is a beta bug.\n",
+   "evidence": [
+    "P.3",
+    "P.10",
+    "P.18"
+   ],
+   "gate": "C_Secrets.ShouldUnitPowerBeSecret",
+   "id": "unit-power-secrecy",
+   "kind": "category",
+   "scope": "always",
+   "summary": "Unit power is secret at ALL times, including out of combat.\n",
+   "symbols": [
+    "UnitPower",
+    "UnitPowerMax"
+   ],
+   "verdict": "secret"
+  },
+  {
+   "detail": "ShouldCooldownsBeSecret() and ShouldActionCooldownBeSecret() are both false out of combat and true in it. Blizzard ships its own cooldown manager.\n",
+   "evidence": [
+    "P.18"
+   ],
+   "gate": "C_Secrets.ShouldCooldownsBeSecret",
+   "id": "cooldown-secrecy",
+   "kind": "category",
+   "scope": "in-combat",
+   "summary": "Spell and action cooldowns become secret in combat.\n",
+   "symbols": [
+    "C_Spell.GetSpellCooldown",
+    "C_Spell.GetSpellCharges",
+    "GetActionCooldown"
+   ],
+   "verdict": "secret",
+   "workaround": "The sanctioned path is C_Spell.GetSpellCooldownDuration -> LuaDurationObject -> Cooldown:SetCooldownFromDurationObject, which does not require addon code to read the number.\n"
+  },
+  {
+   "evidence": [
+    "P.18"
+   ],
+   "gate": "C_Secrets.ShouldUnitStatsBeSecret",
+   "id": "unit-stats-secrecy",
+   "kind": "category",
+   "scope": "in-combat",
+   "summary": "Unit stats become secret in combat.",
+   "verdict": "secret"
+  },
+  {
+   "detail": "ShouldUnitThreatValuesBeSecret() is true in combat while ShouldUnitThreatStateBeSecret() is false. An addon may know whether it has aggro and not by how much. That kills the numeric threat meter and leaves the \"you are about to pull\" warning working, which does not look accidental.\n",
+   "evidence": [
+    "P.18"
+   ],
+   "gate": "C_Secrets.ShouldUnitThreatValuesBeSecret",
+   "id": "threat-values-secrecy",
+   "kind": "category",
+   "scope": "in-combat",
+   "summary": "Threat VALUES are secret in combat, but threat STATE is not.\n",
+   "verdict": "secret"
+  },
+  {
+   "detail": "Measured false on their gates while in combat: ShouldUnitIdentityBeSecret, ShouldUnitHealthMaxBeSecret, ShouldUnitSpellCastBeSecret, ShouldUnitThreatStateBeSecret. Cast bars work. Recorded because \"addons cannot see combat\" is the common summary and it is wrong.\n",
+   "evidence": [
+    "P.18"
+   ],
+   "id": "readable-in-combat",
+   "kind": "note",
+   "scope": "in-combat",
+   "summary": "Unit identity, max health, spell casts and threat state stay readable in combat.\n",
+   "verdict": "permitted"
+  },
+  {
+   "evidence": [
+    "P.4",
+    "P.20"
+   ],
+   "id": "useaction-forbidden",
+   "kind": "symbol",
+   "scope": "always",
+   "summary": "UseAction fires ADDON_ACTION_FORBIDDEN in and out of combat.",
+   "symbols": [
+    "UseAction"
+   ],
+   "verdict": "forbidden"
+  },
+  {
+   "detail": "ADDON_ACTION_BLOCKED, which is retail's long-standing behaviour and is unremarkable. Measured for EditMacro and SetOverrideBindingClick; the other binding setters are listed by association and have not been measured individually.\n",
+   "evidence": [
+    "P.20"
+   ],
+   "id": "combat-blocked-actions",
+   "kind": "symbol",
+   "scope": "in-combat",
+   "summary": "Macro editing and binding overrides are permitted out of combat and blocked in it.\n",
+   "symbols": [
+    "EditMacro",
+    "SetOverrideBindingClick",
+    "SetOverrideBinding",
+    "SetBinding"
+   ],
+   "verdict": "blocked"
+  },
+  {
+   "detail": "This is the binding constraint on any out-of-game bridge: the inbound channel works, but refreshing it costs a manual /reload.\n",
+   "evidence": [
+    "0.2",
+    "P.9"
+   ],
+   "id": "reloadui-protected",
+   "kind": "symbol",
+   "scope": "always",
+   "summary": "An addon cannot reload the UI. A human must type /reload.\n",
+   "symbols": [
+    "ReloadUI"
+   ],
+   "verdict": "forbidden"
+  },
+  {
+   "detail": "Retail protects exactly this, and it is the mechanism every action-bar addon depends on. Our measurement is that the call raised no error and fired no block event - which is weaker evidence than the attribute actually taking effect, and this client has already shown that a refusal can be silent.\n",
+   "evidence": [
+    "P.20"
+   ],
+   "id": "secure-setattribute-in-combat",
+   "kind": "symbol",
+   "no_api_page": true,
+   "scope": "in-combat",
+   "summary": "SetAttribute on a secure action button SUCCEEDED in combat. Re-test before relying on it.\n",
+   "symbols": [
+    "SecureActionButtonTemplate:SetAttribute"
+   ],
+   "verdict": "caution"
+  },
+  {
+   "detail": "The throttle is real, measured at more than 162 seconds and at most 1047. When it bites, the call returns true, no REPLICATE_ITEM_LIST_UPDATE fires, and GetNumReplicateItems stays at 0 - indistinguishable from an auction house with nothing on it. IsThrottledMessageSystemReady describes the message system, not this throttle, and read true throughout.\n",
+   "evidence": [
+    "P.15",
+    "P.17"
+   ],
+   "id": "replicate-throttle",
+   "kind": "behaviour",
+   "scope": "always",
+   "summary": "A throttled full scan returns an EMPTY MARKET, not an error.\n",
+   "symbols": [
+    "C_AuctionHouse.ReplicateItems"
+   ],
+   "verdict": "silent",
+   "workaround": "Track your own last-scan time and refuse to call inside your own window. The client will not tell you. A naive addon writes \"the market is empty\" over its price history. Browse is unthrottled and returns the complete item-key market in about three seconds, so prefer it as the data source.\n"
+  },
+  {
+   "detail": "Every addon starts from defaults on every launch. Measured: the load counter stays at 1 across sessions and no token survives a /reload, while the file itself lands on disk correctly. Outbound works; the in-client round trip does not. Reported as a beta bug rather than a policy decision.\n",
+   "evidence": [
+    "P.9",
+    "0.2"
+   ],
+   "id": "savedvariables-not-read-back",
+   "kind": "behaviour",
+   "scope": "always",
+   "summary": "The client writes SavedVariables and never reads them back.\n",
+   "verdict": "broken",
+   "workaround": "An external process writes Lua into the AddOns folder and the client executes it as addon code at load. That is the inbound bridge, and it works.\n"
+  },
+  {
+   "detail": "The restriction probe reports outgoing addon messages as restricted in both states. What that restricts in practice was not measured - no message was sent - so this is a flag to check before designing a sideband on it, not a confirmed refusal.\n",
+   "evidence": [
+    "P.10",
+    "P.18"
+   ],
+   "id": "addon-messages-restricted",
+   "kind": "behaviour",
+   "scope": "always",
+   "summary": "AreOutgoingAddonChatMessagesRestricted() returns true, in and out of combat.\n",
+   "symbols": [
+    "C_ChatInfo.SendAddonMessage",
+    "C_ChatInfo.SendAddonMessageLogged"
+   ],
+   "verdict": "caution"
+  },
+  {
+   "detail": "A pcall around the read reports success and hands back a value that throws later, wherever it is next indexed - usually a print or a format, far from the read. This took the probe down mid-run. Worse, a secret string stored in SavedVariables would take the whole flush with it.\n",
+   "evidence": [
+    "P.2"
+   ],
+   "id": "secret-value-contagion",
+   "kind": "behaviour",
+   "scope": "always",
+   "summary": "tostring() on a secret value returns a SECRET STRING. The taint survives conversion.\n",
+   "verdict": "caution",
+   "workaround": "Use issecretvalue before AND after conversion. The client also provides issecrettable, hasanysecretvalues, scrub, scrubsecretvalues, canaccesssecrets, secretwrap and dropsecretaccess.\n"
+  },
+  {
+   "detail": "An error in an addon's main chunk stops the remainder of that file loading, so a single stale event name can silently remove every command the addon defines. Distinct from a forbidden registration, which does not raise at all.\n",
+   "evidence": [
+    "P.1",
+    "0.5"
+   ],
+   "id": "unknown-event-registration-throws",
+   "kind": "behaviour",
+   "scope": "always",
+   "summary": "RegisterEvent on an event this client does not have RAISES, aborting the rest of the file.\n",
+   "verdict": "caution",
+   "workaround": "Wrap every RegisterEvent in pcall."
+  },
+  {
+   "detail": "IsAvailable() returns false and GetRotationSpells() returns zero entries on this build. Recorded for accuracy; nothing in this project builds on it.\n",
+   "evidence": [
+    "0.4",
+    "P.6"
+   ],
+   "id": "assisted-combat-inert",
+   "kind": "note",
+   "scope": "always",
+   "summary": "C_AssistedCombat exists but reports itself unavailable.\n",
+   "symbols": [
+    "C_AssistedCombat.IsAvailable",
+    "C_AssistedCombat.GetRotationSpells"
+   ],
+   "verdict": "permitted"
+  }
+ ],
+ "meta": {
+  "build": "69913",
+  "client": "1.60.1",
+  "evidence_doc": "research/findings.md",
+  "interface": 16001,
+  "measured_by": "ForeverProbe",
+  "measured_on": "2026-09-18"
+ }
+}
