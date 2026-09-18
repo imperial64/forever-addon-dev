@@ -1,24 +1,26 @@
 # Findings — WoW Forever addon capabilities
 
-Last updated 2026-09-17. Everything here predates any client testing; all of it is
-superseded by probe output once that exists.
+Last updated 2026-09-18. §0 is measured against the live beta client — a third-party
+capture, fetched and queried here, which supersedes every press source below it. Our own
+probe output supersedes §0 in turn, and does not exist yet.
 
 Companion document: `auction-addon-architecture.md` — how existing auction addons acquire,
 store, price and act on market data, and the four constraints that decide whether the
 economy plan is buildable. Read it before designing anything Auction House related.
 
-Confidence labels: **[PRIMARY]** fetched and read directly · **[REPORTED]** credible
-secondary source, fetched · **[UNVERIFIED]** surfaced in search, not independently
-confirmed · **[EXCLUDED]** checked and found irrelevant or unreliable.
+Confidence labels, strongest first: **[MEASURED]** read off a capture of the running
+client · **[PRIMARY]** fetched and read directly · **[REPORTED]** credible secondary
+source, fetched · **[UNVERIFIED]** surfaced in search, not independently confirmed ·
+**[EXCLUDED]** checked and found irrelevant or unreliable.
 
-**Plan status after the 2026-09-17 pruning pass:**
+**Plan status, updated 2026-09-18 against the measured client (§0):**
 
 | Plan | Status | Next action |
 |---|---|---|
-| Economy / TSM-style | **The goal.** Everything else is secondary | Probe `C_AuctionHouse` vs `QueryAuctionItems` |
-| Claude Code notification bridge | Tooling, built alongside | Probe `io` / `os` / CVar / SavedVariables flush behaviour |
+| Economy / TSM-style | **The goal — and no longer blocked.** `C_AuctionHouse` ships in full (§0.1) | Measure the *numbers*: throttle, caps, owner fields. `/fprobe ah` then `/fprobe ah scan` |
+| Claude Code bridge | Tooling, built alongside. Viable but human-in-the-loop (§0.2) | Confirm the SavedVariables write and the `BridgeData.lua` inbound path on this build |
 | Guild management | **Scrapped** 2026-09-17 | None. Not a focus question; do not probe or design for it |
-| Rotation helper | **Shelved** 2026-09-17 | One probe kill-check (§7); do not design against it |
+| Rotation helper | **Shelved** — but `C_AssistedCombat` is present (§0.4) | Efe's call whether that revives it. Until then: no design, no scaffolding |
 
 Two plans, not four. The economy addon is the actual objective. The bridge is tooling for
 talking to Claude Code from inside a running client — general-purpose, not WoW-specific,
@@ -26,6 +28,132 @@ and expected to be reused across projects — so it is worth building even thoug
 the goal. Guild management was dropped to avoid splitting focus, not because anything
 blocks it; the guild APIs are almost certainly fine, which is exactly why the question is
 not interesting.
+
+---
+
+## 0. The client itself, measured (2026-09-18)
+
+**[MEASURED — a third-party capture of the live beta client, fetched and queried directly
+here; not our own probe output]**
+[Thunderz96/forever-addon-kit](https://github.com/Thunderz96/forever-addon-kit), day-one
+findings against the Forever beta. The README and `data/forever_api.json` (765 KB) were
+both downloaded on 2026-09-18 and the JSON queried locally, so the surface counts below
+are read off the capture rather than taken from their prose.
+
+The capture's own header: version `1.60.1`, build `69893`, interface **`16001`**,
+`project = 1` (`WOW_PROJECT_MAINLINE`), locale enUS. It contains 6,045 global functions,
+11,417 named frames and 269 `C_*` namespaces.
+
+**Standing of this evidence.** One developer's capture method, not independently
+reproduced. It is corroborated on the "Retail API on interface 16001" point by two
+unrelated porting efforts (guildos issues #7 and #9) and on the missing
+`loadstring_untainted` by GSE issue #2110. It is a *static name* capture: it proves a
+function exists, not that calling it is permitted, not what it returns, and not what is
+gated at runtime. It also describes a day-one beta build with acknowledged bugs. It ranks
+above all press reporting in this document and below our own probe output, which does not
+exist yet.
+
+### 0.1 Auction House — open question 1 is answered
+
+`C_AuctionHouse` is present with **85 functions**: the full modern model, including the
+bulk-read path (`ReplicateItems`, `GetNumReplicateItems`, `GetReplicateItemInfo`,
+`GetReplicateItemLink`, `GetReplicateItemTimeLeft`), search (`SendBrowseQuery`,
+`SendSearchQuery`, `RequestMoreBrowseResults`, `HasFullBrowseResults`), the
+commodity/item split (`GetCommoditySearchResultInfo`, `GetItemSearchResultInfo`,
+`GetItemCommodityStatus`, `PostCommodity`, `PostItem`), item keys (`GetItemKeyFromItem`,
+`MakeItemKey`, `SearchForItemKeys`), and the throttle probe
+`IsThrottledMessageSystemReady`.
+
+The Classic-era API is **gone**: `QueryAuctionItems`, `CanSendAuctionQuery`,
+`GetNumAuctionItems`, `GetAuctionItemInfo`, `GetAuctionSellItemInfo`, `StartAuction` and
+`PlaceAuctionBid` are all absent.
+
+**Consequence.** The economy addon is a **Retail port, not a Classic one** — the modern
+namespace with commodities, which is the good outcome and the one
+`auction-addon-architecture.md` is written against. No Auction House function appears in
+any restriction surface (§0.3). What is still unknown is every *number*: scan throttle,
+result caps, whether `ReplicateItems` returns owner names. Only the probe answers those.
+
+### 0.2 The client boundary — open question 2, mostly answered
+
+| Channel | State |
+|---|---|
+| `io`, `os`, `dofile`, `loadfile`, `load` | **absent** — the sandbox is intact, no direct file access |
+| `loadstring` | present (`loadstring_untainted` absent, which is a separate beta bug) |
+| `C_EncodingUtil` | **present, 10 functions** — JSON and CBOR both ways, base64, hex, string compress/decompress |
+| `C_CVar` | present, 12 functions incl. `RegisterCVar`, `SetTempCVar`, `GetCVarBitfield`; `GetCVar`/`SetCVar` also global |
+| `C_ChatInfo` | present, 45 functions incl. `SendAddonMessage`, `SendAddonMessageLogged`, `RegisterAddonMessagePrefix`, plus new restriction probes `AreOutgoingAddonChatMessagesRestricted` and `InChatMessagingLockdown` |
+| `CopyToClipboard` | present |
+| `C_FileSystem`, `C_Clipboard` | absent |
+| `C_System` | one function, `GetFrameStack` |
+
+`C_EncodingUtil` is the find. It was not in the plan and it changes the shape of the
+bridge: the inbound generated `.lua` file and the outbound SavedVariables blob stop being
+hand-rolled Lua literals and become a real wire format, with compression, that both sides
+can agree on. The same goes for an addon-message sideband, which was previously
+unattractive largely because of payload encoding.
+
+**Two blockers, both reported as beta bugs rather than policy:**
+
+1. **SavedVariables are written but never read back.** Proven by the kit with a pre-seeded
+   file: the global was `nil` from main chunk to logout, in every candidate WTF folder.
+   The normal write-now / read-next-launch loop is dead in this build. Note the asymmetry
+   — this breaks the *in-client* round trip, not the outbound half that an external reader
+   cares about, and those are worth telling apart. The probe now does.
+2. **`ReloadUI()` is protected.** An addon cannot reload itself; a human must type
+   `/reload`. That is what stops a fully unattended in-client loop, and it is the binding
+   constraint on the bridge — not the sandbox.
+
+The working inbound pattern is unchanged and now has a second independent implementation:
+an external process writes Lua into the AddOns folder and the client executes it as addon
+code at load (the kit's `ForeverCompat` `seeds/` plus `tools/sv_bridge.py` and a
+sub-second `sv_watch.py`). This is the same mechanism as `auction-addon-architecture.md`
+§5, and the one `BridgeData.lua` already tests.
+
+### 0.3 The restriction surface — open question 3, strong indication
+
+`C_Secrets` is present with **27 functions**, and every one of them is unit-, spell- or
+combat-scoped: `ShouldAurasBeSecret`, `ShouldCooldownsBeSecret`, `ShouldUnitPowerBeSecret`,
+`ShouldUnitThreatValuesBeSecret`, `ShouldUnitIdentityBeSecret`, `HasSecretRestrictions`
+and so on. **Nothing in the secrecy surface touches the Auction House, the economy, CVars,
+addon messages or encoding.** `C_RestrictedActions` (3 functions), `C_CombatLog` with
+`IsCombatLogRestricted`, and a first-party `C_DamageMeter` (8 functions) are all present.
+
+Crucially the restriction is a *gate*, not a removal: per the kit, while
+`C_Secrets.ShouldAurasBeSecret()` is true, every aura read from addon code throws. A gate
+that can be asked its own state is a much cheaper answer to combat-only-vs-always-on than
+diffing masked values — the probe now calls all of them in both combat states and prints
+the delta. If the gates read false out of combat, the black box is combat-scoped and both
+live plans are untouched by it.
+
+One practical consequence for the probe: a secret value **throws** on `tostring()`, on
+comparison, and even on a boolean test. Reads that look safe are not.
+
+### 0.4 `C_AssistedCombat` is present — watch trigger 4 has fired
+
+`C_AssistedCombat` exists on this build with four functions: `IsAvailable`,
+`GetRotationSpells`, `GetNextCastSpell`, `GetActionSpell`. This is the specific thing
+listed as reviving the rotation helper: Blizzard's own rotation-assist API, in Forever,
+which would tell an addon what to cast next without the addon reading combat state at all.
+
+**Recorded, not acted on.** The rotation helper stays shelved, no design or scaffolding
+follows from this, and the probe only calls the two no-argument functions to record what
+they return. Reopening the plan is Efe's call, not a conclusion this document draws.
+
+### 0.5 The Classic globals are gone
+
+`UnitAura`, `GetSpellCooldown`, `GetSpellInfo`, `GetItemInfo`, `GetSpecialization`,
+`GetTalentInfo`, `GetMerchantItemInfo` and `CombatLogGetCurrentEventInfo` are all absent;
+their `C_*` equivalents (`C_UnitAuras`, `C_Spell`, `C_Item`, `C_Traits`) are present.
+`CombatLogGetCurrentEventInfo` being absent matters on its own: the combat-log event can
+fire with nothing on the other side able to read it, and "never fires" and "fires but is
+unreadable" are different answers to question 4.
+
+Two more facts that shape any addon written here, both from the kit and both about
+developer experience rather than policy: registering an event this client does not know
+**throws and aborts the rest of the file**, and after 100 Lua errors in a session the
+client stops delivering errors to any handler. The probe now wraps every registration in
+`pcall` for the first reason.
 
 ---
 
@@ -210,16 +338,21 @@ confirmed firsthand. Relevant to a notification addon if true.
 
 ## What the probe resolves
 
-Ordered by what it now decides. The first rows run entirely out of combat and settle both
-live plans; the combat run only closes out the shelved one.
+§0 has already answered the presence questions from someone else's client. What the probe
+adds is the half a static name capture cannot give: whether a call is *permitted*, what it
+*returns*, and what is gated at runtime. The rows below are rewritten accordingly — the
+presence rows are now confirmations rather than discoveries.
 
 | Probe output | Conclusion |
 |---|---|
-| `C_AuctionHouse` present | Economy addon viable, retail AH code largely ports |
-| Only `QueryAuctionItems` etc. | Classic-era AH API: throttled, full-scan, much slower addon |
-| Neither AH API | Economy plan is dead as designed — and the project loses its goal |
-| `io` / `os` absent (expected) | Bridge cannot read live inbound data; needs `/reload`, a CVar, or a pixel channel |
-| `SendAddonMessage` / `SetCVar` present | Candidate inbound and sideband channels for the bridge |
+| `/fprobe ah scan` returns auctions, with timings | The real throttle and result cap, which §0 cannot supply. This is the economy plan's remaining unknown |
+| `ReplicateItems` tuple carries owner names | Forever did **not** inherit retail's 9.0.2 anonymisation — changes what the addon can attribute |
+| `C_AuctionHouse` calls fire `ADDON_ACTION_BLOCKED` | Presence without permission. Would contradict §0.1 and reopen the plan |
+| `C_Secrets` gates read false out of combat, true in combat | Black box is combat-scoped; both live plans are clear of it (§0.3) |
+| Any `C_Secrets` gate true **out** of combat | Always-on restriction — re-check both live plans for collateral reads |
+| Bridge token survives a `/reload` | The SavedVariables read-back bug (§0.2) is fixed or never applied here |
+| Token lost but `collect-savedvars.ps1` finds the file | Outbound is fine; only the in-client round trip is broken. Enough for the bridge |
+| `BridgeData.lua` reports an external write | Inbound channel confirmed on this build, at the cost of a manual `/reload` |
 | `targetAura1` readable out of combat, `nil` in combat | Black box is real and combat-scoped; rotation helper stays shelved, pre-pull display only |
 | `targetAura1` unreadable in both states | Black box is always-on — close the rotation helper and re-check both live plans for collateral reads |
 | `targetAura1` readable in both states | Contradicts §1; re-verify before believing it |
@@ -229,22 +362,32 @@ live plans; the combat run only closes out the shelved one.
 
 ## Open questions, in priority order
 
-1. Which Auction House API, if any? Gates the economy plan, which is the project's goal.
-   Modern `C_AuctionHouse`, legacy `QueryAuctionItems`, or both — Cataclysm Classic 4.4.2
-   proves a Classic title can get the modern one. `auction-addon-architecture.md` §2.
-2. Any out-of-game export channel beyond SavedVariables, and anything usable *inbound*?
-   Gates the bridge. Partly answered: the inbound channel used in practice is a generated
-   `.lua` file inside the addon folder, executed at load, which means `/reload` is the
-   refresh cost. `auction-addon-architecture.md` §5.
+1. **Answered 2026-09-18 (§0.1): modern `C_AuctionHouse`, all 85 functions, no legacy
+   API.** What replaces it as the top question is the numbers — scan throttle, result
+   caps, and whether owner names survive in `ReplicateItems`. Only `/fprobe ah scan`
+   answers those. `auction-addon-architecture.md` §2.
+2. **Answered 2026-09-18 (§0.2), with two caveats.** The sandbox is intact, the inbound
+   channel is the generated `.lua` file executed at load, and `C_EncodingUtil` gives both
+   directions a real wire format. The caveats are the open work: SavedVariables are not
+   read back on this build, and `ReloadUI()` is protected, so every refresh costs a human
+   typing `/reload`. `auction-addon-architecture.md` §5.
 2a. Will Forever expose auction data through Blizzard's Game Data API? No Classic title
    has since late 2024, and TSM's entire architecture depends on that feed. This gates
    what *kind* of economy addon is possible, independently of question 1.
    `auction-addon-architecture.md` §7.
-3. Is the black box combat-only or always-on? — decides the shelved rotation helper, and
-   is the cheap check that the two live plans are not caught by collateral damage.
+3. Is the black box combat-only or always-on? Now cheap to answer: `C_Secrets` exposes
+   the gates directly and `/fprobe report` diffs them across combat states (§0.3). Every
+   gate is unit/spell/combat-scoped, so the expected answer is combat-only and the two
+   live plans are clear — this is the confirmation, not the discovery.
 4. Does `COMBAT_LOG_EVENT_UNFILTERED` still fire with full fields?
 5. What is actually inside "certain restrictions"? Only a published list or the beta
    client answers this.
 
+6. Does `C_AssistedCombat` work for a player, and is it gated? It is present (§0.4) and
+   is a trigger-4 item. Measured only; reopening the rotation helper is Efe's call.
+
 **Answered 2026-09-17:** does Forever inherit the Midnight doctrine? Yes on the read side,
-per Tim Jones (§1) — hedged, but on the record.
+per Tim Jones (§1) — hedged, but on the record. §0.3 shows the machinery that implements
+it, and shows it is scoped to units, spells and combat.
+
+**Answered 2026-09-18:** which AH API, and what crosses the client boundary — §0.1, §0.2.

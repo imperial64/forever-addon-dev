@@ -1,4 +1,4 @@
-## Interface: 11500
+## Interface: 16001
 ## Title: Forever Probe
 ## Notes: Dumps API surface and tests addon restrictions.
 ## SavedVariables: ForeverProbeDB

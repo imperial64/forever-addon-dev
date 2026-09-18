@@ -21,10 +21,10 @@ Two plans, down from four. Don't add a third.
 
 | Plan | Status | Blocker |
 |---|---|---|
-| Economy / TradeSkillMaster-style | **The goal** | Which Auction House API, if any, Forever ships |
-| Claude Code notification bridge | Tooling, built alongside | No known IPC or data-export channel |
+| Economy / TradeSkillMaster-style | **The goal — unblocked 2026-09-18** | None. Forever ships the full modern `C_AuctionHouse`; what is left is measuring throttle and caps |
+| Claude Code bridge | Tooling, built alongside | Partly. Sandbox intact, inbound `.lua` channel works, but `ReloadUI()` is protected so a human must `/reload` |
 | Guild management | **Scrapped** 2026-09-17 | None — dropped to keep focus, not blocked |
-| Rotation helper | **Shelved** 2026-09-17 | Tim Jones confirmed on camera that the restriction is on the information addons can access |
+| Rotation helper | **Shelved** 2026-09-17 | Read side restricted. `C_AssistedCombat` is present in the beta, which is a revival trigger — Efe's call, not Claude's |
 
 The economy addon is what this project is for. The bridge is **general-purpose tooling for
 talking to Claude Code from inside a running client**, not a WoW feature — it is expected
@@ -47,6 +47,11 @@ black box: addons may restyle the box but not look inside. Addons cannot know ta
 buffs/debuffs, cannot determine cooldown states, and cannot parse combat events in real
 time.
 
+**A capture of the live beta client (`docs/findings.md` §0, fetched and queried 2026-09-18)
+has moved most of this.** Forever is the Retail API set on interface 16001, the restriction
+is implemented as `C_Secrets` gates that are all unit/spell/combat-scoped, and neither the
+Auction House nor any bridge channel appears in a restriction surface.
+
 **Question 1 — does Forever inherit it — is answered.** Tim Jones, on camera at BlizzCon
 2026: there will be "parity between certain restrictions... in terms of the information
 that add-ons have access to". That is the read side, which is the half that kills a
@@ -56,16 +61,21 @@ list has been published, but the Midnight→Forever link is no longer a press in
 
 What is still open, in order:
 
-1. Which Auction House API, if any? Gates the economy plan, and so the project.
-2. Is there any channel across the client boundary — outbound beyond SavedVariables, and
-   anything at all inbound? Gates the bridge.
-3. Is the box closed **only in combat**, or at all times? Both live plans are entirely
-   out-of-combat, so a combat-only restriction is a non-issue for them — this is the cheap
-   check that they are not caught by collateral damage, plus the rotation helper's last
-   chance.
+1. The Auction House **numbers**: real scan throttle, result caps, and whether
+   `ReplicateItems` still carries owner names. The API question itself is answered —
+   modern `C_AuctionHouse`, 85 functions, no legacy API. `/fprobe ah scan` is the only
+   thing that answers the rest.
+2. Does the bridge's round trip survive this build? The sandbox is intact and the inbound
+   generated-`.lua` channel is the mechanism, but on the beta the client writes
+   SavedVariables and never reads them back, and `ReloadUI()` is protected. The outbound
+   half can still be fine — that is what `collect-savedvars.ps1` decides.
+3. Is the box closed **only in combat**, or at all times? Now cheap: `C_Secrets` exposes
+   the gates and `/fprobe report` diffs them across combat states. Expected answer is
+   combat-only, so this is a confirmation and a collateral-damage check.
 
-`ForeverProbe` exists to answer all of these from the client. Prioritise its out-of-combat
-run: that alone resolves both live plans.
+`ForeverProbe` exists to answer these from our own client. Prioritise its out-of-combat
+run: that alone resolves both live plans. Presence is already known from §0 — what the
+probe adds is permission, returned values, and runtime gating.
 
 ## Working rules
 
@@ -114,8 +124,13 @@ SavedVariables.
 
 ## Cautions
 
-- The `.toc` `## Interface:` number is a guess. `/fprobe` prints the real one; correct it.
-  Until then, enable "Load out of date AddOns" at the character screen.
+- The `.toc` declares `16001`, measured on beta build 1.60.1.69893. `/fprobe` prints the
+  client's own number; if they disagree, the client wins. The beta product folder is
+  `_classic_beta_`, which is what the scripts now default to.
+- Registering an event this client does not know **throws and aborts the rest of the
+  file**, and a secret value throws on `tostring()` or a boolean test. Both have already
+  cost a silent probe failure elsewhere; keep every registration and every combat-state
+  read inside `pcall`.
 - The action tests deliberately attempt things that may be blocked. That is the point.
   They are harmless, but `SendChatMessage` tests were removed precisely because they would
   speak in the world; do not reintroduce them without thinking about that.

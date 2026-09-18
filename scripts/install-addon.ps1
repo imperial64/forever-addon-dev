@@ -9,7 +9,7 @@
 [CmdletBinding()]
 param(
     [string]$WowRoot,
-    [string]$Flavor = "_beta_",
+    [string]$Flavor = "_classic_beta_",
     [string]$Addon  = "ForeverProbe",
     [switch]$ResetBridgeData
 )
@@ -85,9 +85,14 @@ if ($keepBridge) {
 Write-Host "Installed $Addon -> $dest" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Cyan
-Write-Host "  1. At the character screen, enable 'Load out of date AddOns' (the .toc interface number is a guess)."
+Write-Host "  1. The .toc now declares 16001, the interface number measured on build 1.60.1.69893."
+Write-Host "     If /fprobe is missing, check 'Load out of date AddOns' and correct the number from /fprobe's output."
 Write-Host "  2. In game, out of combat:  /fprobe"
 Write-Host "  3. At an auction house:     /fprobe ah    (then /fprobe ah scan for a full scan)"
 Write-Host "  4. Pull a mob, then:        /fprobe combat"
 Write-Host "  5. Bridge test:             .\scripts\write-bridge-data.ps1, then /reload and /fprobe bridge"
 Write-Host "  6. /reload, then run:       .\scripts\collect-savedvars.ps1"
+Write-Host ""
+Write-Host "Note: this beta build is reported not to READ SavedVariables back at launch." -ForegroundColor Yellow
+Write-Host "      If the probe says the bridge token did not survive, step 6 is what tells you" -ForegroundColor Yellow
+Write-Host "      whether the file was written anyway - the outbound half can be fine even so." -ForegroundColor Yellow

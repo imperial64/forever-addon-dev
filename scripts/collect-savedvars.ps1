@@ -10,7 +10,7 @@
 [CmdletBinding()]
 param(
     [string]$WowRoot,
-    [string]$Flavor = "_beta_",
+    [string]$Flavor = "_classic_beta_",
     [string]$Addon  = "ForeverProbe",
     [string]$Label
 )
@@ -58,7 +58,9 @@ foreach ($f in $found) {
 Write-Host ""
 Write-Host "Quick look at what was captured:" -ForegroundColor Cyan
 $content = Get-Content $target -Raw
-foreach ($key in @("tocversion", "maskedReads", "flatBan", "combatOnly", "C_AuctionHouse", "C_AssistedCombat")) {
+foreach ($key in @("tocversion", "maskedReads", "flatBan", "combatOnly", "secrecyDelta",
+                   "C_AuctionHouse", "C_AssistedCombat", "C_Secrets", "C_EncodingUtil",
+                   "registerFailures")) {
     $hit = if ($content -match [regex]::Escape($key)) { "present" } else { "not found" }
     Write-Host ("  {0,-18} {1}" -f $key, $hit)
 }

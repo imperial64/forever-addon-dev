@@ -46,4 +46,14 @@ rotation helper stays shelved.
 
 ## Status
 
-Nothing tested yet. See `docs/findings.md`.
+Nothing tested on our own client yet. But a third-party capture of the live beta has been
+fetched and queried — see `docs/findings.md` §0. Two things follow from it:
+
+- **The economy plan is unblocked.** Forever ships the full modern `C_AuctionHouse` (85
+  functions, commodities included) and none of the Classic-era auction API. It is a Retail
+  port. What is left to measure is the throttle and result caps, which is what
+  `/fprobe ah scan` is for.
+- **The bridge works, with a human in the loop.** The sandbox is intact (`io`/`os` absent)
+  and the inbound channel is still a generated `.lua` file, but `C_EncodingUtil` gives it
+  JSON/CBOR and compression, and `ReloadUI()` is protected — so every refresh costs a
+  manual `/reload`.

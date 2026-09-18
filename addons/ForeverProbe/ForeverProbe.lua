@@ -12,6 +12,13 @@
 -- combat run is now a kill-check (and a collateral-damage check for the two live
 -- plans) rather than the point of the addon.
 --
+-- Measured against build 1.60.1.69893 (interface 16001, WOW_PROJECT_MAINLINE):
+-- this is the Retail API set, so the Classic globals this probe used to reach for
+-- (UnitAura, GetSpellCooldown, GetSpellInfo, CombatLogGetCurrentEventInfo) are
+-- simply absent, registering an event the client does not know THROWS and aborts
+-- the file, and a secret value throws on tostring() as readily as on arithmetic.
+-- Everything below is written defensively for those three facts.
+--
 --   /fprobe          static surface scan + action tests out of combat
 --   /fprobe combat   re-run the action tests while actually in combat
 --   /fprobe report   print the out-of-combat vs in-combat delta
@@ -52,13 +59,27 @@ end
 
 local function out(msg) DEFAULT_CHAT_FRAME:AddMessage("|cff44ddffFProbe|r " .. tostring(msg)) end
 
+-- Event registration ----------------------------------------------------------
+-- RegisterEvent on an event this client does not know raises an error, and an
+-- error in the main chunk aborts the rest of the file - which would silently
+-- remove /fprobe entirely. Every registration goes through here instead, and the
+-- failures are themselves a finding worth saving.
+local registerFailures = {}
+local function safeRegister(frame, event)
+    local ok, err = pcall(frame.RegisterEvent, frame, event)
+    if not ok then
+        registerFailures[#registerFailures + 1] = event .. " (" .. tostring(err):sub(1, 60) .. ")"
+    end
+    return ok
+end
+
 -- Block capture ---------------------------------------------------------------
 local activeTest, blockLog = nil, {}
 
 local watcher = CreateFrame("Frame")
-watcher:RegisterEvent("ADDON_ACTION_BLOCKED")
-watcher:RegisterEvent("ADDON_ACTION_FORBIDDEN")
-watcher:RegisterEvent("PLAYER_LOGIN")
+safeRegister(watcher, "ADDON_ACTION_BLOCKED")
+safeRegister(watcher, "ADDON_ACTION_FORBIDDEN")
+safeRegister(watcher, "PLAYER_LOGIN")
 watcher:SetScript("OnEvent", function(_, event, addon, func)
     if event == "PLAYER_LOGIN" then
         -- Outbound half of the bridge. db is whatever was restored from disk, so a
@@ -81,11 +102,16 @@ end)
 -- could mean the event stops firing, fires with fields stripped, or fires only
 -- out of combat. Passively count events and keep a sample of each so the shape
 -- of any restriction is visible rather than guessed at.
-local clog = { count = 0, inCombatCount = 0, samples = {}, subevents = {} }
+local clog = { count = 0, inCombatCount = 0, eventFired = 0, samples = {}, subevents = {} }
 
 local clogFrame = CreateFrame("Frame")
-clogFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+clog.registered = safeRegister(clogFrame, "COMBAT_LOG_EVENT_UNFILTERED")
+-- CombatLogGetCurrentEventInfo is absent on the measured beta build, so the event
+-- can fire with nothing on the other side to read it. Record the distinction:
+-- "event never fires" and "event fires but is unreadable" are different answers.
+clog.readerPresent = CombatLogGetCurrentEventInfo ~= nil
 clogFrame:SetScript("OnEvent", function()
+    clog.eventFired = (clog.eventFired or 0) + 1
     if not CombatLogGetCurrentEventInfo then return end
     local ok, a, b, c, d, e, f, g, h, i, j, k, l = pcall(CombatLogGetCurrentEventInfo)
     if not ok then
@@ -190,9 +216,101 @@ local SECURE_SURFACE = {
 local PLAN_SURFACE = {
     "C_ChatInfo.SendAddonMessage", "SendAddonMessage", "C_ChatInfo.RegisterAddonMessagePrefix",
     "io", "os", "loadstring", "require", "debug", "package",
-    "C_AddOns.GetAddOnMetadata", "ReloadUI", "C_CVar.GetCVar", "C_CVar.SetCVar",
+    "C_AddOns.GetAddOnMetadata", "C_AddOns.GetAddOnLocalTable", "ReloadUI",
+    "C_CVar.GetCVar", "C_CVar.SetCVar", "C_CVar.RegisterCVar", "C_CVar.SetTempCVar",
     "GetScreenWidth", "CreateFrame", "C_Timer.NewTicker",
+    -- Payload handling. C_EncodingUtil is the single most useful thing the measured
+    -- client turned up for this plan: JSON and CBOR both ways, base64, hex, and
+    -- string compression, all in the sandbox. It turns the inbound .lua file and
+    -- the outbound SavedVariables blob from ad-hoc Lua literals into a real wire
+    -- format, and it is what makes an addon-message sideband worth considering.
+    "C_EncodingUtil.SerializeJSON", "C_EncodingUtil.DeserializeJSON",
+    "C_EncodingUtil.SerializeCBOR", "C_EncodingUtil.DeserializeCBOR",
+    "C_EncodingUtil.EncodeBase64", "C_EncodingUtil.DecodeBase64",
+    "C_EncodingUtil.CompressString", "C_EncodingUtil.DecompressString",
+    -- Restriction probes on the outbound chat path, new in this API set.
+    "C_ChatInfo.AreOutgoingAddonChatMessagesRestricted", "C_ChatInfo.InChatMessagingLockdown",
+    "CopyToClipboard", "C_System.GetFrameStack",
 }
+
+-- Secrecy gates ---------------------------------------------------------------
+-- C_Secrets is Blizzard's own switch for the black box, which makes it a far
+-- cheaper answer to "combat-only or always-on" than inferring it from masked
+-- values: ask the client directly, in both combat states, and read the gate.
+-- Nothing in the 27-function secrecy surface touches the Auction House, CVars or
+-- addon messages, so a true here is expected to be irrelevant to both live plans
+-- - this section is the collateral-damage check, and it is the whole reason the
+-- combat run still exists.
+local SECRECY_CHECKS = {
+    "HasSecretRestrictions", "ShouldAurasBeSecret", "ShouldCooldownsBeSecret",
+    "ShouldActionCooldownBeSecret", "ShouldUnitIdentityBeSecret",
+    "ShouldUnitHealthMaxBeSecret", "ShouldUnitPowerBeSecret", "ShouldUnitStatsBeSecret",
+    "ShouldUnitThreatStateBeSecret", "ShouldUnitThreatValuesBeSecret",
+    "ShouldUnitSpellCastBeSecret", "CanCompareUnitTokens",
+}
+
+local function probeSecrecy(label)
+    local s = { inCombat = InCombatLockdown and InCombatLockdown() or false, gates = {} }
+    if not C_Secrets then
+        out("|cffffaa00C_Secrets ABSENT|r - this build has no secrecy gate")
+        s.absent = true
+    else
+        local parts = {}
+        for _, name in ipairs(SECRECY_CHECKS) do
+            local fn = C_Secrets[name]
+            if fn then
+                local ok, v = pcall(function() return tostring(fn()) end)
+                s.gates[name] = ok and v or ("ERR:" .. tostring(v):sub(1, 50))
+                parts[#parts + 1] = (name:gsub("^Should", ""):gsub("BeSecret$", "")) .. "=" .. s.gates[name]
+            end
+        end
+        out("|cff44ddffSECRECY|r " .. table.concat(parts, " "):sub(1, 400))
+    end
+    local function ask(where, fname, key)
+        local tbl = _G[where]
+        local fn = tbl and tbl[fname]
+        if not fn then return end
+        local ok, v = pcall(function() return tostring(fn()) end)
+        s[key] = ok and v or ("ERR:" .. tostring(v):sub(1, 50))
+        out(("  %-22s %s"):format(key, s[key]))
+    end
+    ask("C_CombatLog", "IsCombatLogRestricted", "combatLogRestricted")
+    ask("C_RestrictedActions", "GetAddOnRestrictionState", "addonRestrictionState")
+    ask("C_RestrictedActions", "IsAddOnRestrictionActive", "addonRestrictionActive")
+    ask("C_ChatInfo", "AreOutgoingAddonChatMessagesRestricted", "addonMessagesRestricted")
+    ask("C_ChatInfo", "InChatMessagingLockdown", "chatMessagingLockdown")
+    db.secrecy = db.secrecy or {}
+    db.secrecy[label] = s
+    return s
+end
+
+-- Blizzard's own rotation assist. Present on the measured build with four
+-- functions, which is watch trigger 4. MEASURED ONLY - this records what the API
+-- returns and nothing more; the rotation helper stays shelved until Efe says
+-- otherwise, and no design work hangs off this.
+local function probeAssistedCombat()
+    if not C_AssistedCombat then return nil end
+    local a = { functions = {} }
+    for _, name in ipairs({ "IsAvailable", "GetRotationSpells", "GetNextCastSpell", "GetActionSpell" }) do
+        a.functions[name] = C_AssistedCombat[name] ~= nil
+    end
+    -- Only the no-argument reads are called. GetNextCastSpell/GetActionSpell want
+    -- arguments and would be a combat-decision read, which is not what this probe
+    -- is for.
+    if C_AssistedCombat.IsAvailable then
+        local ok, v = pcall(function() return tostring(C_AssistedCombat.IsAvailable()) end)
+        a.isAvailable = ok and v or ("ERR:" .. tostring(v):sub(1, 60))
+    end
+    if C_AssistedCombat.GetRotationSpells then
+        local ok, v = pcall(C_AssistedCombat.GetRotationSpells)
+        a.rotationSpells = ok and (type(v) == "table" and #v or tostring(v)) or ("ERR:" .. tostring(v):sub(1, 60))
+    end
+    out(("|cffffaa00C_AssistedCombat PRESENT|r isAvailable=%s rotationSpells=%s")
+        :format(tostring(a.isAvailable), tostring(a.rotationSpells)))
+    out("  Blizzard ships its own rotation assist here. Recorded, not acted on.")
+    db.assistedCombat = a
+    return a
+end
 
 -- Auction House ---------------------------------------------------------------
 -- The economy addon is the goal, so this decides the project. Checks come from
@@ -421,7 +539,7 @@ local function ahReplicateScan()
     db.auctionHouse.scanHistory = history
 
     ahScan = { updates = 0, startedAt = GetTime(), requestedAt = time(), done = false }
-    ahScanFrame:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+    safeRegister(ahScanFrame, "REPLICATE_ITEM_LIST_UPDATE")
 
     activeTest = "ReplicateItems"
     local ok, err = pcall(C_AuctionHouse.ReplicateItems)
@@ -531,11 +649,26 @@ local function printBridge()
     db.bridge.untouched = untouched
 
     out("|cff44ddffBRIDGE outbound|r (SavedVariables flush)")
+    -- Two different failures look identical from in here, and they have opposite
+    -- consequences for the bridge:
+    --   a) the client never WROTE the file           -> outbound is dead
+    --   b) the client wrote it and never READ it back -> outbound is fine, and the
+    --      round trip inside the client is what is broken
+    -- (b) is a reported beta bug on this build, so the in-game verdict is only
+    -- half the answer; collect-savedvars.ps1 looking at the file on disk is the
+    -- other half, and it is the one that decides the plan.
     if db.bridge.tokenFromPreviousSession then
         out("  |cff44ff44confirmed|r - last session's token survived: " .. tostring(db.bridge.tokenFromPreviousSession))
+    elseif (db.bridge.loads or 0) > 1 then
+        out("  |cffff4444read-back failed|r - this DB has seen " .. tostring(db.bridge.loads) ..
+            " loads but no token survived")
     else
-        out("  |cffffaa00unconfirmed|r - /reload and run /fprobe bridge again to close the loop")
+        out("  |cffffaa00first load of this DB|r - /reload, then /fprobe bridge again.")
+        out("  If the load counter is STILL 1 afterwards, the client is not reading SavedVariables")
+        out("  back at all (known beta bug). Run scripts/collect-savedvars.ps1 to see whether the")
+        out("  file was nonetheless written - that is what decides the outbound half.")
     end
+    out("  loads recorded by this DB: " .. tostring(db.bridge.loads or 0))
     db.bridge.tokenWrittenThisSession = ("%s-%d"):format(
         date and date("%H%M%S") or tostring(time()), math.random(1000, 9999))
     out("  wrote token " .. db.bridge.tokenWrittenThisSession .. " - it should reappear after /reload")
@@ -555,8 +688,11 @@ local function probeSurfaces()
             out("  |cffffaa00missing read APIs:|r " .. table.concat(missing, ", "):sub(1, 220))
         end
     end
-    if lookup("C_AssistedCombat") then
-        out("|cffffaa00C_AssistedCombat PRESENT|r - Blizzard ships its own rotation assist here")
+    probeAssistedCombat()
+    probeSecrecy("outofcombat")
+    if #registerFailures > 0 then
+        db.registerFailures = registerFailures
+        out("|cffffaa00events this client rejected:|r " .. table.concat(registerFailures, ", "):sub(1, 200))
     end
 
     -- Verdicts for the two live plans, so one out-of-combat run settles them
@@ -574,9 +710,19 @@ local function probeSurfaces()
         :format(tostring(verdict.export.io), tostring(verdict.export.os),
                 tostring(verdict.export.loadstring), tostring(verdict.export.addonMessage),
                 tostring(verdict.export.cvar)))
+    verdict.export.encoding = (lookup("C_EncodingUtil.SerializeJSON") ~= nil)
+    verdict.export.clipboard = (lookup("CopyToClipboard") ~= nil)
+    out(("           json=%s clipboard=%s reloadUI=%s")
+        :format(tostring(verdict.export.encoding), tostring(verdict.export.clipboard),
+                tostring(lookup("ReloadUI") ~= nil)))
     if not verdict.export.io then
-        out("  outbound is SavedVariables on /reload; inbound needs a CVar, a macro, or a pixel channel")
+        out("  outbound is SavedVariables on /reload; inbound is a generated .lua run as addon code")
     end
+    -- ReloadUI exists but is reported protected on this build, which breaks an
+    -- unattended loop: a human has to type /reload for every inbound refresh.
+    -- Never CALLED here - calling it would reload the UI mid-probe and throw away
+    -- the run. Presence plus the restriction state is all that is wanted.
+    verdict.export.reloadUIPresent = lookup("ReloadUI") ~= nil
 
     db.planVerdict = verdict
 end
@@ -632,7 +778,18 @@ local function runActionTests()
     end
 
     -- A harmless, always-known spell so the test is about permission, not validity.
-    local probeSpell = GetSpellInfo and GetSpellInfo(1) or nil
+    local probeSpell = nil
+    do
+        local ok, v = pcall(function()
+            if C_Spell and C_Spell.GetSpellInfo then
+                local info = C_Spell.GetSpellInfo(1)
+                return info and info.name
+            elseif GetSpellInfo then
+                return (GetSpellInfo(1))
+            end
+        end)
+        probeSpell = ok and v or nil
+    end
 
     if CastSpellByName then
         try("CastSpellByName", function() CastSpellByName(probeSpell or "Attack") end)
@@ -675,8 +832,13 @@ local function runActionTests()
     -- succeeded, which would report a false "allowed" every time.
     local reads = {}
     local function readTest(name, fn)
-        local ok, v = pcall(fn)
-        reads[name] = ok and tostring(v) or ("ERR: " .. tostring(v):sub(1, 80))
+        -- The conversion happens INSIDE the pcall. A secret value throws on
+        -- tostring(), on comparison, and even on a boolean test, so converting
+        -- outside would take the whole probe down mid-run rather than recording
+        -- the restriction. Measured: in-combat aura reads throw, they do not
+        -- return nil.
+        local ok, v = pcall(function() return tostring(fn()) end)
+        reads[name] = ok and v or ("ERR: " .. tostring(v):sub(1, 80))
         out(("  READ %-22s %s"):format(name, reads[name]:sub(1, 48)))
     end
 
@@ -719,12 +881,15 @@ local function runActionTests()
     end)
     results.reads = reads
 
+    probeSecrecy(label)
+
     db.actions = db.actions or {}
     db.actions[label] = results
     db.blockLog = blockLog
     db.combatLog = clog
-    out(("combat log events seen so far: %d total, %d while in combat, %d distinct subevents")
-        :format(clog.count, clog.inCombatCount, (function()
+    out(("combat log: registered=%s reader=%s fired=%d readable=%d inCombat=%d subevents=%d")
+        :format(tostring(clog.registered), tostring(clog.readerPresent),
+                clog.eventFired or 0, clog.count, clog.inCombatCount, (function()
             local n = 0; for _ in pairs(clog.subevents) do n = n + 1 end; return n
         end)()))
     out(("recorded as '%s'"):format(label))
@@ -773,6 +938,29 @@ local function printReport()
         out("  |cffff4444rotation helper not viable as designed|r")
     else
         out("  |cff44ff44none - combat state stayed readable|r")
+    end
+    -- The secrecy delta is the direct answer to the combat-only-vs-always-on
+    -- question, straight from Blizzard's own gate rather than inferred from
+    -- masked values. A gate that is false out of combat and true in combat is a
+    -- combat-scoped black box, which leaves both live plans untouched.
+    local sOut, sIn = (db.secrecy or {}).outofcombat, (db.secrecy or {}).incombat
+    if sOut and sIn and sOut.gates and sIn.gates then
+        local gatesOn, alwaysOn = {}, {}
+        for name, v in pairs(sOut.gates) do
+            local iv = sIn.gates[name]
+            if iv == "true" and v ~= "true" then gatesOn[#gatesOn + 1] = name
+            elseif iv == "true" and v == "true" then alwaysOn[#alwaysOn + 1] = name end
+        end
+        table.sort(gatesOn); table.sort(alwaysOn)
+        out("|cffffffffSECRECY - C_Secrets gates:|r")
+        out("  closed only IN COMBAT: " .. (#gatesOn > 0 and table.concat(gatesOn, ", ") or "none"))
+        out("  closed in BOTH states: " .. (#alwaysOn > 0 and table.concat(alwaysOn, ", ") or "none"))
+        if #alwaysOn == 0 then
+            out("  |cff44ff44black box is combat-scoped|r - nothing is secret out of combat")
+        else
+            out("  |cffff4444some gates are always on|r - re-check both live plans for collateral reads")
+        end
+        db.secrecyDelta = { combatOnly = gatesOn, alwaysOn = alwaysOn }
     end
     out(("  combat log: %d events, %d in combat%s"):format(
         (db.combatLog and db.combatLog.count) or 0,

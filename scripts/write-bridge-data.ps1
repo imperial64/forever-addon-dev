@@ -24,7 +24,7 @@
 [CmdletBinding()]
 param(
     [string]$WowRoot,
-    [string]$Flavor  = "_beta_",
+    [string]$Flavor  = "_classic_beta_",
     [string]$Addon   = "ForeverProbe",
     [string]$Tag     = "claude",
     [string]$Message = "hello from Claude Code",
