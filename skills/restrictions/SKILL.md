@@ -22,6 +22,15 @@ Source of truth: `${CLAUDE_PLUGIN_ROOT}/research/restrictions.yaml`. Generated v
 `reference/api/RESTRICTIONS.md`, `data/restrictions.json`, and a banner on each affected
 page in `reference/api/`.
 
+Longer form, written for an outside reader:
+
+- `reference/restrictions/combat-log.md` — the one capability with no workaround
+- `reference/restrictions/secret-values.md` — the gates, the contagion, the safe conversion
+- `reference/restrictions/protected-actions.md` — forbidden versus blocked, and detecting both
+- `reference/restrictions/auction-house-throttle.md` — the silent one
+- `reference/restrictions/evidence.md` — provenance tiers, and what is deliberately marked
+  uncertain
+
 ## There are four separate systems, not one switch
 
 Treating "addon disarmament" as a single thing is the most common mistake, and it produces

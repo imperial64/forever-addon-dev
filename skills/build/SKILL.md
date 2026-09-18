@@ -166,6 +166,16 @@ Before writing against any function, two habits worth keeping:
    function says nothing about whether the client will let an addon use it, and on this
    build the answer is often no.
 
+## Guides
+
+Longer form, written for someone who has not read the research:
+
+- `reference/guides/getting-started.md` — first addon, .toc, installing, enabling
+- `reference/guides/pitfalls.md` — the five above, in detail, plus the three failure shapes
+- `reference/guides/savedvariables-and-the-bridge.md` — persistence, and talking to an
+  external process
+- `reference/guides/auction-house-addon.md` — the measured economy-addon design
+
 ## Recipes
 
 - Auction House and economy addons: **browse is the data source, not `ReplicateItems`.**

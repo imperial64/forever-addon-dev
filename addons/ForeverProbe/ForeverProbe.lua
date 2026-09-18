@@ -2429,6 +2429,26 @@ SlashCmdList.FPROBE = function(arg)
         printReport()
         return
     end
+    -- An unrecognised command used to fall straight through to the full scan,
+    -- which looks exactly like a successful run. That hid a stale install for a
+    -- whole session on 2026-09-18: /fprobe video printed the surface scan and
+    -- read as "video is broken" rather than "this copy predates video".
+    if cmd ~= "" then
+        if cmd ~= "help" then
+            out(("|cffffaa00unknown command:|r %s  |cff888888(this copy of the addon may predate it)|r")
+                :format(cmd))
+        end
+        out("  |cffffffff/fprobe|r               surface scan and action tests, out of combat")
+        out("  |cffffffff/fprobe combat|r        re-run them in combat, then /fprobe report")
+        out("  |cffffffff/fprobe ah|r            auction house detail (browse, scan, throttle)")
+        out("  |cffffffff/fprobe video|r         brightness/contrast CVars (ramp)")
+        out("  |cffffffff/fprobe events|r        which events an addon may subscribe to")
+        out("  |cffffffff/fprobe blocked|r       captured BLOCKED/FORBIDDEN actions")
+        out("  |cffffffff/fprobe bridge|r        inbound BridgeData.lua, outbound flush")
+        out("  |cffffffff/fprobe docs|r          Blizzard's API documentation (dump, version)")
+        return
+    end
+
     db.timestamp = date and date("%Y-%m-%d %H:%M:%S") or time()
     local version, build, _, toc = GetBuildInfo()
     db.build = { version = version, build = build, tocversion = toc }
