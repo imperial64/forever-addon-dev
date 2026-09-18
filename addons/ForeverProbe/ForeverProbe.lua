@@ -1856,14 +1856,27 @@ local function dumpApiDocs(startAt, count)
     store.capturedAt = date and date("%Y-%m-%d %H:%M:%S") or time()
 
     local nSys, nFn, nEv, nTb, failed = 0, 0, 0, 0, 0
+    local collisions = {}
     for i = startAt, last do
         local ok, projected = pcall(projectSystem, systems[i])
         if ok and projected and projected.Name then
-            -- Keyed by full name so repeated or partial runs merge cleanly
-            -- instead of duplicating - this build cannot read SavedVariables back,
-            -- so a pass has to be self-contained within one session.
-            local key = projected.Namespace or projected.Name
-            if projected.Type == "ScriptObject" then key = "ScriptObject:" .. projected.Name end
+            -- Keyed so repeated or partial runs merge cleanly instead of
+            -- duplicating - this build cannot read SavedVariables back, so a pass
+            -- has to be self-contained within one session.
+            --
+            -- NOT keyed by Namespace: measured 2026-09-18, three systems shared a
+            -- namespace with another and silently overwrote it, so 408 walked
+            -- became 405 stored and the loss was invisible afterwards. Name plus
+            -- type is the key, Namespace stays a field, and any residual
+            -- collision is suffixed and RECORDED rather than dropped.
+            local key = projected.Name or ("system" .. i)
+            if projected.Type == "ScriptObject" then key = "ScriptObject:" .. key end
+            if store.systems[key] then
+                collisions[#collisions + 1] = key
+                local n = 2
+                while store.systems[key .. "~" .. n] do n = n + 1 end
+                key = key .. "~" .. n
+            end
             store.systems[key] = projected
             nSys = nSys + 1
             nFn = nFn + #(projected.Functions or {})
@@ -1877,10 +1890,22 @@ local function dumpApiDocs(startAt, count)
         end
     end
 
-    store.counts = { systems = nSys, functions = nFn, events = nEv, tables = nTb, failed = failed }
+    -- Count what is actually in the store, not just what was walked. The two
+    -- disagreeing is exactly the bug above, and it should be loud.
+    local stored = 0
+    for _ in pairs(store.systems) do stored = stored + 1 end
+    store.counts = {
+        systems = nSys, stored = stored, functions = nFn, events = nEv,
+        tables = nTb, failed = failed, collisions = collisions,
+    }
     out(("|cff44ff44dumped|r systems %d..%d -> %d systems, %d functions, %d events, %d tables%s")
         :format(startAt, last, nSys, nFn, nEv, nTb,
                 failed > 0 and (" |cffffaa00(" .. failed .. " failed)|r") or ""))
+    out(("  %d systems in the store"):format(stored))
+    if #collisions > 0 then
+        out(("  |cffffaa00%d name collisions, suffixed:|r %s")
+            :format(#collisions, table.concat(collisions, ", "):sub(1, 200)))
+    end
     out("  |cffffffff/reload|r to flush, then collect-savedvars.ps1")
     out("  If the file is truncated or the flush hangs, take it in passes:")
     out("  |cffffffff/fprobe docs dump 1 100|r, /reload, collect, then 101 100, and so on.")
