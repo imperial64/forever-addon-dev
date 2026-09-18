@@ -438,8 +438,12 @@ how quickly a cached snapshot goes stale.
 | `ShouldActionCooldownBeSecret(1)` | false | **true** |
 | `ShouldUnitStatsBeSecret()` | false | **true** |
 | `ShouldUnitPowerBeSecret("player")` | **true** | **true** |
+| `ShouldUnitThreatValuesBeSecret()` | _not captured_ | **true** |
 | `ShouldUnitIdentityBeSecret("player")` | false | false |
 | `ShouldUnitHealthMaxBeSecret("player")` | false | false |
+| `ShouldUnitSpellCastBeSecret()` | _not captured_ | **false** |
+| `ShouldUnitThreatStateBeSecret()` | _not captured_ | **false** |
+| `CanCompareUnitTokens()` | true | true |
 | `HasSecretRestrictions()` | true | true |
 | `C_RestrictedActions.GetAddOnRestrictionState()` | 0 | **2** |
 | `C_RestrictedActions.IsAddOnRestrictionActive()` | false | **true** |
@@ -456,6 +460,21 @@ Blizzard's published doctrine explicitly promises stays readable — "all class 
 resources remain fully non-secret" — and it is the one thing that is never readable here.
 Either the doctrine does not describe this client, or this is a beta bug. It has now been
 measured twice, in both combat states, by gate and by value.
+
+**The gating is finer-grained than "combat data is secret".** Three gates read *false* in
+combat, and what they permit is specific:
+
+- **Cast bars still work.** `ShouldUnitSpellCastBeSecret()` is false in combat, so an addon
+  can read what a unit is casting. (`UnitCastingInfo("target")` returned `nil` in the same
+  pass, but with no target — the gate is what matters.)
+- **Threat state yes, threat values no.** `ShouldUnitThreatStateBeSecret()` is false while
+  `ShouldUnitThreatValuesBeSecret()` is true. An addon may know *whether* it has aggro and
+  not *by how much*. That is a deliberate-looking line: it kills the numeric threat meter
+  while leaving the "you are about to pull" warning intact.
+- **Unit identity and max health stay readable**, in both states.
+
+So the honest summary is not "addons cannot see combat". It is that a specific list of
+categories becomes secret in combat, and the list was drawn with some care.
 
 **A fourth restriction mechanism, and this one is queryable.**
 `C_RestrictedActions.GetAddOnRestrictionState()` moves 0 → 2 and
@@ -515,7 +534,10 @@ silent.
 `/fprobe report` needs both runs, and this build never reads SavedVariables back, so the
 out-of-combat run does not survive a `/reload`. **Both passes have to happen in one
 session**: `/fprobe`, then pull something, then `/fprobe combat`, then `/fprobe report`.
-The delta above was reconstructed across captures by hand instead.
+The delta above was reconstructed across captures by hand instead —
+`data/ForeverProbe_2026-09-18_165528_combat-delta.lua` holds the in-combat half, and three
+gates in it (`UnitSpellCast`, `UnitThreatState`, `UnitThreatValues`) have no out-of-combat
+counterpart recorded because the in-game print truncated that line.
 
 ---
 
