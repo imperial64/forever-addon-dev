@@ -1,0 +1,22 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# FrameAPICooldown:GetCooldownTimes
+
+```lua
+start, duration = FrameAPICooldown:GetCooldownTimes()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `start` | `number` | no |  |
+| 2 | `duration` | `number` | no |  |
+
+Blizzard's own rendering: `GetCooldownTimes()`
+
+System: `FrameAPICooldown` · Widget methods

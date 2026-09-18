@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_TransmogOutfitInfo.PickupOutfit
+
+```lua
+C_TransmogOutfitInfo.PickupOutfit(outfitID)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `outfitID` | `number` | no |  |
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `C_TransmogOutfitInfo.PickupOutfit(outfitID)`
+
+System: `TransmogOutfitInfo` · Namespace: `C_TransmogOutfitInfo`

@@ -1,0 +1,24 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# SetRaidTarget
+
+> **RESTRICTED — Blizzard flag.** This function carries `HasRestrictions` in the client's own documentation, meaning it is gated on a hardware event or refuses to run from a script.
+
+```lua
+SetRaidTarget(target, userIndex)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `target` | `UnitToken` | no |  |
+| 2 | `userIndex` | `luaIndex` | no |  |
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `SetRaidTarget(target, userIndex)`
+
+System: `RaidMarkers`

@@ -1,0 +1,22 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_Container.PickupContainerItem
+
+```lua
+C_Container.PickupContainerItem(containerIndex, slotIndex)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `containerIndex` | `BagIndex` | no |  |
+| 2 | `slotIndex` | `luaIndex` | no |  |
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `C_Container.PickupContainerItem(containerIndex, slotIndex)`
+
+System: `Container` · Namespace: `C_Container`

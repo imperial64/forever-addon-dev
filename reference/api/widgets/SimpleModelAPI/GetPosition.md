@@ -1,0 +1,23 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# SimpleModelAPI:GetPosition
+
+```lua
+positionX, positionY, positionZ = SimpleModelAPI:GetPosition()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `positionX` | `number` | no |  |
+| 2 | `positionY` | `number` | no |  |
+| 3 | `positionZ` | `number` | no |  |
+
+Blizzard's own rendering: `GetPosition()`
+
+System: `SimpleModelAPI` · Widget methods

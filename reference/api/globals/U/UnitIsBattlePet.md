@@ -1,0 +1,23 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# UnitIsBattlePet
+
+```lua
+result = UnitIsBattlePet(unit)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `unit` | `UnitToken` | no |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `result` | `bool` | yes |  |
+
+Blizzard's own rendering: `UnitIsBattlePet(unit)`
+
+System: `Unit`

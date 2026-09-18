@@ -1,0 +1,23 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# RegisterUnitEventCallback
+
+```lua
+RegisterUnitEventCallback(eventName, callback, unit)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `eventName` | `cstring` | no |  |
+| 2 | `callback` | `EventCallbackType` | no |  |
+| 3 | `unit` | `UnitToken` | no |  |
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `RegisterUnitEventCallback(eventName, callback, unit)`
+
+System: `FrameScript`

@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# FrameAPIModelSceneFrameActor:GetObeyHideInTransmogFlag
+
+```lua
+obey = FrameAPIModelSceneFrameActor:GetObeyHideInTransmogFlag()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `obey` | `bool` | no |  |
+
+Blizzard's own rendering: `GetObeyHideInTransmogFlag()`
+
+System: `FrameAPIModelSceneFrameActor` · Widget methods

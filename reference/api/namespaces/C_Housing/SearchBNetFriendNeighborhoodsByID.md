@@ -1,0 +1,23 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_Housing.SearchBNetFriendNeighborhoodsByID
+
+```lua
+isValidBnetFriend = C_Housing.SearchBNetFriendNeighborhoodsByID(bnetID)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `bnetID` | `number` | no |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `isValidBnetFriend` | `bool` | no |  |
+
+Blizzard's own rendering: `C_Housing.SearchBNetFriendNeighborhoodsByID(bnetID)`
+
+System: `HousingUI` · Namespace: `C_Housing`

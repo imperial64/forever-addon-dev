@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_EquipmentSet.CanUseEquipmentSets
+
+```lua
+canUseEquipmentSets = C_EquipmentSet.CanUseEquipmentSets()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `canUseEquipmentSets` | `bool` | no |  |
+
+Blizzard's own rendering: `C_EquipmentSet.CanUseEquipmentSets()`
+
+System: `EquipmentSet` · Namespace: `C_EquipmentSet`

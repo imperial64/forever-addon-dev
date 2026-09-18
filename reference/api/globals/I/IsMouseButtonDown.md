@@ -1,0 +1,23 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# IsMouseButtonDown
+
+```lua
+down = IsMouseButtonDown(button)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `button` | `mouseButton` | yes |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `down` | `bool` | no |  |
+
+Blizzard's own rendering: `IsMouseButtonDown(optional button)`
+
+System: `Input`

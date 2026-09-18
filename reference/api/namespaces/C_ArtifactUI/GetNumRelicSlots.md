@@ -1,0 +1,23 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_ArtifactUI.GetNumRelicSlots
+
+```lua
+numRelicSlots = C_ArtifactUI.GetNumRelicSlots(onlyUnlocked)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `onlyUnlocked` | `bool` | no | `False` |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `numRelicSlots` | `number` | no |  |
+
+Blizzard's own rendering: `C_ArtifactUI.GetNumRelicSlots(optional onlyUnlocked)`
+
+System: `ArtifactUI` · Namespace: `C_ArtifactUI`

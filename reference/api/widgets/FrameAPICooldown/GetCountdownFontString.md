@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# FrameAPICooldown:GetCountdownFontString
+
+```lua
+countdownString = FrameAPICooldown:GetCountdownFontString()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `countdownString` | `SimpleFontString` | no |  |
+
+Blizzard's own rendering: `GetCountdownFontString()`
+
+System: `FrameAPICooldown` · Widget methods

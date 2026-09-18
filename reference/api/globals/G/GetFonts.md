@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# GetFonts
+
+```lua
+fontNames = GetFonts()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `fontNames` | `table&lt;cstring&gt;` | no |  |
+
+Blizzard's own rendering: `GetFonts()`
+
+System: `Font`

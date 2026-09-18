@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_AuctionHouse.GetNumOwnedAuctions
+
+```lua
+numOwnedAuctions = C_AuctionHouse.GetNumOwnedAuctions()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `numOwnedAuctions` | `number` | no |  |
+
+Blizzard's own rendering: `C_AuctionHouse.GetNumOwnedAuctions()`
+
+System: `AuctionHouse` · Namespace: `C_AuctionHouse`

@@ -1,0 +1,23 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_ConfigurationWarnings.GetConfigurationWarningSeen
+
+```lua
+hasSeenConfigurationWarning = C_ConfigurationWarnings.GetConfigurationWarningSeen(configurationWarning)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `configurationWarning` | `ConfigurationWarning` | no |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `hasSeenConfigurationWarning` | `bool` | no |  |
+
+Blizzard's own rendering: `C_ConfigurationWarnings.GetConfigurationWarningSeen(configurationWarning)`
+
+System: `ConfigurationWarnings` · Namespace: `C_ConfigurationWarnings`

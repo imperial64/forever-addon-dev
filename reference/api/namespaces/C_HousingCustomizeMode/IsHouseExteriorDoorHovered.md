@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_HousingCustomizeMode.IsHouseExteriorDoorHovered
+
+```lua
+isHouseExteriorDoorHovered = C_HousingCustomizeMode.IsHouseExteriorDoorHovered()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `isHouseExteriorDoorHovered` | `bool` | no |  |
+
+Blizzard's own rendering: `C_HousingCustomizeMode.IsHouseExteriorDoorHovered()`
+
+System: `HousingCustomizeModeUI` · Namespace: `C_HousingCustomizeMode`

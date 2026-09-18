@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_LFGList.SetSearchToActivity
+
+```lua
+C_LFGList.SetSearchToActivity(activityID)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `activityID` | `number` | no |  |
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `C_LFGList.SetSearchToActivity(activityID)`
+
+System: `LFGList` · Namespace: `C_LFGList`

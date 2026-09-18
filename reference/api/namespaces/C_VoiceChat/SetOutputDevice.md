@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_VoiceChat.SetOutputDevice
+
+```lua
+C_VoiceChat.SetOutputDevice(deviceID)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `deviceID` | `string` | no |  |
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `C_VoiceChat.SetOutputDevice(deviceID)`
+
+System: `VoiceChat` · Namespace: `C_VoiceChat`

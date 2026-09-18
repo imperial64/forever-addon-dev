@@ -1,0 +1,9 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# STURDINESS_UPDATE
+
+**Payload**
+
+_No payload._
+
+System: `PaperDollInfo`

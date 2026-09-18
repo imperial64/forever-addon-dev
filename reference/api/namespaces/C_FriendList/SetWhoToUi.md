@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_FriendList.SetWhoToUi
+
+```lua
+C_FriendList.SetWhoToUi(whoToUi)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `whoToUi` | `bool` | no |  |
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `C_FriendList.SetWhoToUi(whoToUi)`
+
+System: `FriendList` · Namespace: `C_FriendList`

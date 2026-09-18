@@ -1,0 +1,11 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# GOSSIP_CLOSED
+
+**Payload**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `interactionIsContinuing` | `bool` | no |  |
+
+System: `GossipInfo`

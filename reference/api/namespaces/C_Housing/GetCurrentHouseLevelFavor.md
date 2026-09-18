@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_Housing.GetCurrentHouseLevelFavor
+
+```lua
+C_Housing.GetCurrentHouseLevelFavor(houseGuid)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `houseGuid` | `WOWGUID` | no |  |
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `C_Housing.GetCurrentHouseLevelFavor(houseGuid)`
+
+System: `HousingUI` · Namespace: `C_Housing`

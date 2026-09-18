@@ -1,0 +1,9 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# INVENTORY_SEARCH_UPDATE
+
+**Payload**
+
+_No payload._
+
+System: `Container`

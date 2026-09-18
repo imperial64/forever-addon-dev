@@ -1,0 +1,9 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# NAVIGATION_FRAME_DESTROYED
+
+**Payload**
+
+_No payload._
+
+System: `InGameNavigation`

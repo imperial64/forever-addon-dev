@@ -1,0 +1,22 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_CVar.RegisterCVar
+
+```lua
+C_CVar.RegisterCVar(name, value)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `name` | `cstring` | no |  |
+| 2 | `value` | `cstring` | yes |  |
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `C_CVar.RegisterCVar(name, optional value)`
+
+System: `CVarScripts` · Namespace: `C_CVar`

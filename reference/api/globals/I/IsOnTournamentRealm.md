@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# IsOnTournamentRealm
+
+```lua
+result = IsOnTournamentRealm()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `result` | `bool` | no |  |
+
+Blizzard's own rendering: `IsOnTournamentRealm()`
+
+System: `ConnectionScript`

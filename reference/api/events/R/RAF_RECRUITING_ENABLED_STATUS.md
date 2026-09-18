@@ -1,0 +1,11 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# RAF_RECRUITING_ENABLED_STATUS
+
+**Payload**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `enabled` | `bool` | no |  |
+
+System: `RecruitAFriend`

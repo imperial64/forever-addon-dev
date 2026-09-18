@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# HousingCatalogSearcherAPI:IsUncollectedActive
+
+```lua
+isActive = HousingCatalogSearcherAPI:IsUncollectedActive()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `isActive` | `bool` | no |  |
+
+Blizzard's own rendering: `IsUncollectedActive()`
+
+System: `HousingCatalogSearcherAPI` · Widget methods

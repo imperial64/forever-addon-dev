@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_TransmogSets.GetLatestSource
+
+```lua
+sourceID = C_TransmogSets.GetLatestSource()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `sourceID` | `number` | no |  |
+
+Blizzard's own rendering: `C_TransmogSets.GetLatestSource()`
+
+System: `TransmogrifySets` · Namespace: `C_TransmogSets`

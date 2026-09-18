@@ -1,0 +1,9 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# CRAFTINGORDERS_UPDATE_PERSONAL_ORDER_COUNTS
+
+**Payload**
+
+_No payload._
+
+System: `CraftingOrderUI`

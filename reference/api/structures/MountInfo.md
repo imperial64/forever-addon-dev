@@ -1,0 +1,25 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# MountInfo
+
+_Structure_
+
+**Fields**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `name` | `cstring` | no |  |
+| 2 | `spellID` | `number` | no |  |
+| 3 | `icon` | `fileID` | no |  |
+| 4 | `isActive` | `bool` | no |  |
+| 5 | `isUsable` | `bool` | no |  |
+| 6 | `sourceType` | `number` | no |  |
+| 7 | `isFavorite` | `bool` | no |  |
+| 8 | `isFactionSpecific` | `bool` | no |  |
+| 9 | `faction` | `PvPFaction` | yes |  |
+| 10 | `shouldHideOnChar` | `bool` | no |  |
+| 11 | `isCollected` | `bool` | no |  |
+| 12 | `mountID` | `number` | no |  |
+| 13 | `isSteadyFlight` | `bool` | no |  |
+
+System: `MountJournal`

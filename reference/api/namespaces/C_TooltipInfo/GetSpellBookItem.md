@@ -1,0 +1,24 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_TooltipInfo.GetSpellBookItem
+
+```lua
+data = C_TooltipInfo.GetSpellBookItem(spellBookItemSlotIndex, spellBookItemSpellBank)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `spellBookItemSlotIndex` | `luaIndex` | no |  |
+| 2 | `spellBookItemSpellBank` | `SpellBookSpellBank` | no |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `data` | `TooltipData` | no |  |
+
+Blizzard's own rendering: `C_TooltipInfo.GetSpellBookItem(spellBookItemSlotIndex, spellBookItemSpellBank)`
+
+System: `TooltipInfo` · Namespace: `C_TooltipInfo`

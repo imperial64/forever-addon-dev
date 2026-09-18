@@ -1,0 +1,19 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_ItemSocketInfo.CompleteSocketing
+
+```lua
+C_ItemSocketInfo.CompleteSocketing()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `C_ItemSocketInfo.CompleteSocketing()`
+
+System: `ItemSocketInfo` · Namespace: `C_ItemSocketInfo`

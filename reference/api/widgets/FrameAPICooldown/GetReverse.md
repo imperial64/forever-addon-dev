@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# FrameAPICooldown:GetReverse
+
+```lua
+reverse = FrameAPICooldown:GetReverse()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `reverse` | `bool` | no |  |
+
+Blizzard's own rendering: `GetReverse()`
+
+System: `FrameAPICooldown` · Widget methods

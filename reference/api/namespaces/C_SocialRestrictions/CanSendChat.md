@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_SocialRestrictions.CanSendChat
+
+```lua
+canSendChat = C_SocialRestrictions.CanSendChat()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `canSendChat` | `bool` | no |  |
+
+Blizzard's own rendering: `C_SocialRestrictions.CanSendChat()`
+
+System: `SocialRestrictions` · Namespace: `C_SocialRestrictions`

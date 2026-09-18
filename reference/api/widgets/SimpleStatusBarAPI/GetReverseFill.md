@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# SimpleStatusBarAPI:GetReverseFill
+
+```lua
+isReverseFill = SimpleStatusBarAPI:GetReverseFill()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `isReverseFill` | `bool` | no |  |
+
+Blizzard's own rendering: `GetReverseFill()`
+
+System: `SimpleStatusBarAPI` · Widget methods

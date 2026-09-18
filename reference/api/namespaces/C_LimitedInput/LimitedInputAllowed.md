@@ -1,0 +1,23 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_LimitedInput.LimitedInputAllowed
+
+```lua
+allowed = C_LimitedInput.LimitedInputAllowed(type)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `type` | `LimitedInputType` | no |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `allowed` | `bool` | no |  |
+
+Blizzard's own rendering: `C_LimitedInput.LimitedInputAllowed(type)`
+
+System: `LimitedInput` · Namespace: `C_LimitedInput`

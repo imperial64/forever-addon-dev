@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_AuctionHouse.GetQuoteDurationRemaining
+
+```lua
+quoteDurationSeconds = C_AuctionHouse.GetQuoteDurationRemaining()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `quoteDurationSeconds` | `number` | no |  |
+
+Blizzard's own rendering: `C_AuctionHouse.GetQuoteDurationRemaining()`
+
+System: `AuctionHouse` · Namespace: `C_AuctionHouse`

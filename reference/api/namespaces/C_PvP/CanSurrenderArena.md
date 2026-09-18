@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_PvP.CanSurrenderArena
+
+```lua
+CanSurrenderArena = C_PvP.CanSurrenderArena()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `CanSurrenderArena` | `bool` | no |  |
+
+Blizzard's own rendering: `C_PvP.CanSurrenderArena()`
+
+System: `PvpInfo` · Namespace: `C_PvP`

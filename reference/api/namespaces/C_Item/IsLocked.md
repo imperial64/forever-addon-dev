@@ -1,0 +1,23 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_Item.IsLocked
+
+```lua
+isLocked = C_Item.IsLocked(itemLocation)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `itemLocation` | `ItemLocation (ItemLocationMixin)` | no |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `isLocked` | `bool` | no |  |
+
+Blizzard's own rendering: `C_Item.IsLocked(itemLocation)`
+
+System: `Item` · Namespace: `C_Item`

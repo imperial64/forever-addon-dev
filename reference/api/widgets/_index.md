@@ -1,0 +1,89 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# Widget types
+
+Methods on frames and other script objects.
+
+| Widget type | Methods |
+|---|---|
+| [AbbreviateConfigAPI](../widgets/AbbreviateConfigAPI/) | 2 |
+| [AbbreviatedNumberFormatterAPI](../widgets/AbbreviatedNumberFormatterAPI/) | 6 |
+| [DurationTextBindingObjectAPI](../widgets/DurationTextBindingObjectAPI/) | 30 |
+| [FrameAPIArchaeologyDigSiteFrame](../widgets/FrameAPIArchaeologyDigSiteFrame/) | 0 |
+| [FrameAPIBlob](../widgets/FrameAPIBlob/) | 14 |
+| [FrameAPICharacterModelBase](../widgets/FrameAPICharacterModelBase/) | 24 |
+| [FrameAPICinematicModel](../widgets/FrameAPICinematicModel/) | 18 |
+| [FrameAPICooldown](../widgets/FrameAPICooldown/) | 46 |
+| [FrameAPIDressUpModel](../widgets/FrameAPIDressUpModel/) | 20 |
+| [FrameAPIFogOfWarFrame](../widgets/FrameAPIFogOfWarFrame/) | 12 |
+| [FrameAPIModelSceneFrame](../widgets/FrameAPIModelSceneFrame/) | 47 |
+| [FrameAPIModelSceneFrameActor](../widgets/FrameAPIModelSceneFrameActor/) | 31 |
+| [FrameAPIModelSceneFrameActorBase](../widgets/FrameAPIModelSceneFrameActorBase/) | 50 |
+| [FrameAPINamePlate](../widgets/FrameAPINamePlate/) | 6 |
+| [FrameAPIQuestPOI](../widgets/FrameAPIQuestPOI/) | 3 |
+| [FrameAPIScenarioPOI](../widgets/FrameAPIScenarioPOI/) | 2 |
+| [FrameAPISimpleCheckout](../widgets/FrameAPISimpleCheckout/) | 8 |
+| [FrameAPITabardModel](../widgets/FrameAPITabardModel/) | 6 |
+| [FrameAPITabardModelBase](../widgets/FrameAPITabardModelBase/) | 7 |
+| [FrameAPITooltip](../widgets/FrameAPITooltip/) | 9 |
+| [FrameAPIUnitPositionFrame](../widgets/FrameAPIUnitPositionFrame/) | 12 |
+| [HousingCatalogSearcherAPI](../widgets/HousingCatalogSearcherAPI/) | 46 |
+| [HousingFixturePointFrameAPI](../widgets/HousingFixturePointFrameAPI/) | 5 |
+| [HousingLayoutPinFrameAPI](../widgets/HousingLayoutPinFrameAPI/) | 17 |
+| [LuaColorCurveObjectAPI](../widgets/LuaColorCurveObjectAPI/) | 11 |
+| [LuaCurveObjectAPI](../widgets/LuaCurveObjectAPI/) | 10 |
+| [LuaCurveObjectBaseAPI](../widgets/LuaCurveObjectBaseAPI/) | 3 |
+| [LuaDurationClockObjectAPI](../widgets/LuaDurationClockObjectAPI/) | 1 |
+| [LuaDurationManualClockAPI](../widgets/LuaDurationManualClockAPI/) | 4 |
+| [LuaDurationObjectAPI](../widgets/LuaDurationObjectAPI/) | 31 |
+| [LuaLocaleContextAPI](../widgets/LuaLocaleContextAPI/) | 22 |
+| [MinimapFrameAPI](../widgets/MinimapFrameAPI/) | 31 |
+| [NumericFormatterAPI](../widgets/NumericFormatterAPI/) | 1 |
+| [NumericRuleFormatterAPI](../widgets/NumericRuleFormatterAPI/) | 5 |
+| [PingPinFrameAPI](../widgets/PingPinFrameAPI/) | 0 |
+| [SecondsFormatterAPI](../widgets/SecondsFormatterAPI/) | 35 |
+| [SimpleAnimAPI](../widgets/SimpleAnimAPI/) | 36 |
+| [SimpleAnimAlphaAPI](../widgets/SimpleAnimAlphaAPI/) | 4 |
+| [SimpleAnimFlipBookAPI](../widgets/SimpleAnimFlipBookAPI/) | 10 |
+| [SimpleAnimGroupAPI](../widgets/SimpleAnimGroupAPI/) | 28 |
+| [SimpleAnimPathAPI](../widgets/SimpleAnimPathAPI/) | 5 |
+| [SimpleAnimRadialProgressAPI](../widgets/SimpleAnimRadialProgressAPI/) | 4 |
+| [SimpleAnimRotationAPI](../widgets/SimpleAnimRotationAPI/) | 6 |
+| [SimpleAnimScaleAPI](../widgets/SimpleAnimScaleAPI/) | 8 |
+| [SimpleAnimScaleLineAPI](../widgets/SimpleAnimScaleLineAPI/) | 0 |
+| [SimpleAnimTextureCoordTranslationAPI](../widgets/SimpleAnimTextureCoordTranslationAPI/) | 2 |
+| [SimpleAnimTranslationAPI](../widgets/SimpleAnimTranslationAPI/) | 2 |
+| [SimpleAnimTranslationLineAPI](../widgets/SimpleAnimTranslationLineAPI/) | 0 |
+| [SimpleAnimVertexColorAPI](../widgets/SimpleAnimVertexColorAPI/) | 4 |
+| [SimpleAnimatableObjectAPI](../widgets/SimpleAnimatableObjectAPI/) | 3 |
+| [SimpleBrowserAPI](../widgets/SimpleBrowserAPI/) | 12 |
+| [SimpleButtonAPI](../widgets/SimpleButtonAPI/) | 42 |
+| [SimpleCheckboxAPI](../widgets/SimpleCheckboxAPI/) | 6 |
+| [SimpleColorSelectAPI](../widgets/SimpleColorSelectAPI/) | 19 |
+| [SimpleControlPointAPI](../widgets/SimpleControlPointAPI/) | 5 |
+| [SimpleEditBoxAPI](../widgets/SimpleEditBoxAPI/) | 79 |
+| [SimpleFontAPI](../widgets/SimpleFontAPI/) | 24 |
+| [SimpleFontStringAPI](../widgets/SimpleFontStringAPI/) | 57 |
+| [SimpleFrameAPI](../widgets/SimpleFrameAPI/) | 126 |
+| [SimpleFrameScriptObjectAPI](../widgets/SimpleFrameScriptObjectAPI/) | 21 |
+| [SimpleHTMLAPI](../widgets/SimpleHTMLAPI/) | 23 |
+| [SimpleLineAPI](../widgets/SimpleLineAPI/) | 9 |
+| [SimpleMapSceneAPI](../widgets/SimpleMapSceneAPI/) | 5 |
+| [SimpleMaskTextureAPI](../widgets/SimpleMaskTextureAPI/) | 0 |
+| [SimpleMessageFrameAPI](../widgets/SimpleMessageFrameAPI/) | 33 |
+| [SimpleModelAPI](../widgets/SimpleModelAPI/) | 65 |
+| [SimpleModelFFXAPI](../widgets/SimpleModelFFXAPI/) | 4 |
+| [SimpleMovieAPI](../widgets/SimpleMovieAPI/) | 4 |
+| [SimpleObjectAPI](../widgets/SimpleObjectAPI/) | 5 |
+| [SimpleOffScreenFrameAPI](../widgets/SimpleOffScreenFrameAPI/) | 8 |
+| [SimpleRegionAPI](../widgets/SimpleRegionAPI/) | 16 |
+| [SimpleScriptRegionAPI](../widgets/SimpleScriptRegionAPI/) | 55 |
+| [SimpleScriptRegionResizingAPI](../widgets/SimpleScriptRegionResizingAPI/) | 13 |
+| [SimpleScrollFrameAPI](../widgets/SimpleScrollFrameAPI/) | 9 |
+| [SimpleSliderAPI](../widgets/SimpleSliderAPI/) | 19 |
+| [SimpleStatusBarAPI](../widgets/SimpleStatusBarAPI/) | 28 |
+| [SimpleTextureAPI](../widgets/SimpleTextureAPI/) | 4 |
+| [SimpleTextureBaseAPI](../widgets/SimpleTextureBaseAPI/) | 52 |
+| [SimpleVectorGraphicsAPI](../widgets/SimpleVectorGraphicsAPI/) | 4 |
+| [TimedSignalMapAPI](../widgets/TimedSignalMapAPI/) | 8 |
+| [UnitHealPredictionCalculatorAPI](../widgets/UnitHealPredictionCalculatorAPI/) | 35 |

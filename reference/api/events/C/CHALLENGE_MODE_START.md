@@ -1,0 +1,11 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# CHALLENGE_MODE_START
+
+**Payload**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `mapID` | `number` | no |  |
+
+System: `ChallengeModeInfo`

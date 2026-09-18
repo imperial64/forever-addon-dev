@@ -1,0 +1,25 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_UnitAuras.GetAuraDispelTypeColor
+
+```lua
+dispelTypeColor = C_UnitAuras.GetAuraDispelTypeColor(auraInstanceUnit, auraInstanceID, curve)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `auraInstanceUnit` | `UnitToken` | no |  |
+| 2 | `auraInstanceID` | `number` | no |  |
+| 3 | `curve` | `LuaColorCurveObject` | no |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `dispelTypeColor` | `colorRGBA (ColorMixin)` | no |  |
+
+Blizzard's own rendering: `C_UnitAuras.GetAuraDispelTypeColor(auraInstanceUnit, auraInstanceID, curve)`
+
+System: `UnitAuras` · Namespace: `C_UnitAuras`

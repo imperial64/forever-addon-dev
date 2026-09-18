@@ -1,0 +1,25 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_Traits.PurchaseAllRanks
+
+```lua
+success = C_Traits.PurchaseAllRanks(configID, nodeID, ignoreCost)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `configID` | `number` | no |  |
+| 2 | `nodeID` | `number` | no |  |
+| 3 | `ignoreCost` | `bool` | no |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `success` | `bool` | no |  |
+
+Blizzard's own rendering: `C_Traits.PurchaseAllRanks(configID, nodeID, ignoreCost)`
+
+System: `SharedTraits` · Namespace: `C_Traits`

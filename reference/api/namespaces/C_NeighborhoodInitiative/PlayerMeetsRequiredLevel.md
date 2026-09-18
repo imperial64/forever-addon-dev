@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_NeighborhoodInitiative.PlayerMeetsRequiredLevel
+
+```lua
+success = C_NeighborhoodInitiative.PlayerMeetsRequiredLevel()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `success` | `bool` | no |  |
+
+Blizzard's own rendering: `C_NeighborhoodInitiative.PlayerMeetsRequiredLevel()`
+
+System: `NeighborhoodInitiative` · Namespace: `C_NeighborhoodInitiative`

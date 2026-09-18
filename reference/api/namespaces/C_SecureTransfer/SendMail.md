@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# C_SecureTransfer.SendMail
+
+> **RESTRICTED — Blizzard flag.** This function carries `HasRestrictions` in the client's own documentation, meaning it is gated on a hardware event or refuses to run from a script.
+
+```lua
+C_SecureTransfer.SendMail()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+_None._
+
+Blizzard's own rendering: `C_SecureTransfer.SendMail()`
+
+System: `SecureTransfer` · Namespace: `C_SecureTransfer`

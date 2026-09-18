@@ -1,0 +1,9 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# ENABLE_XP_GAIN
+
+**Payload**
+
+_No payload._
+
+System: `PaperDollInfo`

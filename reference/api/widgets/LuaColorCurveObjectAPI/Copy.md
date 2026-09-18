@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# LuaColorCurveObjectAPI:Copy
+
+```lua
+curve = LuaColorCurveObjectAPI:Copy()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `curve` | `LuaColorCurveObject` | no |  |
+
+Blizzard's own rendering: `Copy()`
+
+System: `LuaColorCurveObjectAPI` · Widget methods

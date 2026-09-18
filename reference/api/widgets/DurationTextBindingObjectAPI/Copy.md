@@ -1,0 +1,21 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build unknown. Do not edit; edit the generator. -->
+
+# DurationTextBindingObjectAPI:Copy
+
+```lua
+copy = DurationTextBindingObjectAPI:Copy()
+```
+
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `copy` | `DurationTextBinding` | no |  |
+
+Blizzard's own rendering: `Copy()`
+
+System: `DurationTextBindingObjectAPI` · Widget methods
