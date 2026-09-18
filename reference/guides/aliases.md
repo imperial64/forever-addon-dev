@@ -1,8 +1,8 @@
-<!-- HAND-WRITTEN. Not regenerated. Unlike everything else under reference/api/,
-     this file is maintained by a person - it records what people TYPE, which no
-     capture of the client can tell you. -->
-
 # Aliases: what you reached for, and what replaced it
+
+This is a guide, not a capture. It records what people *type* — which no scan of the
+client can tell you — so it is maintained by hand and lives here rather than under the
+generated `reference/api/` tree.
 
 Forever runs Retail's API. The Classic-era globals are **gone**, and they are the ones
 most people type first — either from memory of Classic, or from copying a Classic addon.

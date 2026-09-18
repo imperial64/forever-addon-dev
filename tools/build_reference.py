@@ -649,6 +649,19 @@ def main() -> int:
         return 1
 
     if args.clean and args.out.exists():
+        # --clean removes the whole tree, so the "everything here is generated"
+        # boundary is load-bearing: a hand-written file under --out would be
+        # deleted and never re-emitted. ALIASES.md was exactly that, and lost a
+        # regeneration to it before moving to reference/guides/aliases.md.
+        strays = [path for path in sorted(args.out.rglob("*")) if path.is_file()
+                  and "GENERATED" not in path.read_text(
+                      encoding="utf-8", errors="replace")[:200]]
+        if strays:
+            print(f"{args.out} holds files that were not generated; --clean would "
+                  f"delete them. Move them out of the generated tree:", file=sys.stderr)
+            for path in strays:
+                print(f"  {path}", file=sys.stderr)
+            return 1
         shutil.rmtree(args.out)
 
     restrictions = Restrictions(args.restrictions, findings_link=str(args.findings).replace("\\", "/"))
