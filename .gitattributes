@@ -4,6 +4,10 @@
 # destroy the one property the generator is built around: that a regeneration
 # diff IS the client patch delta.
 reference/api/** text eol=lf
-data/api.json     text eol=lf
+data/*.json       text eol=lf
+# The generator rewrites this file whole to refresh the table inside it, with LF,
+# so it needs the same treatment as the reference tree even though the prose
+# around the markers is hand-written.
+skills/restrictions/SKILL.md text eol=lf
 *.lua             text eol=lf
 *.py              text eol=lf
