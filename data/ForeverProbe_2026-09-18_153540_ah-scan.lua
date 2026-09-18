@@ -1,0 +1,265 @@
+
+ForeverProbeDB = {
+["eventProbe"] = {
+["refused"] = {
+"COMBAT_LOG_EVENT",
+"COMBAT_LOG_EVENT_UNFILTERED",
+},
+["allowed"] = {
+"AUCTION_HOUSE_SHOW",
+"AUCTION_HOUSE_THROTTLED_SYSTEM_READY",
+"BAG_UPDATE",
+"CHAT_MSG_ADDON",
+"PLAYER_MONEY",
+"PLAYER_REGEN_DISABLED",
+"PLAYER_REGEN_ENABLED",
+"UNIT_AURA",
+"UNIT_COMBAT",
+"UNIT_HEALTH",
+"UNIT_POWER_UPDATE",
+"UNIT_SPELLCAST_START",
+"UNIT_SPELLCAST_SUCCEEDED",
+"UNIT_THREAT_LIST_UPDATE",
+},
+["missing"] = {
+},
+},
+["bridge"] = {
+["loads"] = 1,
+},
+["auctionHouse"] = {
+["restricted"] = {
+["present"] = {
+"C_AuctionHouse.PostItem",
+"C_AuctionHouse.PostCommodity",
+"C_AuctionHouse.ConfirmPostItem",
+"C_AuctionHouse.ConfirmPostCommodity",
+"C_AuctionHouse.PlaceBid",
+"C_AuctionHouse.StartCommoditiesPurchase",
+"C_AuctionHouse.CancelAuction",
+},
+["absent"] = {
+},
+},
+["api"] = "retail",
+["live"] = {
+["throttleReady"] = true,
+["perPage"] = 50,
+["auctionFrameOpen"] = true,
+["replicateCached"] = 0,
+},
+["hasCommodities"] = true,
+["frames"] = {
+["modern"] = true,
+["legacy"] = false,
+},
+["shapes"] = {
+["itemKeyFromItem(2589)"] = "ERR: Interface/AddOns/ForeverProbe/ForeverProbe.lua:989: bad argument #1 to 'GetItemKeyFromItem' (Usage: local itemKey = C_AuctionHouse.GetItemKeyFromItem(item))",
+["timeLeftBand1"] = "1800",
+["commodityStatus(2589)"] = "ERR: Interface/AddOns/ForeverProbe/ForeverProbe.lua:996: bad argument #1 to 'GetItemKeyFromItem' (Usage: local itemKey = C_AuctionHouse.GetItemKeyFromItem(item))",
+["timeLeftBand4"] = "ERR: Interface/AddOns/ForeverProbe/ForeverProbe.lua:984: bad argument #1 to 'GetTimeLeftBandInfo' (Usage: local timeLeftMinSeconds, timeLeftMaxSeconds = C_AuctionHouse.GetTimeLeftBandInfo(timeLeftBand))",
+["timeLeftBand3"] = "43200",
+["availablePostCount"] = "ERR: Interface/AddOns/ForeverProbe/ForeverProbe.lua:992: bad argument #1 to 'GetAvailablePostCount' (Usage: local listCount = C_AuctionHouse.GetAvailablePostCount(item))",
+["timeLeftBand5"] = "ERR: Interface/AddOns/ForeverProbe/ForeverProbe.lua:984: bad argument #1 to 'GetTimeLeftBandInfo' (Usage: local timeLeftMinSeconds, timeLeftMaxSeconds = C_AuctionHouse.GetTimeLeftBandInfo(timeLeftBand))",
+["timeLeftBand2"] = "7200",
+},
+["restrictedCount"] = 7,
+["throttle"] = {
+["readyAt"] = 1789734300,
+},
+["hasReplicate"] = true,
+["commodity"] = {
+["present"] = {
+"C_AuctionHouse.GetItemCommodityStatus",
+"C_AuctionHouse.GetNumCommoditySearchResults",
+"C_AuctionHouse.GetCommoditySearchResultInfo",
+"C_AuctionHouse.GetCommoditySearchResultsQuantity",
+"C_AuctionHouse.CalculateCommodityDeposit",
+},
+["absent"] = {
+},
+},
+["modern"] = {
+["present"] = {
+"C_AuctionHouse.SendBrowseQuery",
+"C_AuctionHouse.RequestMoreBrowseResults",
+"C_AuctionHouse.GetBrowseResults",
+"C_AuctionHouse.SendSearchQuery",
+"C_AuctionHouse.SendSellSearchQuery",
+"C_AuctionHouse.GetNumItemSearchResults",
+"C_AuctionHouse.GetItemSearchResultInfo",
+"C_AuctionHouse.GetItemKeyInfo",
+"C_AuctionHouse.QueryOwnedAuctions",
+"C_AuctionHouse.GetOwnedAuctionInfo",
+"C_AuctionHouse.CalculateItemDeposit",
+"C_AuctionHouse.IsThrottledMessageSystemReady",
+},
+["absent"] = {
+},
+},
+["eventCounts"] = {
+["AUCTION_HOUSE_SHOW"] = 3,
+["AUCTION_HOUSE_CLOSED"] = 3,
+["AUCTION_HOUSE_BROWSE_RESULTS_ADDED"] = 1,
+["AUCTION_HOUSE_THROTTLED_SYSTEM_READY"] = 3,
+["AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"] = 1,
+},
+["scan"] = {
+["total"] = 14389,
+["lastUpdateAt"] = 3.012000000002445,
+["elapsed"] = 3.012000000002445,
+["done"] = true,
+["updates"] = 1,
+["ownersPresent"] = 0,
+["ownersNil"] = 500,
+["startedAt"] = 110457.772,
+["samples"] = {
+{
+["tuple"] = "1=Worn Mace 2=133478 3=1 4=1 5=true 6=1 7=REQ_LEVEL_ABBR 8=0 9=0 10=1000100 11=0 12=nil 13=nil 14=nil 15=nil 16=0 17=36 18=true",
+["index"] = 0,
+["returns"] = 18,
+["ownerFullName"] = "nil",
+["owner"] = "nil",
+},
+{
+["tuple"] = "1=Schematic: Mechanical Squirrel 2=134942 3=1 4=2 5=false 6=75 7=SKILL_ABBR 8=0 9=0 10=500 11=0 12=nil 13=nil 14=nil 15=nil 16=0 17=4408 18=true",
+["index"] = 1,
+["returns"] = 18,
+["ownerFullName"] = "nil",
+["owner"] = "nil",
+},
+{
+["tuple"] = "1=Embossed Leather Vest 2=132724 3=1 4=2 5=false 6=7 7=REQ_LEVEL_ABBR 8=0 9=0 10=1000 11=0 12=nil 13=nil 14=nil 15=nil 16=0 17=2300 18=true",
+["index"] = 2,
+["returns"] = 18,
+["ownerFullName"] = "nil",
+["owner"] = "nil",
+},
+{
+["tuple"] = "1=Scroll: KWYJIBO 2=237446 3=1 4=1 5=false 6=1 7=REQ_LEVEL_ABBR 8=0 9=0 10=900 11=0 12=nil 13=nil 14=nil 15=nil 16=0 17=211780 18=true",
+["index"] = 3,
+["returns"] = 18,
+["ownerFullName"] = "nil",
+["owner"] = "nil",
+},
+{
+["tuple"] = "1=Scroll: KWYJIBO 2=237446 3=1 4=1 5=false 6=1 7=REQ_LEVEL_ABBR 8=0 9=0 10=1000 11=0 12=nil 13=nil 14=nil 15=nil 16=0 17=211780 18=true",
+["index"] = 4,
+["returns"] = 18,
+["ownerFullName"] = "nil",
+["owner"] = "nil",
+},
+},
+["stringFieldLayouts"] = {
+["1,7"] = 500,
+},
+["perTenth"] = {
+[30] = 1,
+},
+["requestedAt"] = 1789734320,
+["callOk"] = true,
+},
+["hasLegacyGetAll"] = false,
+["legacyAction"] = {
+["present"] = {
+},
+["absent"] = {
+"PlaceAuctionBid",
+"StartAuction",
+"PostAuction",
+"CancelAuction",
+},
+},
+["browse"] = {
+["total"] = 680,
+["elapsed"] = 3.017999999996391,
+["done"] = true,
+["full"] = true,
+["rounds"] = {
+{
+["at"] = 0.2620000000024447,
+["results"] = 500,
+["gained"] = 500,
+["full"] = "false",
+["reason"] = "updated",
+},
+{
+["at"] = 1.501999999993132,
+["results"] = 500,
+["gained"] = 0,
+["full"] = "false",
+["reason"] = "requested",
+},
+{
+["at"] = 1.726999999998952,
+["results"] = 680,
+["gained"] = 180,
+["full"] = "true",
+["reason"] = "added",
+},
+},
+["startedAt"] = 110436.285,
+["requested"] = 6,
+["events"] = {
+["AUCTION_HOUSE_SHOW"] = 3,
+["AUCTION_HOUSE_BROWSE_RESULTS_ADDED"] = 1,
+["AUCTION_HOUSE_CLOSED"] = 2,
+["AUCTION_HOUSE_THROTTLED_SYSTEM_READY"] = 3,
+["AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"] = 1,
+},
+["callOk"] = true,
+["lastCount"] = 680,
+},
+["eventSupport"] = {
+["AUCTION_HOUSE_SHOW"] = true,
+["AUCTION_HOUSE_CLOSED"] = true,
+["COMMODITY_SEARCH_RESULTS_UPDATED"] = true,
+["ITEM_SEARCH_RESULTS_UPDATED"] = true,
+["AUCTION_HOUSE_BROWSE_RESULTS_ADDED"] = true,
+["AUCTION_HOUSE_BROWSE_FAILURE"] = true,
+["AUCTION_HOUSE_THROTTLED_SYSTEM_READY"] = true,
+["AUCTION_HOUSE_BROWSE_RESULTS_UPDATED"] = true,
+},
+["legacy"] = {
+["present"] = {
+},
+["absent"] = {
+"QueryAuctionItems",
+"CanSendAuctionQuery",
+"GetNumAuctionItems",
+"GetAuctionItemInfo",
+"GetAuctionItemLink",
+"SortAuctionItems",
+"GetAuctionSellItemInfo",
+"GetAuctionItemTimeLeft",
+},
+},
+["perPage"] = 50,
+["replicate"] = {
+["present"] = {
+"C_AuctionHouse.ReplicateItems",
+"C_AuctionHouse.GetNumReplicateItems",
+"C_AuctionHouse.GetReplicateItemInfo",
+},
+["absent"] = {
+},
+},
+["scanHistory"] = {
+1789734320,
+},
+},
+["blockLog"] = {
+{
+["addon"] = "ForeverProbe",
+["test"] = "RegisterEvent:COMBAT_LOG_EVENT_UNFILTERED",
+["event"] = "ADDON_ACTION_FORBIDDEN",
+["func"] = "UNKNOWN()",
+},
+{
+["addon"] = "ForeverProbe",
+["test"] = "RegisterEvent:COMBAT_LOG_EVENT",
+["event"] = "ADDON_ACTION_FORBIDDEN",
+["func"] = "UNKNOWN()",
+},
+},
+}

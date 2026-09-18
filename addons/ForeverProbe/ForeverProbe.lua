@@ -620,6 +620,23 @@ local function finishReplicateScan()
     db.auctionHouse = db.auctionHouse or {}
     db.auctionHouse.scan = ahScan
 
+    -- A second successful scan inside retail's 900s window would mean Forever
+    -- does not carry that throttle. A refusal brackets it from the other side.
+    -- Either answer is the measurement; nothing else in the probe can give it.
+    local attempts = (db.auctionHouse or {}).scanAttempts or {}
+    local prev = attempts[#attempts - 1]
+    if prev then
+        local gap = time() - prev.at
+        ahScan.secondsSincePreviousAttempt = gap
+        if total > 0 then
+            out(("  |cff44ff44THROTTLE: a second scan returned %d auctions %d seconds after the last|r")
+                :format(total, gap))
+            out("  Retail refuses inside 900s. Forever did not.")
+        else
+            out(("  |cffffaa00THROTTLE: second scan returned nothing after %d seconds|r - throttled"):format(gap))
+        end
+    end
+
     if total == 0 and ahScan.updates == 0 then
         out("  |cffff4444no update event and 0 items|r - throttled, unsupported, or the AH window was shut")
     else
@@ -652,6 +669,25 @@ ahScanFrame:SetScript("OnEvent", function(_, event)
     if ahScan.updates == 1 then ahScan.elapsed = GetTime() - ahScan.startedAt end
 end)
 
+-- The throttle is only measurable by trying again -------------------------
+-- AUCTION_HOUSE_THROTTLED_SYSTEM_READY turned out to describe the message
+-- system, not the replicate throttle: in the first capture it fired 20 seconds
+-- BEFORE the scan was even requested, off the browse query, and
+-- IsThrottledMessageSystemReady read true 64 seconds after a successful scan.
+-- Neither says anything about ReplicateItems.
+--
+-- So the only honest test is to call it again and see whether data comes back.
+-- Each attempt is stamped with absolute time, because this build does not read
+-- SavedVariables back and the history cannot survive a /reload - the gap has to
+-- be reconstructed from the collected files afterwards.
+local function ahScanAttemptLog(result)
+    db.auctionHouse = db.auctionHouse or {}
+    local log = db.auctionHouse.scanAttempts or {}
+    log[#log + 1] = { at = time(), gameTime = GetTime(), result = result }
+    db.auctionHouse.scanAttempts = log
+    return #log
+end
+
 local function ahReplicateScan()
     if not (C_AuctionHouse and C_AuctionHouse.ReplicateItems) then
         out("|cffff4444no C_AuctionHouse.ReplicateItems|r - nothing to scan. The probe deliberately does")
@@ -676,6 +712,7 @@ local function ahReplicateScan()
     db.auctionHouse.scanHistory = history
 
     ahScan = { updates = 0, startedAt = GetTime(), requestedAt = time(), done = false }
+    ahScan.attempt = ahScanAttemptLog("requested")
     safeRegister(ahScanFrame, "REPLICATE_ITEM_LIST_UPDATE")
 
     activeTest = "ReplicateItems"
@@ -850,11 +887,46 @@ ahEvents:SetScript("OnEvent", function(_, event)
     end
 end)
 
+-- One level of a table, flattened to text, secret-safe. Enough to read a shape
+-- off, not so much that SavedVariables becomes unreadable.
+local function shapeOf(t, depth)
+    if type(t) ~= "table" then return plain(t) end
+    if issecrettable and issecrettable(t) then return "<SECRET TABLE>" end
+    local parts = {}
+    for k, v in pairs(t) do
+        local val
+        if type(v) == "table" and (depth or 1) > 0 then
+            val = "{" .. shapeOf(v, (depth or 1) - 1) .. "}"
+        else
+            val = plain(v)
+        end
+        parts[#parts + 1] = plain(k) .. "=" .. val
+        if #parts >= 20 then break end
+    end
+    table.sort(parts)
+    return table.concat(parts, " ")
+end
+
 local function finishBrowse()
     if not browse or browse.done then return end
     browse.done = true
     browse.elapsed = GetTime() - browse.startedAt
     browse.total = browseCount()
+
+    -- THE shape that matters. A browse result is what an economy addon reads on
+    -- every pass: one entry per item key, with the cheapest price and the total
+    -- quantity behind it. Three samples is enough to read the field list off and
+    -- see whether Forever kept retail's structure.
+    local okResults, results = pcall(C_AuctionHouse.GetBrowseResults)
+    if okResults and type(results) == "table" then
+        browse.resultShape = {}
+        for i = 1, math.min(3, #results) do
+            browse.resultShape[i] = shapeOf(results[i], 2)
+        end
+        if browse.resultShape[1] then
+            out("  browse entry: " .. plain(browse.resultShape[1]))
+        end
+    end
     browse.events = {}
     for k, v in pairs(ahEventCount) do browse.events[k] = v end
 
@@ -961,16 +1033,12 @@ end
 -- whatever the client already has cached.
 local function ahShapes()
     local shapes = {}
+    db.auctionHouse = db.auctionHouse or {}
     local function record(name, fn)
         local ok, v = pcall(fn)
         if not ok then shapes[name] = "ERR: " .. plain(v); return end
         if type(v) == "table" and not (issecrettable and issecrettable(v)) then
-            local parts = {}
-            for k, val in pairs(v) do
-                parts[#parts + 1] = plain(k) .. "=" .. plain(val)
-                if #parts >= 12 then break end
-            end
-            shapes[name] = plain(table.concat(parts, " "))
+            shapes[name] = shapeOf(v, 1)
         else
             shapes[name] = plain(v)
         end
@@ -979,22 +1047,44 @@ local function ahShapes()
 
     -- Time-left bands are the whole basis of "is this listing about to expire",
     -- and a Classic+ title could easily ship different bands from retail's four.
+    -- Retail has four bands (30m / 2h / 12h / 48h). Measured on Forever
+    -- 2026-09-18: only three exist, and asking for a fourth is a bad-argument
+    -- error rather than a nil. So walk until it refuses and record the count -
+    -- the number of bands IS the finding, and it changes what "about to expire"
+    -- means for any pricing logic.
     if C_AuctionHouse and C_AuctionHouse.GetTimeLeftBandInfo then
-        for band = 1, 5 do
-            record("timeLeftBand" .. band, function() return C_AuctionHouse.GetTimeLeftBandInfo(band) end)
+        local bands = {}
+        for band = 1, 8 do
+            local ok, minSec, maxSec = pcall(C_AuctionHouse.GetTimeLeftBandInfo, band)
+            if not ok then break end
+            bands[band] = plain(minSec) .. ".." .. plain(maxSec)
+            shapes["timeLeftBand" .. band] = bands[band]
         end
+        shapes.timeLeftBandCount = #bands
+        out(("  timeLeftBands          %d (retail has 4): %s")
+            :format(#bands, table.concat(bands, ", ")))
     end
     -- Item keys are the join key for every price record the addon will ever keep.
-    if C_AuctionHouse and C_AuctionHouse.GetItemKeyFromItem then
-        record("itemKeyFromItem(2589)", function() return C_AuctionHouse.GetItemKeyFromItem(2589) end)
+    -- GetItemKeyFromItem takes an ITEM, not an item id - passing 2589 was my
+    -- error and produced three bad-argument lines in the first capture. A real
+    -- addon takes the key off a browse result, so do that: run /fprobe ah browse
+    -- first and this reads the genuine article.
+    local firstKey
+    if C_AuctionHouse and C_AuctionHouse.GetBrowseResults then
+        local ok, results = pcall(C_AuctionHouse.GetBrowseResults)
+        if ok and type(results) == "table" and results[1] then
+            firstKey = results[1].itemKey
+            record("itemKey (from browse)", function() return firstKey end)
+        end
     end
-    if C_AuctionHouse and C_AuctionHouse.GetAvailablePostCount then
-        record("availablePostCount", function() return C_AuctionHouse.GetAvailablePostCount(2589) end)
+    if firstKey and C_AuctionHouse.GetItemKeyInfo then
+        record("itemKeyInfo", function() return C_AuctionHouse.GetItemKeyInfo(firstKey) end)
     end
-    if C_AuctionHouse and C_AuctionHouse.GetItemCommodityStatus then
-        record("commodityStatus(2589)", function()
-            return C_AuctionHouse.GetItemCommodityStatus(C_AuctionHouse.GetItemKeyFromItem(2589))
-        end)
+    if firstKey and C_AuctionHouse.GetItemCommodityStatus then
+        record("commodityStatus", function() return C_AuctionHouse.GetItemCommodityStatus(firstKey) end)
+    end
+    if not firstKey then
+        out("  |cffffaa00no browse results cached|r - run /fprobe ah browse first for the item-key shapes")
     end
     db.auctionHouse = db.auctionHouse or {}
     db.auctionHouse.shapes = shapes

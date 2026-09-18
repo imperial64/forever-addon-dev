@@ -101,8 +101,19 @@ So the bulk read exists, returns anonymised data, costs a client stall, and give
 most four snapshots an hour. Legacy `getAll` is the same 15-minute cadence with a
 42 554-item ceiling and a disconnect risk.
 
-**Consequence:** you cannot build a live market view from in-game scanning. Every addon
-that appears to have one is getting the data from outside the game.
+**Consequence for retail:** you cannot build a live market view from in-game scanning.
+Every addon that appears to have one is getting the data from outside the game.
+
+> **Superseded for Forever, measured 2026-09-18 — see `findings.md` §P.15 and §P.16.**
+> On the Forever beta a single browse query returned the *complete* item-key market — 680
+> keys covering 14,389 auctions — in 3.0 seconds over 3 rounds, unthrottled and repeatable,
+> with the client flagging `HasFullBrowseResults` when it was done. `ReplicateItems`
+> returned all 14,389 in 3.0 seconds in one event, with no per-frame storm. The reasoning
+> below is correct about retail and does not describe this client. An economy addon here
+> can plausibly be just an addon.
+>
+> Owner names are still `nil`, as retail has had since 9.0.2, so seller attribution is out
+> in both games. And this is a beta realm: the *shape* generalises, the timings may not.
 
 ---
 

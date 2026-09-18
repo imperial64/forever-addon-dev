@@ -301,6 +301,85 @@ truncates it.
 
 ---
 
+### P.15 The Auction House numbers, measured
+
+Run at an auction house on 2026-09-18, build 69913. This is what the project existed to
+find out, and it is better than `auction-addon-architecture.md` §3 predicted.
+
+**Browse — the free, repeatable read:**
+
+| Round | At | Results | Gained | `HasFullBrowseResults` |
+|---|---|---|---|---|
+| 1 (`updated`) | 0.26s | 500 | +500 | false |
+| 2 (`requested`) | 1.50s | 500 | +0 | false |
+| 3 (`added`) | 1.73s | **680** | +180 | **true** |
+
+One `SendBrowseQuery` with empty filters, one `RequestMoreBrowseResults`, and **the entire
+browsable market arrived in 3.0 seconds** — 680 item keys, flagged complete. The page size
+is 500. No throttle was involved and the query can be repeated at will.
+
+**Replicate — the expensive full read:**
+
+- **14,389 auctions**, first and last update event both at **3.0s**
+- **one** `REPLICATE_ITEM_LIST_UPDATE` event for the entire list — peak of 1 event per 0.1s
+  bucket, against retail's documented ~2000 per frame. No event storm, no client stall
+- **owner names are `nil`**: 0 of 500 sampled rows carried one, at retail's tuple index
+  14/15. Forever inherited retail's 9.0.2 anonymisation. Listings cannot be attributed to
+  a seller, so the "track individual competitors" capability §9 hoped for is not available
+- the tuple is **retail's 18-field shape exactly**:
+
+```
+1=Worn Mace  2=133478(texture)  3=1(count)  4=1(quality)  5=true(usable)
+6=1(level)   7=REQ_LEVEL_ABBR(levelType)   8=0(minBid)   9=0(minIncrement)
+10=1000100(buyout)  11=0(bidAmount)  12/13=highBidder(nil)  14/15=owner(nil)
+16=0(saleTime)  17=36(itemID)  18=true(hasAllInfo)
+```
+
+**Two differences from retail worth knowing:**
+
+- **Three time-left bands, not four.** `GetTimeLeftBandInfo` answers for 1, 2 and 3 —
+  1800s, 7200s, 43200s (30 minutes, 2 hours, 12 hours) — and errors on 4. Retail has a
+  fourth at 48 hours. Any "about to expire" logic has a shorter ladder to work with here.
+- `NUM_AUCTION_ITEMS_PER_PAGE` is still defined and still 50, a legacy constant with no
+  legacy API left to page.
+
+All seven restricted post/bid/cancel functions are present, matching retail's
+`HasRestrictions` set exactly. None were called.
+
+**The throttle is still not measured, and the event does not measure it.**
+`AUCTION_HOUSE_THROTTLED_SYSTEM_READY` fired three times, and in the capture it fired
+*twenty seconds before the scan was requested* — off the browse query. `IsThrottledMessage
+SystemReady` read true 64 seconds after a successful scan. Both describe the message
+system, not the 15-minute `ReplicateItems` throttle. The only honest test is to call
+`ReplicateItems` a second time and see whether data comes back, which the probe now does
+and stamps with absolute time.
+
+### P.16 This changes the addon's shape
+
+`auction-addon-architecture.md` §3 concluded, from retail's documented behaviour, that "you
+cannot build a live market view from in-game scanning" and that every addon appearing to
+have one gets its data from outside the game. **That conclusion does not hold on this
+client.**
+
+A browse query returned the complete item-key market — every item on the auction house,
+with its cheapest price and total quantity — in **three seconds, in three rounds, with no
+throttle**. It can be run again immediately. The expensive throttled path,
+`ReplicateItems`, is what retail addons were forced onto because browse was inadequate
+there; here browse alone supports a live view, and `ReplicateItems` becomes the optional
+deep read for per-listing detail.
+
+That removes the reason TSM is half a desktop application (§4). An economy addon on Forever
+can plausibly be **just an addon**, with the Claude Code bridge (§P.9) as a convenience for
+getting history out rather than a necessity for getting data in.
+
+**Caveats, because this is a beta realm.** 14,389 auctions and 680 item keys is a small
+market; a launch realm will be an order of magnitude larger, and both the 500-result page
+size and the three-second completion may scale badly. What generalises is the *shape*: an
+unthrottled, paginated, completion-flagged browse that reports when it has everything. What
+does not yet generalise is the timing. Re-measure at launch.
+
+---
+
 ### P.13 Consequences of P.1
 
 - **Neither live plan is touched.** The economy addon and the bridge read auction data,
@@ -670,17 +749,13 @@ presence rows are now confirmations rather than discoveries.
 
 ## Open questions, in priority order
 
-1. **Answered 2026-09-18 (§0.1): modern `C_AuctionHouse`, all 85 functions, no legacy
-   API.** The open question is now the *numbers*, and it is the only thing standing
-   between this project and building the thing it exists to build:
-   - the real `ReplicateItems` throttle (retail: 900s) — `/fprobe ah scan`, then wait
-     for the throttle-cleared line
-   - the per-query browse cap and how many `RequestMoreBrowseResults` rounds reach it —
-     `/fprobe ah browse`, which costs nothing and can be repeated
-   - whether replicate rows still carry owner names (retail stripped them in 9.0.2),
-     which decides whether listings can be attributed at all
-   - how long a full scan takes end to end, and whether it stalls the client
-   `auction-addon-architecture.md` §2 and §9.
+1. **Answered 2026-09-18 — three of the four numbers measured (§P.15).** Browse returns
+   the complete item-key market in 3 seconds over 3 rounds, unthrottled and repeatable
+   (500 per page, 680 keys total). `ReplicateItems` returns 14,389 auctions in 3 seconds
+   in a single event, with no client stall. Owner names are `nil`, so listings cannot be
+   attributed. **Only the `ReplicateItems` throttle is left**, and it can only be measured
+   by firing a second scan — the throttle event describes the message system, not the
+   15-minute replicate window. `auction-addon-architecture.md` §2, §3 and §9.
 2. **Closed 2026-09-18 by measurement (§P.9).** Outbound works — the SavedVariables file
    is on disk and an external process can read it. Inbound works — the generated `.lua` is
    executed as addon code and the receiver runs. The client not reading its own saves back
