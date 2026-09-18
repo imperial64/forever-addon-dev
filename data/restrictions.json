@@ -140,7 +140,7 @@
    "verdict": "blocked"
   },
   {
-   "detail": "This is the binding constraint on any out-of-game bridge: the inbound channel works, but refreshing it costs a manual /reload.\n",
+   "detail": "This is the binding constraint on any out-of-game data channel: the inbound channel works, but refreshing it costs a manual /reload.\n",
    "evidence": [
     "0.2",
     "P.9"
@@ -155,7 +155,7 @@
    "verdict": "forbidden"
   },
   {
-   "detail": "Retail protects exactly this, and it is the mechanism every action-bar addon depends on. Our measurement is that the call raised no error and fired no block event - which is weaker evidence than the attribute actually taking effect, and this client has already shown that a refusal can be silent.\n",
+   "detail": "Retail protects exactly this, and it is the mechanism every action-bar addon depends on. The measurement here is that the call raised no error and fired no block event - which is weaker evidence than the attribute actually taking effect, and this client has already shown that a refusal can be silent.\n",
    "evidence": [
     "P.20"
    ],
@@ -197,7 +197,7 @@
    "scope": "always",
    "summary": "The client writes SavedVariables and never reads them back.\n",
    "verdict": "broken",
-   "workaround": "An external process writes Lua into the AddOns folder and the client executes it as addon code at load. That is the inbound bridge, and it works.\n"
+   "workaround": "An external process writes Lua into the AddOns folder and the client executes it as addon code at load. That inbound channel works; it costs a manual /reload per refresh.\n"
   },
   {
    "detail": "The restriction probe reports outgoing addon messages as restricted in both states. What that restricts in practice was not measured - no message was sent - so this is a flag to check before designing a sideband on it, not a confirmed refusal.\n",
@@ -257,6 +257,35 @@
     "C_AssistedCombat.GetRotationSpells"
    ],
    "verdict": "permitted"
+  },
+  {
+   "detail": "Brightness, Contrast and Gamma carry no lock flags - GetCVarInfo reports isLockedFromUser, isSecure and isReadOnly all false. Writes land through both C_CVar.SetCVar and the undocumented global SetCVar, identically, and read back exactly. A write is a cheap live post-process, not a device restart: a four-second sweep writing every frame from OnUpdate managed 442 writes over 443 frames at 111 fps, worst frame gap 31 ms. Brightness and Contrast are on a 0-100 scale (default 50), Gamma centres on 1.0. Measured in maximized windowed mode at 1920x1080, so this is not fullscreen-only. NOT measured in combat: SetCVar is not a protected function and none of these carry lock flags, so a block is unlikely, but P.20 has already shown this client's action gating does not always match retail.\n",
+   "evidence": [
+    "P.22"
+   ],
+   "id": "graphics-cvars-writable",
+   "kind": "note",
+   "label": "Brightness, Contrast, Gamma",
+   "scope": "always",
+   "summary": "Display brightness and contrast ARE addon-writable, live, at frame rate.\n",
+   "symbols": [
+    "C_CVar.SetCVar",
+    "SetCVar"
+   ],
+   "verdict": "permitted",
+   "workaround": "Until /fprobe video has been run mid-fight, freeze on PLAYER_REGEN_DISABLED and resume on PLAYER_REGEN_ENABLED rather than assuming the write lands in combat.\n"
+  },
+  {
+   "detail": "All three retail names report present=false. The client's own names are Brightness, Contrast and Gamma, with HDRBrightness, HDRPeakBrightness, useHDRBrightness and useHDRPeakBrightness alongside them. Anything ported from a retail addon on the assumption that the gx-prefixed names still apply will not work. What a write to a name the client does not have actually does was NOT measured - the write tests only ran against names confirmed present - so do not assume it errors.\n",
+   "evidence": [
+    "P.22"
+   ],
+   "id": "retail-graphics-cvar-names-absent",
+   "kind": "behaviour",
+   "scope": "always",
+   "summary": "gxBrightness, gxContrast and gxGamma do NOT exist on this client.\n",
+   "verdict": "caution",
+   "workaround": "Enumerate rather than assume. ConsoleGetAllCommands() is present and returned 1902 commands; filtering it is how these names were found in the first place.\n"
   }
  ],
  "meta": {

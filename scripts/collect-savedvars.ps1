@@ -77,4 +77,4 @@ foreach ($key in @("tocversion", "maskedReads", "flatBan", "combatOnly", "secrec
     Write-Host ("  {0,-18} {1}" -f $key, $hit)
 }
 Write-Host ""
-Write-Host "Hand the file in research/captures/ to Claude for analysis." -ForegroundColor Cyan
+Write-Host "The capture in research/captures/ is the input to tools/build_reference.py." -ForegroundColor Cyan

@@ -11,8 +11,10 @@ Everything here was measured against a running client. Blizzard's own documentat
 | `C_ChatInfo.SendAddonMessage`, `C_ChatInfo.SendAddonMessageLogged` | **CAUTION** | always | AreOutgoingAddonChatMessagesRestricted() returns true, in and out of combat. |
 | `C_AssistedCombat.IsAvailable`, `C_AssistedCombat.GetRotationSpells` | **PERMITTED** | always | C_AssistedCombat exists but reports itself unavailable. |
 | `COMBAT_LOG_EVENT`, `COMBAT_LOG_EVENT_UNFILTERED` | **FORBIDDEN** | always | Addons may not register for the combat log, in either form. |
+| `C_CVar.SetCVar`, `SetCVar` | **PERMITTED** | always | Display brightness and contrast ARE addon-writable, live, at frame rate. |
 | `ReloadUI` | **FORBIDDEN** | always | An addon cannot reload the UI. A human must type /reload. |
 | `C_AuctionHouse.ReplicateItems` | **FAILS SILENTLY** | always | A throttled full scan returns an EMPTY MARKET, not an error. |
+| `retail-graphics-cvar-names-absent` | **CAUTION** | always | gxBrightness, gxContrast and gxGamma do NOT exist on this client. |
 | `savedvariables-not-read-back` | **BROKEN ON THIS BUILD** | always | The client writes SavedVariables and never reads them back. |
 | `secret-value-contagion` | **CAUTION** | always | tostring() on a secret value returns a SECRET STRING. The taint survives conversion. |
 | `UnitPower`, `UnitPowerMax` | **SECRET** | always | Unit power is secret at ALL times, including out of combat. |
@@ -80,6 +82,16 @@ ShouldCooldownsBeSecret() and ShouldActionCooldownBeSecret() are both false out 
 
 _Evidence: §P.18 in `research/findings.md`._
 
+## graphics-cvars-writable
+
+Display brightness and contrast ARE addon-writable, live, at frame rate.
+
+Brightness, Contrast and Gamma carry no lock flags - GetCVarInfo reports isLockedFromUser, isSecure and isReadOnly all false. Writes land through both C_CVar.SetCVar and the undocumented global SetCVar, identically, and read back exactly. A write is a cheap live post-process, not a device restart: a four-second sweep writing every frame from OnUpdate managed 442 writes over 443 frames at 111 fps, worst frame gap 31 ms. Brightness and Contrast are on a 0-100 scale (default 50), Gamma centres on 1.0. Measured in maximized windowed mode at 1920x1080, so this is not fullscreen-only. NOT measured in combat: SetCVar is not a protected function and none of these carry lock flags, so a block is unlikely, but P.20 has already shown this client's action gating does not always match retail.
+
+**Workaround.** Until /fprobe video has been run mid-fight, freeze on PLAYER_REGEN_DISABLED and resume on PLAYER_REGEN_ENABLED rather than assuming the write lands in combat.
+
+_Evidence: §P.22 in `research/findings.md`._
+
 ## readable-in-combat
 
 Unit identity, max health, spell casts and threat state stay readable in combat.
@@ -92,7 +104,7 @@ _Evidence: §P.18 in `research/findings.md`._
 
 An addon cannot reload the UI. A human must type /reload.
 
-This is the binding constraint on any out-of-game bridge: the inbound channel works, but refreshing it costs a manual /reload.
+This is the binding constraint on any out-of-game data channel: the inbound channel works, but refreshing it costs a manual /reload.
 
 _Evidence: §0.2, §P.9 in `research/findings.md`._
 
@@ -106,13 +118,23 @@ The throttle is real, measured at more than 162 seconds and at most 1047. When i
 
 _Evidence: §P.15, §P.17 in `research/findings.md`._
 
+## retail-graphics-cvar-names-absent
+
+gxBrightness, gxContrast and gxGamma do NOT exist on this client.
+
+All three retail names report present=false. The client's own names are Brightness, Contrast and Gamma, with HDRBrightness, HDRPeakBrightness, useHDRBrightness and useHDRPeakBrightness alongside them. Anything ported from a retail addon on the assumption that the gx-prefixed names still apply will not work. What a write to a name the client does not have actually does was NOT measured - the write tests only ran against names confirmed present - so do not assume it errors.
+
+**Workaround.** Enumerate rather than assume. ConsoleGetAllCommands() is present and returned 1902 commands; filtering it is how these names were found in the first place.
+
+_Evidence: §P.22 in `research/findings.md`._
+
 ## savedvariables-not-read-back
 
 The client writes SavedVariables and never reads them back.
 
 Every addon starts from defaults on every launch. Measured: the load counter stays at 1 across sessions and no token survives a /reload, while the file itself lands on disk correctly. Outbound works; the in-client round trip does not. Reported as a beta bug rather than a policy decision.
 
-**Workaround.** An external process writes Lua into the AddOns folder and the client executes it as addon code at load. That is the inbound bridge, and it works.
+**Workaround.** An external process writes Lua into the AddOns folder and the client executes it as addon code at load. That inbound channel works; it costs a manual /reload per refresh.
 
 _Evidence: §P.9, §0.2 in `research/findings.md`._
 
@@ -130,7 +152,7 @@ _Evidence: §P.2 in `research/findings.md`._
 
 SetAttribute on a secure action button SUCCEEDED in combat. Re-test before relying on it.
 
-Retail protects exactly this, and it is the mechanism every action-bar addon depends on. Our measurement is that the call raised no error and fired no block event - which is weaker evidence than the attribute actually taking effect, and this client has already shown that a refusal can be silent.
+Retail protects exactly this, and it is the mechanism every action-bar addon depends on. The measurement here is that the call raised no error and fired no block event - which is weaker evidence than the attribute actually taking effect, and this client has already shown that a refusal can be silent.
 
 _Evidence: §P.20 in `research/findings.md`._
 

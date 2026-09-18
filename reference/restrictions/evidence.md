@@ -10,7 +10,7 @@ the press summaries derived from it are wrong in both directions.
 |---|---|---|
 | 1 | Blizzard's own `HasRestrictions` flag, from the client's documentation | `RESTRICTED — Blizzard flag` banner. 274 functions |
 | 2 | Presence or absence in a capture of the client's global table | `Present on this client` / a missing page |
-| 3 | **Our measured runtime behaviour** | `RESTRICTED — measured` banner, with an evidence link |
+| 3 | **Runtime behaviour measured on a live client** | `RESTRICTED — measured` banner, with an evidence link |
 
 Tier 3 is the only one nobody else has, and it is the only one that answers "what happens
 when I actually call this".

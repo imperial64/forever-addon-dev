@@ -32,7 +32,7 @@ generated `.lua` file read at load. There is no unattended refresh.
 
 ## The one to re-test before trusting
 
-`SecureActionButton:SetAttribute` **succeeded in combat** in our measurement. Retail
+`SecureActionButton:SetAttribute` **succeeded in combat** when measured. Retail
 protects exactly that, and it is the mechanism every action-bar addon depends on.
 
 Our evidence is that the call raised no error and fired no block event — which is weaker

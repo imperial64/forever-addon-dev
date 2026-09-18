@@ -55,8 +55,8 @@ scan after a reload as unknown-risk.
 
 `SendBrowseQuery` returned the complete item-key market in three seconds, unthrottled and
 repeatable. Use `ReplicateItems` only when you need per-listing detail, and treat it as an
-occasional deep read rather than a refresh mechanism. See
-`reference/guides/auction-house-addon.md`.
+occasional deep read rather than a refresh mechanism. The numbers are in
+`research/findings.md` P.15.
 
 ## Evidence
 

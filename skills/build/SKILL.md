@@ -3,8 +3,9 @@ name: build
 description: >
   Write, structure, scaffold and debug World of Warcraft Forever addons - .toc files and
   load order, frames and event handling, SavedVariables, slash commands, secure templates,
-  plus the Auction House and economy recipes measured on the Forever beta (interface
-  16001). Use when starting a new addon, writing or reviewing addon Lua for WoW Forever,
+  and the client behaviours measured on the Forever beta (interface 16001) that a working
+  addon has to be written around. Use when starting a new addon, writing or reviewing addon
+  Lua for WoW Forever,
   asking how to do something in an addon, or debugging one that loads wrongly, silently
   does nothing, or dies mid-run. For one function's exact signature use the api skill; for
   whether a call is forbidden, secret or throttled use the restrictions skill.
@@ -64,8 +65,7 @@ addon starts from defaults every launch. Outbound works fine — an external pro
 read the file — but the in-client round trip is broken.
 
 If you need settings to persist, the working pattern is an external process writing a
-`.lua` file into your addon folder that the client executes as addon code at load. That is
-also the whole inbound half of a Claude Code bridge.
+`.lua` file into your addon folder that the client executes as addon code at load.
 
 ### 4. `ReloadUI()` is protected
 
@@ -172,22 +172,20 @@ Longer form, written for someone who has not read the research:
 
 - `reference/guides/getting-started.md` — first addon, .toc, installing, enabling
 - `reference/guides/pitfalls.md` — the five above, in detail, plus the three failure shapes
-- `reference/guides/savedvariables-and-the-bridge.md` — persistence, and talking to an
-  external process
-- `reference/guides/auction-house-addon.md` — the measured economy-addon design
+- `reference/guides/savedvariables.md` — persistence, and moving data in and out
 
-## Recipes
+## Two recipes worth knowing before you design
 
-- Auction House and economy addons: **browse is the data source, not `ReplicateItems`.**
-  One browse query returns the complete item-key market in about three seconds,
-  unthrottled and repeatable. `ReplicateItems` is the optional deep read, it is throttled,
-  and a throttled call returns an empty market rather than an error — so track your own
-  scan timing. Measurements and design consequences:
-  `research/auction-addon-architecture.md` section 9, `research/findings.md` P.15–P.17.
-- Talking to an external process: the inbound channel is a generated `.lua` file executed
-  at load, the outbound channel is SavedVariables read from disk, and the cost is a manual
-  `/reload` per refresh. `research/findings.md` P.9 and
-  `research/auction-addon-architecture.md` section 5.
+- **Auction House data: browse is the source, not `ReplicateItems`.** One
+  `C_AuctionHouse.SendBrowseQuery` returns the complete item-key market in about three
+  seconds, unthrottled and repeatable. `ReplicateItems` is the optional per-listing deep
+  read, it is throttled, and a throttled call returns an *empty market* rather than an
+  error — so any addon that calls it has to track its own scan timing. `research/findings.md`
+  P.15–P.17.
+- **Moving data in and out of the client.** The inbound channel is a generated `.lua` file
+  the `.toc` lists and the client executes at load; the outbound channel is SavedVariables
+  read from disk; the cost is a manual `/reload` per refresh, because `ReloadUI()` is
+  protected. `reference/guides/savedvariables.md`, `research/findings.md` P.9.
 
 ## When an addon "does nothing"
 

@@ -11,7 +11,7 @@ param(
     [string]$WowRoot,
     [string]$Flavor = "_classic_beta_",
     [string]$Addon  = "ForeverProbe",
-    [switch]$ResetBridgeData
+    [switch]$ResetExternalData
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,20 +66,20 @@ if ($luajit -or $luac) {
 $dest = Join-Path $flavorPath "Interface\AddOns\$Addon"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-# BridgeData.lua is the inbound channel, not source: write-bridge-data.ps1 owns the
-# installed copy, and reinstalling would silently wipe a payload that is mid-test.
-# Preserve whatever is there unless -ResetBridgeData is passed.
-$bridge = Join-Path $dest "BridgeData.lua"
-$keepBridge = $null
-if ((Test-Path $bridge) -and -not $ResetBridgeData) {
-    $keepBridge = [System.IO.File]::ReadAllText($bridge)
+# ExternalData.lua is the inbound channel, not source: write-external-data.ps1 owns
+# the installed copy, and reinstalling would silently wipe a payload that is
+# mid-test. Preserve whatever is there unless -ResetExternalData is passed.
+$externalData = Join-Path $dest "ExternalData.lua"
+$keepExternalData = $null
+if ((Test-Path $externalData) -and -not $ResetExternalData) {
+    $keepExternalData = [System.IO.File]::ReadAllText($externalData)
 }
 
 Copy-Item -Path (Join-Path $src "*") -Destination $dest -Recurse -Force
 
-if ($keepBridge) {
-    [System.IO.File]::WriteAllText($bridge, $keepBridge, (New-Object System.Text.UTF8Encoding($false)))
-    Write-Host "Kept the installed BridgeData.lua (-ResetBridgeData to overwrite it)" -ForegroundColor Yellow
+if ($keepExternalData) {
+    [System.IO.File]::WriteAllText($externalData, $keepExternalData, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host "Kept the installed ExternalData.lua (-ResetExternalData to overwrite it)" -ForegroundColor Yellow
 }
 
 Write-Host "Installed $Addon -> $dest" -ForegroundColor Green
@@ -92,9 +92,9 @@ Write-Host "  3. At an auction house:     /fprobe ah, then /fprobe ah browse (fr
 Write-Host "                              /fprobe ah scan (burns the 15 min throttle), stay logged"
 Write-Host "                              in, then /fprobe ah throttle"
 Write-Host "  4. Pull a mob, then:        /fprobe combat"
-Write-Host "  5. Bridge test:             .\scripts\write-bridge-data.ps1, then /reload and /fprobe bridge"
+Write-Host "  5. External data test:      .\scripts\write-external-data.ps1, then /reload and /fprobe external"
 Write-Host "  6. /reload, then run:       .\scripts\collect-savedvars.ps1"
 Write-Host ""
 Write-Host "Note: this beta build is reported not to READ SavedVariables back at launch." -ForegroundColor Yellow
-Write-Host "      If the probe says the bridge token did not survive, step 6 is what tells you" -ForegroundColor Yellow
+Write-Host "      If the probe says the token did not survive, step 6 is what tells you" -ForegroundColor Yellow
 Write-Host "      whether the file was written anyway - the outbound half can be fine even so." -ForegroundColor Yellow

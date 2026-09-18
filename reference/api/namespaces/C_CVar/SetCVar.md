@@ -2,6 +2,11 @@
 
 # C_CVar.SetCVar
 
+> **PERMITTED — measured, at all times.** Display brightness and contrast ARE addon-writable, live, at frame rate.
+> Measured 2026-09-18 on build 69913. Evidence: §P.22 in [findings](../../../../research/findings.md).
+> 
+> _Workaround:_ Until /fprobe video has been run mid-fight, freeze on PLAYER_REGEN_DISABLED and resume on PLAYER_REGEN_ENABLED rather than assuming the write lands in combat.
+
 ```lua
 success = C_CVar.SetCVar(name, value)
 ```
