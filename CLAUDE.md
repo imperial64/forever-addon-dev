@@ -56,6 +56,26 @@ management was scrapped 2026-09-17 for focus. The rotation helper is **closed** 
 `C_AssistedCombat` turned out to be present, which was its stated revival trigger, and Efe
 declined to reopen on it. Do not raise it again without Efe raising it first.
 
+## Where this is up to (2026-09-18)
+
+The plugin works end to end: it installs, the reference generates from a capture, the four
+skills route. Remaining, in order:
+
+1. **`tools/lint-addon.py`** - check addon source against `data/restrictions.json` and the
+   presence surface. Verification that matters: run it against
+   `addons/ForeverProbe/ForeverProbe.lua`, which is already correct for this client, and it
+   should flag nothing. Then break a copy deliberately and confirm each check fires.
+2. **`examples/economy-addon/`** - the flagship example, scaffolded by the `build` skill as
+   the dogfood test. Browse is the data source, not `ReplicateItems`.
+3. `reference/guides/` and `reference/restrictions/` are empty; the skills point at
+   `research/` instead, which is written for us rather than for a stranger.
+4. No git remote yet, so `plugin.json` carries no `homepage` or `repository`.
+
+Two measurements to redo in game when convenient: `SecureActionButton:SetAttribute`
+apparently succeeding **in combat** (P.20 - flagged `caution`, retail protects it), and the
+three `C_Secrets` gates with no out-of-combat value because the chat line truncated
+(`UnitSpellCast`, `UnitThreatState`, `UnitThreatValues`).
+
 ## Working rules
 
 - **Evidence beats reporting.** Probe output supersedes any news article, including
