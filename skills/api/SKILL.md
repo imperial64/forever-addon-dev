@@ -74,7 +74,7 @@ If a page is missing, say the symbol does not exist on build 1.60.1.69913, and c
 
 ## Reading a page
 
-- A **`RESTRICTED — measured`** banner at the top is our own measurement, and it is the
+- A **`RESTRICTED — measured`** banner at the top is this plugin's own measurement, and it is the
   part no other reference has. It says what the client actually did, with a link to the
   evidence. Always surface it; never paraphrase it away.
 - A **`RESTRICTED — Blizzard flag`** banner means the function carries `HasRestrictions` in

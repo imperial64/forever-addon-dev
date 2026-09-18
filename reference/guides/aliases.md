@@ -11,8 +11,8 @@ If a lookup fails, check here before concluding the function does not exist.
 
 ## Auction House
 
-The whole Classic auction API is absent. An economy addon here is a **Retail port**, not a
-Classic one.
+The whole Classic auction API is absent. Auction House code for this client is a **Retail
+port**, not a Classic one.
 
 | You typed | Use instead |
 |---|---|

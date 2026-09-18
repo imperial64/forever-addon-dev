@@ -47,7 +47,7 @@ On this build the client writes your saved file on logout or `/reload` and **nev
 it**. Your addon starts from defaults every launch.
 
 This is reported as a beta bug rather than a policy decision, but you have to design around
-it today. See `guides/savedvariables-and-the-bridge.md`.
+it today. See `guides/savedvariables.md`.
 
 ## 4. `ReloadUI()` is protected
 

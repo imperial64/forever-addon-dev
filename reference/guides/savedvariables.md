@@ -1,4 +1,4 @@
-# Persistence, and talking to the outside world
+# Persistence, and moving data in and out
 
 These are the same topic on this client, because the mechanism that gets data *in* is the
 same one that works around the bug in getting data *back*.
@@ -48,9 +48,8 @@ MyAddon_Inbox = MyAddon_Inbox or {}
 MyAddon_Inbox[#MyAddon_Inbox + 1] = { tag = "prices", when = 1789735367, payload = "..." }
 ```
 
-Your addon reads `MyAddon_Inbox` out of memory at load. This is how
-TradeSkillMaster_AppHelper has always fed TSM its desktop-app data, and it works here
-unchanged.
+Your addon reads `MyAddon_Inbox` out of memory at load. It works because the file is code
+being executed, not data being read, which is the only door the sandbox leaves open.
 
 **The cost is a `/reload` per refresh**, and because `ReloadUI()` is protected, a person
 has to type it. There is no polling and no push.

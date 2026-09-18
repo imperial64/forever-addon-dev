@@ -33,7 +33,7 @@ user is actually running.
 .\scripts\install-addon.ps1 -WowRoot "<path to WoW>" -Flavor "_classic_beta_"
 ```
 
-It syntax-gates with luajit if present, and preserves any existing `BridgeData.lua`.
+It syntax-gates with luajit if present, and preserves any existing `ExternalData.lua`.
 Enable ForeverProbe at the character screen — new addons are not enabled by default, which
 is the usual reason nothing appears to happen.
 
@@ -83,8 +83,8 @@ does not document. Without it those pages are missing, and a missing page stops 
 
 ## If the measurements themselves need redoing
 
-The API reference is Blizzard's data. The restriction list is ours, and it does not
-regenerate — it is measured by hand with the probe:
+The API reference is Blizzard's data. The restriction list is measured, and it does not
+regenerate — it is established by hand with the probe:
 
 ```
 /fprobe            surface, actions, reads, secrecy gates, out of combat

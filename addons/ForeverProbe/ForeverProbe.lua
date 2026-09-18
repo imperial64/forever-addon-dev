@@ -1,31 +1,31 @@
 -- Forever Probe
 --
--- Records the addon API surface of WoW Forever.
---
--- Primary job (2026-09-17 onwards): decide the two live plans - does an Auction
--- House API exist (the economy addon, which is the goal), and is there any channel
--- across the client boundary (the Claude Code bridge). The out-of-combat run
--- answers both on its own.
---
--- Secondary job: the combat delta. The rotation helper is shelved, since Tim Jones
--- said Forever has parity with retail on the INFORMATION addons can access, so the
--- combat run is now a kill-check (and a collateral-damage check for the two live
--- plans) rather than the point of the addon.
+-- Records the addon API surface of WoW Forever and measures what the client
+-- actually permits: which functions exist, which of them an addon may call,
+-- which events an addon may subscribe to, and which values go dark once combat
+-- starts. Presence and permission are separate questions, and the probe answers
+-- them separately.
 --
 -- Measured against build 1.60.1.69893 (interface 16001, WOW_PROJECT_MAINLINE):
--- this is the Retail API set, so the Classic globals this probe used to reach for
--- (UnitAura, GetSpellCooldown, GetSpellInfo, CombatLogGetCurrentEventInfo) are
--- simply absent, registering an event the client does not know THROWS and aborts
--- the file, and a secret value throws on tostring() as readily as on arithmetic.
--- Everything below is written defensively for those three facts.
+-- this is the Retail API set. Three facts about it shape every line below, and
+-- the code is written defensively for all three.
 --
---   /fprobe          static surface scan + action tests out of combat
---   /fprobe combat   re-run the action tests while actually in combat
---   /fprobe report   print the out-of-combat vs in-combat delta
---   /fprobe ah       Auction House detail, standing at an auction house
---   /fprobe ah scan  fire a full ReplicateItems scan (burns the 15 min throttle)
---   /fprobe bridge   inbound BridgeData.lua and outbound SavedVariables flush
---   /fprobe video    brightness/contrast CVars - may an addon write them at all
+--   1. The Classic globals an addon might reach for (UnitAura, GetSpellCooldown,
+--      GetSpellInfo, CombatLogGetCurrentEventInfo) are simply absent.
+--   2. RegisterEvent on an event this client does not know THROWS, and an error
+--      in the main chunk aborts the rest of the file.
+--   3. A secret value throws on tostring() as readily as on arithmetic.
+--
+--   /fprobe           static surface scan + action tests out of combat
+--   /fprobe combat    re-run the action tests while actually in combat
+--   /fprobe report    print the out-of-combat vs in-combat delta
+--   /fprobe ah        Auction House detail, standing at an auction house
+--   /fprobe ah scan   fire a full ReplicateItems scan (burns the 15 min throttle)
+--   /fprobe events    which events an addon may subscribe to at all
+--   /fprobe blocked   captured BLOCKED/FORBIDDEN actions
+--   /fprobe external  inbound ExternalData.lua and outbound SavedVariables flush
+--   /fprobe video     brightness/contrast CVars - may an addon write them at all
+--   /fprobe docs      Blizzard's own API documentation (dump, version)
 --
 -- Results persist to WTF/Account/<ACCT>/SavedVariables/ForeverProbe.lua on
 -- /reload or logout.
@@ -40,22 +40,22 @@ local ADDON, ns = ...
 ForeverProbeDB = ForeverProbeDB or {}
 local db = ForeverProbeDB
 
--- Inbound bridge channel ------------------------------------------------------
--- This is the mechanism every serious auction addon uses to get out-of-game data
--- into the client, and TradeSkillMaster_AppHelper is the reference implementation:
--- an external process overwrites a .lua file inside the addon folder, the client
--- executes it as ADDON CODE at load, and the addon reads it back out of memory.
--- There is no polling and no push - new data costs a /reload. It works because the
--- file is code being run, not data being read, which is the only door the sandbox
--- leaves open. See research/auction-addon-architecture.md section 5.
+-- Inbound external data channel -----------------------------------------------
+-- The only way an addon gets data from outside the client: a process outside the
+-- game overwrites a .lua file inside the addon folder, the client executes it as
+-- ADDON CODE at load, and the addon reads it back out of memory. There is no
+-- polling and no push - new data costs a /reload. It works because the file is
+-- code being run, not data being read, which is the only door the sandbox leaves
+-- open, and it is what any config injection or out-of-game data import is built
+-- on.
 --
--- BridgeData.lua is that file. It ships with a known default so an untouched
+-- ExternalData.lua is that file. It ships with a known default so an untouched
 -- install is distinguishable from a successful external write.
-local bridgeInbox = {}
+local externalInbox = {}
 
-function ns.LoadBridgeData(tag, ...)
-    bridgeInbox[tag] = bridgeInbox[tag] or {}
-    table.insert(bridgeInbox[tag], { ... })
+function ns.LoadExternalData(tag, ...)
+    externalInbox[tag] = externalInbox[tag] or {}
+    table.insert(externalInbox[tag], { ... })
 end
 
 -- Secret-safe conversion ------------------------------------------------------
@@ -115,7 +115,8 @@ end
 --      only available to the Blizzard UI" dialog, and the registration quietly
 --      does not happen. Observed at load on 2026-09-18.
 --
--- (2) is the exact trap CLAUDE.md warns about: a pcall alone reports success.
+-- (2) is the trap this whole probe is written around: a pcall alone reports
+-- success, so a refusal reads as an allow.
 -- So each registration is wrapped AND attributed, and the result of both paths is
 -- recorded, because which events an addon may not even listen to is a finding in
 -- its own right.
@@ -143,13 +144,13 @@ safeRegister(watcher, "ADDON_ACTION_FORBIDDEN")
 safeRegister(watcher, "PLAYER_LOGIN")
 watcher:SetScript("OnEvent", function(_, event, addon, func)
     if event == "PLAYER_LOGIN" then
-        -- Outbound half of the bridge. db is whatever was restored from disk, so a
-        -- token written during the LAST session is sitting right here if the flush
-        -- on /reload or logout actually happened.
-        db.bridge = db.bridge or {}
-        db.bridge.tokenFromPreviousSession = db.bridge.tokenWrittenThisSession
-        db.bridge.tokenWrittenThisSession = nil
-        db.bridge.loads = (db.bridge.loads or 0) + 1
+        -- Outbound half of the channel. db is whatever was restored from disk, so
+        -- a token written during the LAST session is sitting right here if the
+        -- flush on /reload or logout actually happened.
+        db.external = db.external or {}
+        db.external.tokenFromPreviousSession = db.external.tokenWrittenThisSession
+        db.external.tokenWrittenThisSession = nil
+        db.external.loads = (db.external.loads or 0) + 1
         out("loaded. /fprobe out of combat, then /fprobe combat mid-fight.")
         -- Checked every login, not just on demand: someone reading a signature
         -- that no longer exists has no way to notice on their own.
@@ -189,7 +190,7 @@ end)
 local clog = { count = 0, inCombatCount = 0, eventFired = 0, samples = {}, subevents = {} }
 
 local clogFrame = CreateFrame("Frame")
--- NOT registered at load, deliberately. Measured on our own client 2026-09-18:
+-- NOT registered at load, deliberately. Measured on a live client 2026-09-18:
 -- RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED") fires ADDON_ACTION_FORBIDDEN, out
 -- of combat, at load. The answer is in, and repeating it every login only trains
 -- the player to click Disable on a dialog that is actually a result.
@@ -247,10 +248,11 @@ local function scan(list)
     return found, missing
 end
 
--- What a rotation helper READS. Expect some of this to be restricted: the
--- read side is what Blizzard has said it is restricting. Presence alone proves
--- nothing here - a black box keeps the function and returns nil or a masked
--- value, so the read tests compare VALUES across combat states.
+-- The combat-state READ surface: spell, unit, aura, cooldown and talent reads.
+-- The read side is what Blizzard has said it is restricting, so expect some of
+-- this to be masked. Presence alone proves nothing here - a black box keeps the
+-- function and returns nil or a masked value, so the read tests compare VALUES
+-- across combat states.
 local READ_SURFACE = {
     "GetSpellCooldown", "C_Spell.GetSpellCooldown", "GetSpellCharges", "C_Spell.GetSpellCharges",
     "IsUsableSpell", "C_Spell.IsSpellUsable", "IsSpellInRange", "C_Spell.IsSpellInRange",
@@ -267,8 +269,9 @@ local READ_SURFACE = {
     "GetNumTalents", "GetShapeshiftForm", "GetWeaponEnchantInfo", "GetSpellBookItemInfo",
 }
 
--- What a rotation helper would need to EXECUTE an ability. Retail protects all of
--- this in combat. Presence means nothing on its own; the action tests decide.
+-- The combat-state EXECUTE surface: casting, actions, macros, bindings and
+-- targeting. Retail protects all of this in combat. Presence means nothing on its
+-- own; the action tests decide.
 local EXECUTE_SURFACE = {
     "CastSpellByName", "CastSpellByID", "UseAction", "UseInventoryItem", "UseItemByName",
     "RunMacro", "RunMacroText", "EditMacro", "SetMacroSpell", "PickupMacro",
@@ -277,9 +280,9 @@ local EXECUTE_SURFACE = {
 }
 
 -- The sanctioned escape hatch in retail: precompute out of combat and let
--- Blizzard's own secure code do the switching. Also worth checking whether
--- Forever ships retail's assisted-combat API, which would make the whole
--- question moot in a different way.
+-- Blizzard's own secure code do the switching. C_AssistedCombat is scanned
+-- alongside it, since a client that ships its own rotation assist answers the
+-- question at a different level.
 local SECURE_SURFACE = {
     "SecureActionButtonTemplate", "SecureHandlerWrapScript", "SecureHandlerExecute",
     "SecureHandlerSetFrameRef", "RegisterStateDriver", "RegisterAttributeDriver",
@@ -292,22 +295,18 @@ local SECURE_SURFACE = {
     "C_AssistedCombat", "C_AssistedCombat.GetNextCastSpell", "AssistedCombatManager",
 }
 
--- The two live plans: the economy addon and the notification bridge. This is now
--- the highest-value section of the scan - it decides both, out of combat.
---
--- The bridge half is deliberately broad. It is general-purpose tooling for talking
--- to Claude Code from inside the game, not a WoW feature, so anything that moves
--- bytes across the client boundary in either direction counts: file access, addon
--- messages, and whatever else the global dump turns up.
--- The Auction House half lives in its own section below; this is the bridge half.
-local PLAN_SURFACE = {
+-- What can move bytes across the client boundary, in either direction: file
+-- access, addon messages, and payload encoding. This bounds any addon that
+-- imports or exports data, so the list is deliberately broad - anything that
+-- could carry a payload in or out counts, whether or not it is a WoW feature.
+local CHANNEL_SURFACE = {
     "C_ChatInfo.SendAddonMessage", "SendAddonMessage", "C_ChatInfo.RegisterAddonMessagePrefix",
     "io", "os", "loadstring", "require", "debug", "package",
     "C_AddOns.GetAddOnMetadata", "C_AddOns.GetAddOnLocalTable", "ReloadUI",
     "C_CVar.GetCVar", "C_CVar.SetCVar", "C_CVar.RegisterCVar", "C_CVar.SetTempCVar",
     "GetScreenWidth", "CreateFrame", "C_Timer.NewTicker",
-    -- Payload handling. C_EncodingUtil is the single most useful thing the measured
-    -- client turned up for this plan: JSON and CBOR both ways, base64, hex, and
+    -- Payload handling. C_EncodingUtil is the single most useful thing the
+    -- measured client turned up here: JSON and CBOR both ways, base64, hex, and
     -- string compression, all in the sandbox. It turns the inbound .lua file and
     -- the outbound SavedVariables blob from ad-hoc Lua literals into a real wire
     -- format, and it is what makes an addon-message sideband worth considering.
@@ -325,9 +324,8 @@ local PLAN_SURFACE = {
 -- cheaper answer to "combat-only or always-on" than inferring it from masked
 -- values: ask the client directly, in both combat states, and read the gate.
 -- Nothing in the 27-function secrecy surface touches the Auction House, CVars or
--- addon messages, so a true here is expected to be irrelevant to both live plans
--- - this section is the collateral-damage check, and it is the whole reason the
--- combat run still exists.
+-- addon messages, so the gates are expected to bound combat-state reads and
+-- nothing else. Confirming that boundary is what the combat run is for.
 local SECRECY_CHECKS = {
     "HasSecretRestrictions", "ShouldAurasBeSecret", "ShouldCooldownsBeSecret",
     "ShouldActionCooldownBeSecret", "ShouldUnitIdentityBeSecret",
@@ -403,9 +401,8 @@ local function probeSecrecy(label)
 end
 
 -- Blizzard's own rotation assist. Present on the measured build with four
--- functions, which is watch trigger 4. MEASURED ONLY - this records what the API
--- returns and nothing more; the rotation helper stays shelved until Efe says
--- otherwise, and no design work hangs off this.
+-- functions. MEASURED ONLY - this records whether the client ships the capability
+-- and what the no-argument reads return, and nothing more.
 local function probeAssistedCombat()
     if not C_AssistedCombat then return nil end
     local a = { functions = {} }
@@ -413,8 +410,8 @@ local function probeAssistedCombat()
         a.functions[name] = C_AssistedCombat[name] ~= nil
     end
     -- Only the no-argument reads are called. GetNextCastSpell/GetActionSpell want
-    -- arguments and would be a combat-decision read, which is not what this probe
-    -- is for.
+    -- arguments and would be a live combat-decision read, which is a use of the
+    -- API rather than a measurement of it.
     if C_AssistedCombat.IsAvailable then
         local ok, v = pcall(C_AssistedCombat.IsAvailable)
         a.isAvailable = ok and plain(v) or ("ERR:" .. plain(v))
@@ -425,14 +422,16 @@ local function probeAssistedCombat()
     end
     out(("|cffffaa00C_AssistedCombat PRESENT|r isAvailable=%s rotationSpells=%s")
         :format(tostring(a.isAvailable), tostring(a.rotationSpells)))
-    out("  Blizzard ships its own rotation assist here. Recorded, not acted on.")
+    out("  This client ships its own rotation assist. Recorded, not acted on.")
     db.assistedCombat = a
     return a
 end
 
 -- Auction House ---------------------------------------------------------------
--- The economy addon is the goal, so this decides the project. Checks come from
--- research/auction-addon-architecture.md section 9.
+-- Which auction API this client ships, and what shape it is in: modern namespace
+-- or legacy query API, commodities or not, bulk read or per-item only, and how
+-- large the restricted set is. Those four answers bound what any market-data
+-- addon can do here.
 --
 -- PRESENCE ONLY. Nothing in here posts, bids, buys or cancels. The seven
 -- restricted functions are scanned for existence and never called - calling them
@@ -525,7 +524,7 @@ local function probeAuctionHouse()
         out("  |cffffaa00API|r  legacy QueryAuctionItems only - paginated, ~0.3s throttle, 15min getAll")
     else
         ah.api = "none"
-        out("  |cffff4444API|r  no Auction House API at all - economy plan dead as designed")
+        out("  |cffff4444API|r  no Auction House API at all - addons cannot read the market")
     end
 
     -- 2. Bulk reads. Without one of these there is no market snapshot at all,
@@ -795,9 +794,9 @@ local function ahLiveReads()
 end
 
 -- Auction House measurement --------------------------------------------------
--- Presence is settled: research/findings.md section 0.1 read the modern namespace off
--- a capture of this exact build. What is NOT settled is every number, and the
--- numbers are what decide the addon's data model:
+-- Presence is settled: the modern namespace was read off a capture of this exact
+-- build. What is NOT settled is every number, and the numbers are what decide an
+-- addon's data model:
 --
 --   * how much of the market one browse query can return, and at what cost
 --   * the real ReplicateItems throttle, which retail documents as 900s
@@ -919,10 +918,10 @@ local function finishBrowse()
     browse.elapsed = GetTime() - browse.startedAt
     browse.total = browseCount()
 
-    -- THE shape that matters. A browse result is what an economy addon reads on
-    -- every pass: one entry per item key, with the cheapest price and the total
-    -- quantity behind it. Three samples is enough to read the field list off and
-    -- see whether Forever kept retail's structure.
+    -- THE shape that matters. A browse result is what a market-data addon reads
+    -- on every pass: one entry per item key, with the cheapest price and the
+    -- total quantity behind it. Three samples is enough to read the field list
+    -- off and see whether Forever kept retail's structure.
     local okResults, results = pcall(C_AuctionHouse.GetBrowseResults)
     if okResults and type(results) == "table" then
         browse.resultShape = {}
@@ -1035,7 +1034,7 @@ local function ahThrottleReport()
     db.auctionHouse.eventSupport = ahEventSupport
 end
 
--- Shapes that decide how the addon stores what it reads. All cheap reads off
+-- Shapes that decide how an addon stores what it reads. All cheap reads off
 -- whatever the client already has cached.
 local function ahShapes()
     local shapes = {}
@@ -1070,11 +1069,11 @@ local function ahShapes()
         out(("  timeLeftBands          %d (retail has 4): %s")
             :format(#bands, table.concat(bands, ", ")))
     end
-    -- Item keys are the join key for every price record the addon will ever keep.
-    -- GetItemKeyFromItem takes an ITEM, not an item id - passing 2589 was my
-    -- error and produced three bad-argument lines in the first capture. A real
-    -- addon takes the key off a browse result, so do that: run /fprobe ah browse
-    -- first and this reads the genuine article.
+    -- Item keys are the join key for every price record an addon keeps.
+    -- GetItemKeyFromItem takes an ITEM, not an item id - passing a bare 2589
+    -- produced three bad-argument lines in the first capture. A real addon takes
+    -- the key off a browse result, so do that: run /fprobe ah browse first and
+    -- this reads the genuine article.
     local firstKey
     if C_AuctionHouse and C_AuctionHouse.GetBrowseResults then
         local ok, results = pcall(C_AuctionHouse.GetBrowseResults)
@@ -1096,28 +1095,28 @@ local function ahShapes()
     db.auctionHouse.shapes = shapes
 end
 
--- Bridge report ---------------------------------------------------------------
-local function printBridge()
-    db.bridge = db.bridge or {}
+-- External data channel report ------------------------------------------------
+local function printExternal()
+    db.external = db.external or {}
 
-    out("|cff44ddffBRIDGE inbound|r (BridgeData.lua, executed at load)")
+    out("|cff44ddffEXTERNAL inbound|r (ExternalData.lua, executed at load)")
     local tags, entries = {}, 0
-    for tag, list in pairs(bridgeInbox) do
+    for tag, list in pairs(externalInbox) do
         tags[#tags + 1] = tag .. "(" .. #list .. ")"
         entries = entries + #list
     end
     table.sort(tags)
-    local def = bridgeInbox["default"] and bridgeInbox["default"][1]
+    local def = externalInbox["default"] and externalInbox["default"][1]
     local untouched = (def and def[1] == "unmodified" and entries == 1) and true or false
 
     if entries == 0 then
-        out("  |cffff4444nothing received|r - BridgeData.lua is missing from the .toc or failed to load")
+        out("  |cffff4444nothing received|r - ExternalData.lua is missing from the .toc or failed to load")
     elseif untouched then
         out("  |cffffaa00shipped default only|r - the file loads and the channel works, but nothing has")
-        out("  written to it yet. Run scripts/write-bridge-data.ps1, then /reload.")
+        out("  written to it yet. Run scripts/write-external-data.ps1, then /reload.")
     else
         out("  |cff44ff44external write received:|r " .. table.concat(tags, " "))
-        for tag, list in pairs(bridgeInbox) do
+        for tag, list in pairs(externalInbox) do
             local first = list[1]
             if first then
                 local parts = {}
@@ -1126,34 +1125,34 @@ local function printBridge()
             end
         end
     end
-    db.bridge.inbox = bridgeInbox
-    db.bridge.inboxEntries = entries
-    db.bridge.untouched = untouched
+    db.external.inbox = externalInbox
+    db.external.inboxEntries = entries
+    db.external.untouched = untouched
 
-    out("|cff44ddffBRIDGE outbound|r (SavedVariables flush)")
+    out("|cff44ddffEXTERNAL outbound|r (SavedVariables flush)")
     -- Two different failures look identical from in here, and they have opposite
-    -- consequences for the bridge:
+    -- consequences:
     --   a) the client never WROTE the file           -> outbound is dead
     --   b) the client wrote it and never READ it back -> outbound is fine, and the
     --      round trip inside the client is what is broken
     -- (b) is a reported beta bug on this build, so the in-game verdict is only
     -- half the answer; collect-savedvars.ps1 looking at the file on disk is the
-    -- other half, and it is the one that decides the plan.
-    if db.bridge.tokenFromPreviousSession then
-        out("  |cff44ff44confirmed|r - last session's token survived: " .. tostring(db.bridge.tokenFromPreviousSession))
-    elseif (db.bridge.loads or 0) > 1 then
-        out("  |cffff4444read-back failed|r - this DB has seen " .. tostring(db.bridge.loads) ..
+    -- other half, and it is the one that settles it.
+    if db.external.tokenFromPreviousSession then
+        out("  |cff44ff44confirmed|r - last session's token survived: " .. tostring(db.external.tokenFromPreviousSession))
+    elseif (db.external.loads or 0) > 1 then
+        out("  |cffff4444read-back failed|r - this DB has seen " .. tostring(db.external.loads) ..
             " loads but no token survived")
     else
-        out("  |cffffaa00first load of this DB|r - /reload, then /fprobe bridge again.")
+        out("  |cffffaa00first load of this DB|r - /reload, then /fprobe external again.")
         out("  If the load counter is STILL 1 afterwards, the client is not reading SavedVariables")
         out("  back at all (known beta bug). Run scripts/collect-savedvars.ps1 to see whether the")
         out("  file was nonetheless written - that is what decides the outbound half.")
     end
-    out("  loads recorded by this DB: " .. tostring(db.bridge.loads or 0))
-    db.bridge.tokenWrittenThisSession = ("%s-%d"):format(
+    out("  loads recorded by this DB: " .. tostring(db.external.loads or 0))
+    db.external.tokenWrittenThisSession = ("%s-%d"):format(
         date and date("%H%M%S") or tostring(time()), math.random(1000, 9999))
-    out("  wrote token " .. db.bridge.tokenWrittenThisSession .. " - it should reappear after /reload")
+    out("  wrote token " .. db.external.tokenWrittenThisSession .. " - it should reappear after /reload")
 end
 
 -- Which events may an addon listen to at all? -------------------------------
@@ -1166,12 +1165,12 @@ end
 local EVENT_PROBE = {
     -- the combat log itself, both forms
     "COMBAT_LOG_EVENT_UNFILTERED", "COMBAT_LOG_EVENT",
-    -- combat state, which both live plans do not need but which bounds the rule
+    -- combat state, which bounds the rule from the outside
     "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "UNIT_COMBAT",
     -- unit information the doctrine names
     "UNIT_AURA", "UNIT_HEALTH", "UNIT_POWER_UPDATE", "UNIT_SPELLCAST_SUCCEEDED",
     "UNIT_SPELLCAST_START", "UNIT_THREAT_LIST_UPDATE",
-    -- the two live plans' own events, which had better be fine
+    -- events well outside combat, as the control group
     "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_THROTTLED_SYSTEM_READY",
     "CHAT_MSG_ADDON", "PLAYER_MONEY", "BAG_UPDATE",
 }
@@ -1199,7 +1198,7 @@ local function probeEvents()
     out("  |cffffaa00not on client:|r " .. (#missing > 0 and table.concat(missing, ", ") or "none"))
     if #refused > 0 then
         out("  The refused set is the shape of the rule: combat log only, or combat")
-        out("  information generally. Both live plans care only that their own events pass.")
+        out("  information generally. Anything outside that set is unaffected.")
     end
     db.eventProbe = { allowed = allowed, refused = refused, missing = missing }
 end
@@ -1229,7 +1228,7 @@ end
 local function probeSurfaces()
     local sections = {
         read = READ_SURFACE, execute = EXECUTE_SURFACE,
-        secure = SECURE_SURFACE, plans = PLAN_SURFACE,
+        secure = SECURE_SURFACE, channel = CHANNEL_SURFACE,
     }
     db.surfaces = {}
     for name, list in pairs(sections) do
@@ -1248,8 +1247,9 @@ local function probeSurfaces()
     end
     printBlocked()
 
-    -- Verdicts for the two live plans, so one out-of-combat run settles them
-    -- without needing the combat pass at all.
+    -- Capability verdicts about this client, settled by the out-of-combat run
+    -- alone: which auction API ships, and what can carry data across the client
+    -- boundary.
     local verdict = {}
     verdict.auctionHouse = probeAuctionHouse()
 
@@ -1259,13 +1259,13 @@ local function probeSurfaces()
         addonMessage = (lookup("C_ChatInfo.SendAddonMessage") or lookup("SendAddonMessage")) ~= nil,
         cvar = (lookup("C_CVar.SetCVar") or lookup("SetCVar")) ~= nil,
     }
-    out(("|cff44ddffBRIDGE|r  io=%s os=%s load=%s addonMsg=%s cvar=%s")
+    out(("|cff44ddffEXTERNAL|r  io=%s os=%s load=%s addonMsg=%s cvar=%s")
         :format(tostring(verdict.export.io), tostring(verdict.export.os),
                 tostring(verdict.export.loadstring), tostring(verdict.export.addonMessage),
                 tostring(verdict.export.cvar)))
     verdict.export.encoding = (lookup("C_EncodingUtil.SerializeJSON") ~= nil)
     verdict.export.clipboard = (lookup("CopyToClipboard") ~= nil)
-    out(("           json=%s clipboard=%s reloadUI=%s")
+    out(("            json=%s clipboard=%s reloadUI=%s")
         :format(tostring(verdict.export.encoding), tostring(verdict.export.clipboard),
                 tostring(lookup("ReloadUI") ~= nil)))
     if not verdict.export.io then
@@ -1277,7 +1277,7 @@ local function probeSurfaces()
     -- the run. Presence plus the restriction state is all that is wanted.
     verdict.export.reloadUIPresent = lookup("ReloadUI") ~= nil
 
-    db.planVerdict = verdict
+    db.verdicts = verdict
 end
 
 -- Full global dump, for diffing against retail and Classic Era later.
@@ -1305,8 +1305,8 @@ end
 
 -- Action tests ----------------------------------------------------------------
 -- Run identically in and out of combat. The DELTA is the answer: blocked in both
--- is a flat ban, blocked only in combat matches retail and is irrelevant to a
--- suggest-only rotation helper.
+-- is a flat ban, blocked only in combat matches retail and leaves out-of-combat
+-- use untouched.
 local function runActionTests()
     local inCombat = InCombatLockdown and InCombatLockdown() or false
     local label = inCombat and "incombat" or "outofcombat"
@@ -1366,8 +1366,8 @@ local function runActionTests()
     end
 
     -- The legitimate path: retarget a secure button the player clicks themselves.
-    -- Out of combat this should succeed; retail blocks it in combat. This one test
-    -- decides whether a one-button "press this next" helper is possible at all.
+    -- Out of combat this should succeed; retail blocks it in combat. This is the
+    -- test for whether an addon may change what a secure button does, and when.
     if not _G.ForeverProbeSecureBtn then
         local btn = CreateFrame("Button", "ForeverProbeSecureBtn", UIParent, "SecureActionButtonTemplate")
         btn:Hide()
@@ -1492,10 +1492,10 @@ local function printReport()
     out("  blocked in BOTH states: " ..
         (#flatBan > 0 and table.concat(flatBan, ", ") or "none"))
 
-    -- The read diff is the one that decides whether a rotation helper is possible.
-    -- A value that is readable out of combat and nil/blank in combat is the black
-    -- box closing, which is a different and much harder restriction than a
-    -- blocked action.
+    -- The read diff. A value that is readable out of combat and nil/blank in
+    -- combat is the black box closing, which is a different and much harder
+    -- restriction than a blocked action: the call still succeeds and the data is
+    -- simply not there.
     local masked = {}
     for name, ooVal in pairs(a.outofcombat.reads or {}) do
         local icVal = (a.incombat.reads or {})[name]
@@ -1509,14 +1509,14 @@ local function printReport()
     out("|cffffffffREADS - data lost on entering combat:|r")
     if #masked > 0 then
         out("  |cffff4444BLACK BOX CONFIRMED:|r " .. table.concat(masked, ", "))
-        out("  |cffff4444rotation helper not viable as designed|r")
+        out("  |cffff4444these reads are unavailable to addons in combat|r")
     else
         out("  |cff44ff44none - combat state stayed readable|r")
     end
     -- The secrecy delta is the direct answer to the combat-only-vs-always-on
     -- question, straight from Blizzard's own gate rather than inferred from
     -- masked values. A gate that is false out of combat and true in combat is a
-    -- combat-scoped black box, which leaves both live plans untouched.
+    -- combat-scoped black box, which leaves everything outside combat untouched.
     local sOut, sIn = (db.secrecy or {}).outofcombat, (db.secrecy or {}).incombat
     if sOut and sIn and sOut.gates and sIn.gates then
         local gatesOn, alwaysOn = {}, {}
@@ -1532,7 +1532,7 @@ local function printReport()
         if #alwaysOn == 0 then
             out("  |cff44ff44black box is combat-scoped|r - nothing is secret out of combat")
         else
-            out("  |cffff4444some gates are always on|r - re-check both live plans for collateral reads")
+            out("  |cffff4444some gates are always on|r - these reads are restricted out of combat too")
         end
         db.secrecyDelta = { combatOnly = gatesOn, alwaysOn = alwaysOn }
     end
@@ -1608,18 +1608,18 @@ local function docsVersionCheck(verbose)
 end
 
 -- Blizzard's own API documentation ------------------------------------------
--- The whole plugin plan hangs on this one question: does Forever ship
--- Blizzard_APIDocumentationGenerated, and may an addon load it?
+-- Does Forever ship Blizzard_APIDocumentationGenerated, and may an addon load it?
+-- This is what the API reference is generated from, so the answer decides whether
+-- the reference is measured or inferred.
 --
 -- If yes, every function signature - argument names, types, nilable flags,
 -- return types, events, enums and structures - comes out of the client itself,
 -- and stays correct across beta patches for free. If no, the fallback is hand
--- curation from retail sources, which is inference rather than measurement and
--- against this repo's whole point.
+-- curation from retail sources, which is inference rather than measurement.
 --
--- APIDocumentation_LoadUI is PRESENT in our global dump. That is not the same as
--- being allowed to call it - RegisterEvent was present and refused (findings
--- section P.1) - so the call is attributed like any other action test.
+-- APIDocumentation_LoadUI is PRESENT in the global dump. That is not the same as
+-- being allowed to call it - RegisterEvent was present and refused - so the call
+-- is attributed like any other action test.
 --
 -- This command measures and reports. It deliberately does NOT dump everything:
 -- the size of one system is what decides whether the real dump has to be
@@ -1671,7 +1671,7 @@ local function probeApiDocs()
 
     if #blocked > 0 then
         out("  |cffff4444FORBIDDEN|r - " .. plain(blocked[1]))
-        out("  Addons may not load the documentation. The plugin needs the fallback.")
+        out("  Addons may not load the documentation - the reference cannot be generated from it.")
         db.apiDocsProbe = api
         return
     end
@@ -1701,7 +1701,7 @@ local function probeApiDocs()
 
     -- Totals, and the breakdown by system Type. "ScriptObject" is how Blizzard
     -- classifies widget/frame methods; if that count is zero then the generated
-    -- docs cover the C API only, and the plugin must not claim to document
+    -- docs cover the C API only, and nothing downstream may claim to document
     -- Frame:SetPoint and friends.
     local nFunctions, nEvents, nTables = 0, 0, 0
     local byType, namespaced = {}, 0
@@ -1768,8 +1768,8 @@ local function probeApiDocs()
     end
 
     -- Size. This is the number that decides whether the dumper chunks per system
-    -- or writes in one pass - the largest SavedVariables flush this repo has
-    -- managed is 303 KB, and retail's doc set is several MB.
+    -- or writes in one pass - the largest SavedVariables flush measured so far is
+    -- 303 KB, and retail's doc set is several MB.
     if C_EncodingUtil and C_EncodingUtil.SerializeJSON and sampleSystem then
         local okJson, json = pcall(C_EncodingUtil.SerializeJSON, sampleSystem)
         if okJson and type(json) == "string" then
@@ -1789,10 +1789,9 @@ local function probeApiDocs()
 end
 
 -- The dumper ----------------------------------------------------------------
--- Measured 2026-09-18 on build 69913: the documentation loads, and it is bigger
--- than the plan assumed - 408 systems, 6,577 functions, 1,802 events, 792
--- tables, with 81 ScriptObject systems, which means widget and frame methods are
--- documented too.
+-- Measured 2026-09-18 on build 69913: the documentation loads, and it is large -
+-- 408 systems, 6,577 functions, 1,802 events, 792 tables, with 81 ScriptObject
+-- systems, which means widget and frame methods are documented too.
 --
 -- Two things the measurement changed.
 --
@@ -1802,17 +1801,17 @@ end
 --    objects with "attempted to serialize a function value". So this builds a
 --    plain PROJECTION first - data fields only, nothing callable - and lets the
 --    client's own SavedVariables writer serialize that. Fewer moving parts than
---    JSON-inside-Lua, and the desktop side already reads these files with luajit.
+--    JSON-inside-Lua, and the resulting file is plain Lua that any parser reads.
 --
 -- 2. Those mixins expose Blizzard's own renderers. Capturing GetArgumentString,
 --    GetReturnString and GetFullName next to the structured fields costs almost
---    nothing and gives the generator a cross-check: if our reconstructed
---    signature disagrees with Blizzard's own rendering of the same entry, one of
---    them is wrong and we want to know rather than ship it.
+--    nothing and gives the generator a cross-check: if a reconstructed signature
+--    disagrees with Blizzard's own rendering of the same entry, one of them is
+--    wrong, and a mismatch that is recorded can be caught before it ships.
 --
 -- Blizzard's prose Documentation fields are deliberately NOT captured. Signatures
 -- and type names are close to facts; the prose is Blizzard's writing, extracted
--- from a copyrighted client, and this repo is going public.
+-- from a copyrighted client.
 
 -- Only scalars are stored. Anything else - a table, a function, a secret - is
 -- dropped rather than guessed at, so a field that survives into the projection is
@@ -1913,8 +1912,8 @@ end
 
 -- /fprobe docs dump [start] [count]
 --
--- The range arguments exist because the biggest SavedVariables flush this repo
--- has ever managed is 303 KB and this projection will be several megabytes. If
+-- The range arguments exist because the largest SavedVariables flush measured so
+-- far is 303 KB and this projection will be several megabytes. If
 -- the whole thing will not write, it can be taken in passes; each pass merges
 -- into what is already there rather than replacing it.
 local function dumpApiDocs(startAt, count)
@@ -2017,15 +2016,14 @@ end
 --   4. are writes blocked in combat
 --
 -- The retail names are a STARTING GUESS, not the answer. ConsoleGetAllCommands is
--- present on this build, so the real names get enumerated rather than assumed -
--- the same mistake as citing a source without fetching it.
+-- present on this build, so the real names get enumerated rather than assumed.
 --
--- (2) is the one that decides whether a smooth ease is possible, and no Lua read
--- reports what the monitor is doing. So /fprobe video ramp drives a sweep from
--- OnUpdate and counts the frames it got: a live post-process leaves the frame
--- deltas flat, while a device restart per write craters them. That shows up in
--- the numbers as well as on the screen, which turns half of a "ask the human"
--- question into a measurement.
+-- (2) decides whether a smooth ease is possible at all, and no Lua read reports
+-- what the monitor is doing. So /fprobe video ramp drives a sweep from OnUpdate
+-- and counts the frames it got: a live post-process leaves the frame deltas flat,
+-- while a device restart per write craters them. That shows up in the numbers as
+-- well as on the screen, which turns half of a "ask the human" question into a
+-- measurement.
 --
 -- (3) cannot be measured from Lua either, so the display-mode CVars are recorded
 -- alongside the result. A capture that does not say which mode it was taken in
@@ -2110,7 +2108,7 @@ end
 
 -- Nudge a CVar, read it back, put it back. The readback is the whole point: a
 -- write that is accepted and ignored returns success and changes nothing, which
--- is the silent no this project keeps walking into.
+-- is the silent no this whole probe is built to catch.
 local function videoWriteTest(snap, setter, setterName)
     local test = { via = setterName }
     local base = tonumber(snap.value)
@@ -2277,7 +2275,7 @@ end
 -- writing every frame, then reports how many frames it actually got. A cheap
 -- post-process leaves the frame gaps flat; a device restart per write shows up as
 -- a spike. Whether the SCREEN changed is still the player's to report - the
--- client will not tell us, and "accepted and ignored" looks identical from Lua.
+-- client does not say, and "accepted and ignored" looks identical from Lua.
 local RAMP_SECONDS, RAMP_DEPTH = 4.0, 0.40
 local rampFrame
 
@@ -2401,7 +2399,7 @@ SlashCmdList.FPROBE = function(arg)
         end
         return probeApiDocs()
     end
-    if cmd == "bridge" then return printBridge() end
+    if cmd == "external" then return printExternal() end
     if cmd == "video" then
         if sub == "ramp" then return videoRamp(extra) end
         return probeVideo()
@@ -2444,7 +2442,7 @@ SlashCmdList.FPROBE = function(arg)
         out("  |cffffffff/fprobe video|r         brightness/contrast CVars (ramp)")
         out("  |cffffffff/fprobe events|r        which events an addon may subscribe to")
         out("  |cffffffff/fprobe blocked|r       captured BLOCKED/FORBIDDEN actions")
-        out("  |cffffffff/fprobe bridge|r        inbound BridgeData.lua, outbound flush")
+        out("  |cffffffff/fprobe external|r      inbound ExternalData.lua, outbound flush")
         out("  |cffffffff/fprobe docs|r          Blizzard's API documentation (dump, version)")
         return
     end
@@ -2455,7 +2453,7 @@ SlashCmdList.FPROBE = function(arg)
     out(("build %s (%s) toc %s"):format(tostring(version), tostring(build), tostring(toc)))
     probeSurfaces()
     probeGlobals()
-    printBridge()
+    printExternal()
     out("action tests:")
     runActionTests()
     out("next: |cffffffff/fprobe ah|r at an auction house, |cffffffff/fprobe combat|r on a mob, then /reload.")

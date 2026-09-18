@@ -94,6 +94,6 @@ the version-check trap.
 ## What to read next
 
 - `guides/pitfalls.md` — the five things that will bite you, all measured
-- `guides/savedvariables-and-the-bridge.md` — persistence, and why it is broken on this build
+- `guides/savedvariables.md` — persistence, and why it is broken on this build
 - `restrictions/` — what the client will refuse, and how it refuses
 - `reference/api/` — every function, generated from the client's own documentation

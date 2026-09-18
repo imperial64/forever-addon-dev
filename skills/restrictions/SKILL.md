@@ -54,8 +54,10 @@ whether it is currently restricted, instead of inferring it from a masked value.
 | `C_ChatInfo.SendAddonMessage`, `C_ChatInfo.SendAddonMessageLogged` | **CAUTION** | always | AreOutgoingAddonChatMessagesRestricted() returns true, in and out of combat. |
 | `C_AssistedCombat.IsAvailable`, `C_AssistedCombat.GetRotationSpells` | **PERMITTED** | always | C_AssistedCombat exists but reports itself unavailable. |
 | `COMBAT_LOG_EVENT`, `COMBAT_LOG_EVENT_UNFILTERED` | **FORBIDDEN** | always | Addons may not register for the combat log, in either form. |
+| Brightness, Contrast, Gamma | **PERMITTED** | always | Display brightness and contrast ARE addon-writable, live, at frame rate. |
 | `ReloadUI` | **FORBIDDEN** | always | An addon cannot reload the UI. A human must type /reload. |
 | `C_AuctionHouse.ReplicateItems` | **FAILS SILENTLY** | always | A throttled full scan returns an EMPTY MARKET, not an error. |
+| `retail-graphics-cvar-names-absent` | **CAUTION** | always | gxBrightness, gxContrast and gxGamma do NOT exist on this client. |
 | SavedVariables | **BROKEN ON THIS BUILD** | always | The client writes SavedVariables and never reads them back. |
 | Any secret value | **CAUTION** | always | tostring() on a secret value returns a SECRET STRING. The taint survives conversion. |
 | `UnitPower`, `UnitPowerMax` | **SECRET** | always | Unit power is secret at ALL times, including out of combat. |

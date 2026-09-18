@@ -1,6 +1,11 @@
 # forever-addon-dev
 
-A Claude Code plugin for building **World of Warcraft: Forever** addons.
+A Claude Code plugin for **AI-assisted development of World of Warcraft: Forever addons**.
+
+Install it, and Claude answers Forever addon questions from measured ground truth instead
+of from memory of Retail: the client's own API documentation, plus a restriction list
+established by probing a live client. It scaffolds addons, looks up signatures, explains
+why a call came back `nil`, and lints source against what the client will actually allow.
 
 Forever launches 2026-11-04. Its addon API is Retail's, on interface `16001`, and it
 carries Midnight's restrictions — but no restriction list has been published, and the
@@ -13,7 +18,10 @@ The plugin answers three questions:
 |---|---|
 | How do I build a Forever addon? | The gotchas that cost real debugging time, written as instruction |
 | What is the full API? | 6,577 functions with signatures, generated from the client's own documentation |
-| What am I not allowed to do? | 17 restrictions, each measured on a running client, with the evidence attached |
+| What am I not allowed to do? | 19 restrictions, each measured on a running client, with the evidence attached |
+
+It is addon-agnostic. There is no opinion here about what you should build — the reference
+covers the whole API surface, and the restriction list is whatever the client enforces.
 
 ## Install
 
@@ -21,6 +29,15 @@ The plugin answers three questions:
 /plugin marketplace add imperial64/forever-addon-dev
 /plugin install forever-addon-dev@forever-addon-dev
 ```
+
+## Skills
+
+| Skill | Use it for |
+|---|---|
+| `build` | Writing, structuring, scaffolding and debugging an addon |
+| `api` | One symbol's exact signature, or whether it exists on this build |
+| `restrictions` | Whether a call is forbidden, secret, throttled or protected, and why |
+| `regenerate` | Rebuilding the reference from your own client after a patch |
 
 ## What makes the restriction list worth having
 
@@ -30,7 +47,7 @@ read. Both were measured here, and the answers are not what the published doctri
 
 - **`UseAction`, `ReloadUI`, `SetBinding` and `SetOverrideBindingClick` are not documented
   by Blizzard at all** — four of the most restricted functions on the client. Their pages
-  here exist because we measured them.
+  here exist because they were measured.
 - **Addons may not subscribe to the combat log.** Not "the payload is stripped" — the
   registration itself is refused, out of combat, with `ADDON_ACTION_FORBIDDEN`. Both
   `COMBAT_LOG_EVENT` and `COMBAT_LOG_EVENT_UNFILTERED`.
@@ -55,9 +72,19 @@ data/              machine-readable: api.json, restrictions.json
 tools/             the generator, the linter, the SavedVariables parser
 addons/ForeverProbe/  the probe addon - also the doc generator
 scripts/           install to the client, collect results back
-research/          the lab notebook this grew out of, kept as the evidence base
-examples/          worked examples
+research/          the measurement record the restriction data is drawn from
 ```
+
+## Checking an addon
+
+```bash
+python tools/lint_addon.py path/to/YourAddon/
+```
+
+Flags calls this client does not have, subscriptions it will refuse, reads that come back
+secret, protected actions, and the version-check trap that makes Retail addons take their
+Classic code path on interface `16001`. It is a regex linter, not a Lua parser, so a clean
+run is not a proof of correctness — it says so on every run.
 
 ## Regenerating the reference
 
@@ -72,11 +99,19 @@ moved past it.
 python tools/build_reference.py research/captures/<newest>.lua --surface <a full run> --clean
 ```
 
+Generation is deterministic and no per-symbol page carries a timestamp, so regenerating
+against a newer client produces a diff that *is* the patch delta.
+
 ## Provenance
 
 Nothing here is inferred from a patch note. The rule this grew up under: probe output
 supersedes reporting, and a source is not cited unless it was fetched. Where something is
-uncertain it says so — `research/findings.md` marks three gates as *not captured* rather
+uncertain it says so — `research/findings.md` marks several gates as *not measured* rather
 than guessing them from their neighbours.
+
+This repository was itself built with AI assistance. The probe, the generator, the linter
+and the prose were written with Claude Code; what keeps that honest is that the claims are
+measured rather than recalled, and the measurements are in the repository next to the
+guidance they support.
 
 Not affiliated with Blizzard Entertainment. See [LICENSE](LICENSE).
