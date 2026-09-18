@@ -95,9 +95,16 @@ probe adds is permission, returned values, and runtime gating.
   2026-09-18: registering `COMBAT_LOG_EVENT_UNFILTERED` is forbidden, returns normally,
   and the frame simply never receives the event. A refusal can be a refusal to *listen*,
   not just a masked value — check `/fprobe blocked` after any run.
-- **A black box does not error either.** Restricted reads return `nil`, `0`, or masked
-  values while the function stays present. Compare returned *values* across combat states,
-  never just whether the call succeeded.
+- **A black box does not error either.** Restricted reads return `nil`, `0`, masked
+  values, or a *secret* value while the function stays present. Compare returned *values*
+  across combat states, never just whether the call succeeded.
+- **Secret values are contagious and `tostring()` does not launder them.** Measured
+  2026-09-18: `tostring()` of a secret returns a secret *string*, so a `pcall` around the
+  read reports success and the value throws later, wherever it is next indexed — which is
+  usually a print or a format, far from the read. Use `issecretvalue` before and after
+  conversion, and always before storing: a secret string in the DB would take the whole
+  SavedVariables flush with it. The probe's `plain()` helper is the only sanctioned way to
+  turn a game read into text.
 - **Don't build on the in-combat restriction as a reason to abandon a plan** unless a
   source or probe result explicitly extends it to a non-combat state. The rotation helper
   was shelved on a dev statement about *information access*, not on this rule; that

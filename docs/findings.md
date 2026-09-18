@@ -33,10 +33,10 @@ not interesting.
 
 ## P. Measured here, on our own client (2026-09-18)
 
-**[PROBE — ForeverProbe, run by Efe on beta build 1.60.1.69893, character in Elwynn
+**[PROBE — ForeverProbe, run by Efe on beta build 1.60.1.69913, character in Elwynn
 Forest, out of combat]** This outranks everything below it, including §0. It is the first
 result in this document that came from our own client rather than someone else's capture
-or someone's reporting.
+or someone's reporting. Note the build: 69913, one ahead of the capture §0 describes.
 
 ### P.1 An addon may not register `COMBAT_LOG_EVENT_UNFILTERED` at all
 
@@ -74,7 +74,113 @@ would have no reader for it.
 3. **`func=UNKNOWN()`** — the client did not name the function in the event payload. The
    attribution comes from the probe tagging each registration, not from the client.
 
-### P.2 Consequences
+### P.2 Secret values are contagious, and `tostring()` does not launder them
+
+`/fprobe` crashed mid-run on its first live pass:
+
+```
+ForeverProbe.lua:1234: attempt to index field '?' (a secret string value,
+while execution tainted by 'ForeverProbe')
+  locals: name="playerPower"  ok=true  v=<secret string>
+```
+
+Note `ok=true`. The read was wrapped in a `pcall`, the `pcall` succeeded, and the value it
+handed back detonated one line later in the print. **`tostring()` on a secret value returns
+a secret string.** The taint survives the conversion, so "convert it inside a pcall" —
+which this document previously recommended, in §0.3 — is not protection at all. The
+operation that throws is the next *index* of the result, which is somewhere else entirely
+by then.
+
+The client ships the correct tools and this build has the whole family: `issecretvalue`,
+`issecrettable`, `hasanysecretvalues`, `scrub`, `scrubsecretvalues`, `canaccesssecrets`,
+`secretwrap`, `dropsecretaccess`. Anything reading game state must test with
+`issecretvalue` **before and after** conversion, and must do so before storing, because a
+secret string written into SavedVariables would take the whole flush down — and the flush
+is the entire output of this addon.
+
+### P.3 `UnitPower("player")` is secret **out of combat**
+
+The value that crashed it was player power, read standing in Elwynn Forest with no target
+and no combat. That is a direct contradiction of the doctrine (§3), which says class
+secondary resources "remain fully non-secret", and it is a second strike against the
+combat-scoped reading of the black box.
+
+Measured in the same out-of-combat pass:
+
+| Gate | Value |
+|---|---|
+| `HasSecretRestrictions()` | **true** |
+| `ShouldAurasBeSecret()` | false |
+| `ShouldCooldownsBeSecret()` | false |
+| `UnitPower("player")` | **returns a secret value** |
+| `C_CombatLog.IsCombatLogRestricted()` | **true** |
+| `C_ChatInfo.AreOutgoingAddonChatMessagesRestricted()` | **true** |
+| `C_ChatInfo.InChatMessagingLockdown()` | false |
+
+So out of combat, some things are secret and some are not, and which is which does not
+follow the doctrine's own description. Auras and cooldowns — the two things §3 names as
+removed — read as *not* secret out of combat, while power, which §3 explicitly protects,
+is secret.
+
+**Caveat on the gates.** Several `C_Secrets` functions take arguments (a unit token, an
+action slot, a spell id) and threw on the first run because they were called with none.
+"Threw because I called it wrong" is indistinguishable from "threw because it is
+restricted", and recording the first as the second would have been a false finding. The
+probe now tries each gate against several argument sets and records which one answered, so
+the next run gives a clean table.
+
+### P.4 Actions: `UseAction` is forbidden out of combat
+
+Out of combat, on our own client:
+
+| Call | Result |
+|---|---|
+| `CastSpellByName` | allowed |
+| `UseAction(1)` | **BLOCKED** — `ADDON_ACTION_FORBIDDEN:UseAction()` |
+| `EditMacro` | allowed |
+| `SetOverrideBindingClick` | allowed |
+| `SecureBtn:SetAttribute` | allowed |
+
+`UseAction` is forbidden outright rather than merely protected in combat. Neither live plan
+uses it.
+
+### P.5 Both live plans confirmed on our own client
+
+This is the corroboration §0 needed, measured here rather than read off someone else's
+capture.
+
+**Auction House** — `/fprobe` scored every section full: modern 12/12, commodity 5/5,
+replicate 3/3, restricted 7/7, legacy 0/8, legacy actions 0/4. The verdict line reads
+"modern `C_AuctionHouse` only — retail AH code largely ports". The restricted set matches
+retail's seven exactly. §0.1 is confirmed, and the economy plan's API question is closed
+twice over.
+
+**Bridge** — `io=false os=false load=true addonMsg=true cvar=true json=true clipboard=true
+reloadUI=true`, and the inbound channel works: `BridgeData.lua` loaded and reported
+"shipped default only", which is the probe's way of saying the file was executed as addon
+code and the receiver ran. The channel is live; it has simply not been written to yet.
+`scripts/write-bridge-data.ps1` then `/reload` closes that loop.
+
+The one new constraint is `AreOutgoingAddonChatMessagesRestricted() = true`. The bridge's
+primary path does not use addon messages, so this costs nothing today, but it removes the
+sideband that §0.2 listed as a candidate.
+
+### P.6 Odds and ends
+
+- **The client is build 69913**, not the 69893 the §0 capture describes. Forever is
+  patching the beta daily; §0 is already one build behind, which is an argument for
+  trusting the probe over the capture wherever they disagree.
+- `C_AssistedCombat` is present but **inert**: `IsAvailable()` returns false and
+  `GetRotationSpells()` returns 0 entries. The rotation helper is closed on Efe's decision
+  (§0.4) and this does not reopen it — but it does mean the API Blizzard shipped is not
+  currently doing anything for a player on this build.
+- Global dump: 5,958 functions and 269 `C_` namespaces, against the capture's 6,045 and
+  269. Same shape, slightly different surface — consistent with the build difference.
+- Surface scores: read 32/48, execute 16/18, secure 14/15, plans 26/31.
+
+---
+
+### P.7 Consequences of P.1
 
 - **Neither live plan is touched.** The economy addon and the bridge read auction data,
   money, bags and addon messages. None of them subscribe to the combat log.
@@ -87,7 +193,7 @@ would have no reader for it.
   with Jones saying they are shipping one (§1) and with `C_DamageMeter` being present
   (§0.3).
 
-### P.3 Still to measure here
+### P.8 Still to measure here
 
 `/fprobe events` walks the neighbourhood of the refusal and attributes each result, so the
 next run says whether the rule is "no combat log" or "no combat information": it tries
@@ -192,12 +298,18 @@ addon messages or encoding.** `C_RestrictedActions` (3 functions), `C_CombatLog`
 Crucially the restriction is a *gate*, not a removal: per the kit, while
 `C_Secrets.ShouldAurasBeSecret()` is true, every aura read from addon code throws. A gate
 that can be asked its own state is a much cheaper answer to combat-only-vs-always-on than
-diffing masked values — the probe now calls all of them in both combat states and prints
-the delta. If the gates read false out of combat, the black box is combat-scoped and both
-live plans are untouched by it.
+diffing masked values — the probe calls all of them in both combat states and prints the
+delta.
 
-One practical consequence for the probe: a secret value **throws** on `tostring()`, on
-comparison, and even on a boolean test. Reads that look safe are not.
+**§P.3 has since made the expected answer wrong.** Out of combat on our own client,
+`HasSecretRestrictions()` is already true and `UnitPower("player")` already returns a
+secret, while auras and cooldowns do not. The gates are not a single combat-scoped switch,
+and this section's "if the gates read false out of combat" framing should not be relied
+on.
+
+One practical consequence for the probe, also corrected by measurement: a secret value does
+**not** reliably throw on `tostring()` — it returns a secret *string*, and the throw
+happens later, wherever that string is next indexed. See §P.2.
 
 ### 0.4 `C_AssistedCombat` is present — watch trigger 4 has fired
 
@@ -457,13 +569,15 @@ presence rows are now confirmations rather than discoveries.
    has since late 2024, and TSM's entire architecture depends on that feed. This gates
    what *kind* of economy addon is possible, independently of question 1.
    `auction-addon-architecture.md` §7.
-3. Is the black box combat-only or always-on? **This is now two questions**, because §P.1
-   showed the restriction operates at two levels. Event *subscription* is unconditionally
-   forbidden — measured out of combat, at load. Whether the `C_Secrets` *value* gates are
-   combat-scoped is still open, and `/fprobe report` diffs them across combat states
-   (§0.3). Every gate is named for a unit, spell or combat concept, so the live plans are
-   still expected to be clear — but "the black box is combat-scoped" is too simple a
-   summary to keep repeating.
+3. Is the black box combat-only or always-on? **The combat-scoped reading is now failing
+   twice over, out of combat, on our own client.** Event subscription to the combat log is
+   unconditionally forbidden (§P.1); `HasSecretRestrictions()` is true and
+   `UnitPower("player")` returns a secret value while standing in a field doing nothing
+   (§P.3) — the latter directly contradicting §3's promise that class resources stay
+   readable. Auras and cooldowns, the two things §3 names as removed, read as not secret
+   out of combat. What remains is to get a clean gate table now that the argument arity is
+   handled, and to run the in-combat pass for the delta. Neither live plan reads any of
+   it, which is the only reason this is still a curiosity rather than a problem.
 4. **Answered 2026-09-18 (§P.1): the question does not apply.** An addon may not register
    for the event at all — `ADDON_ACTION_FORBIDDEN`, at load, out of combat — and there is
    no `CombatLogGetCurrentEventInfo` to read it with. What is left is the *boundary*:

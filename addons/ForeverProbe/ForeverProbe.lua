@@ -57,7 +57,37 @@ function ns.LoadBridgeData(tag, ...)
     table.insert(bridgeInbox[tag], { ... })
 end
 
-local function out(msg) DEFAULT_CHAT_FRAME:AddMessage("|cff44ddffFProbe|r " .. tostring(msg)) end
+-- Secret-safe conversion ------------------------------------------------------
+-- MEASURED 2026-09-18, the hard way: tostring() on a secret value returns a
+-- SECRET STRING. The taint survives the conversion. So converting inside a pcall
+-- is NOT protection - the pcall returns ok=true and hands back a value that blows
+-- up one line later, in the print, with
+--   "attempt to index field '?' (a secret string value, while execution tainted)"
+-- That is what took /fprobe down mid-run on the first live pass, at playerPower.
+--
+-- The client provides the real predicate, and this build has the whole family:
+-- issecretvalue, issecrettable, hasanysecretvalues, scrub, scrubsecretvalues,
+-- canaccesssecrets, secretwrap, dropsecretaccess.
+--
+-- EVERYTHING read out of the game goes through plain() before it is printed,
+-- formatted, compared or stored. Storage matters most: a secret string written
+-- into the DB would take the entire SavedVariables flush down with it, and this
+-- addon exists to produce that file.
+local function plain(v)
+    if issecretvalue and issecretvalue(v) then return "<SECRET>" end
+    local ok, str = pcall(tostring, v)
+    if not ok then return "<UNPRINTABLE>" end
+    -- tostring() of a secret is itself secret, so the value has to be re-tested
+    -- after conversion rather than before it only.
+    if issecretvalue and issecretvalue(str) then return "<SECRET>" end
+    -- Indexing is the operation that actually throws, so do it here, once, where
+    -- a failure is contained.
+    local okCut, cut = pcall(string.sub, str, 1, 200)
+    if not okCut then return "<SECRET>" end
+    return cut
+end
+
+local function out(msg) DEFAULT_CHAT_FRAME:AddMessage("|cff44ddffFProbe|r " .. plain(msg)) end
 
 -- Block capture ---------------------------------------------------------------
 -- Declared up here rather than next to the watcher frame because safeRegister
@@ -248,6 +278,10 @@ local SECURE_SURFACE = {
     "SecureActionButtonTemplate", "SecureHandlerWrapScript", "SecureHandlerExecute",
     "SecureHandlerSetFrameRef", "RegisterStateDriver", "RegisterAttributeDriver",
     "SecureCmdOptionParse", "InCombatLockdown", "issecure", "issecurevariable",
+    -- The secret-value toolkit. issecretvalue is the only reliable way to look at
+    -- a game read without risking the whole run; the rest are its family.
+    "issecretvalue", "issecrettable", "hasanysecretvalues", "scrub", "scrubsecretvalues",
+    "canaccesssecrets", "secretwrap", "dropsecretaccess",
     "hooksecurefunc", "forceinsecure",
     "C_AssistedCombat", "C_AssistedCombat.GetNextCastSpell", "AssistedCombatManager",
 }
@@ -302,24 +336,55 @@ local function probeSecrecy(label)
         out("|cffffaa00C_Secrets ABSENT|r - this build has no secrecy gate")
         s.absent = true
     else
+        -- First live run showed half of these erroring at the call site: they
+        -- take arguments (a unit token, an action slot, a spell id) and a missing
+        -- argument throws exactly like a restriction would. Guessing the arity
+        -- wrongly and recording "ERR" would have been a false finding, so each
+        -- gate is tried against a few plausible argument sets and the one that
+        -- answers is recorded along with WHAT it was asked.
+        local ARGS = {
+            { n = "()" },
+            { n = '("player")', "player" },
+            { n = '("target")', "target" },
+            { n = "(1)", 1 },
+            { n = '("player", 1)', "player", 1 },
+        }
         local parts = {}
         for _, name in ipairs(SECRECY_CHECKS) do
             local fn = C_Secrets[name]
             if fn then
-                local ok, v = pcall(function() return tostring(fn()) end)
-                s.gates[name] = ok and v or ("ERR:" .. tostring(v):sub(1, 50))
-                parts[#parts + 1] = (name:gsub("^Should", ""):gsub("BeSecret$", "")) .. "=" .. s.gates[name]
+                local value, calledWith
+                for _, argset in ipairs(ARGS) do
+                    local ok, v = pcall(fn, unpack(argset))
+                    if ok then
+                        value, calledWith = plain(v), argset.n
+                        break
+                    end
+                    value = "ERR:" .. plain(v)
+                end
+                s.gates[name] = value
+                s.gateArgs = s.gateArgs or {}
+                s.gateArgs[name] = calledWith or "no argument set worked"
+                parts[#parts + 1] = (name:gsub("^Should", ""):gsub("BeSecret$", "")) ..
+                    (calledWith and calledWith ~= "()" and calledWith or "") .. "=" .. plain(value)
             end
         end
         out("|cff44ddffSECRECY|r " .. table.concat(parts, " "):sub(1, 400))
     end
-    local function ask(where, fname, key)
+    local function ask(where, fname, key, ...)
         local tbl = _G[where]
         local fn = tbl and tbl[fname]
         if not fn then return end
-        local ok, v = pcall(function() return tostring(fn()) end)
-        s[key] = ok and v or ("ERR:" .. tostring(v):sub(1, 50))
-        out(("  %-22s %s"):format(key, s[key]))
+        local ok, v = pcall(fn, ...)
+        if not ok and select("#", ...) == 0 then
+            -- Same trap as the gates above: these take an addon name, and a
+            -- missing argument is indistinguishable from a refusal unless the
+            -- call is retried properly.
+            ok, v = pcall(fn, ADDON)
+            if ok then s[key .. "Arg"] = "(addonName)" end
+        end
+        s[key] = ok and plain(v) or ("ERR:" .. plain(v))
+        out(("  %-22s %s"):format(key, plain(s[key])))
     end
     ask("C_CombatLog", "IsCombatLogRestricted", "combatLogRestricted")
     ask("C_RestrictedActions", "GetAddOnRestrictionState", "addonRestrictionState")
@@ -345,12 +410,12 @@ local function probeAssistedCombat()
     -- arguments and would be a combat-decision read, which is not what this probe
     -- is for.
     if C_AssistedCombat.IsAvailable then
-        local ok, v = pcall(function() return tostring(C_AssistedCombat.IsAvailable()) end)
-        a.isAvailable = ok and v or ("ERR:" .. tostring(v):sub(1, 60))
+        local ok, v = pcall(C_AssistedCombat.IsAvailable)
+        a.isAvailable = ok and plain(v) or ("ERR:" .. plain(v))
     end
     if C_AssistedCombat.GetRotationSpells then
         local ok, v = pcall(C_AssistedCombat.GetRotationSpells)
-        a.rotationSpells = ok and (type(v) == "table" and #v or tostring(v)) or ("ERR:" .. tostring(v):sub(1, 60))
+        a.rotationSpells = ok and (type(v) == "table" and #v or plain(v)) or ("ERR:" .. plain(v))
     end
     out(("|cffffaa00C_AssistedCombat PRESENT|r isAvailable=%s rotationSpells=%s")
         :format(tostring(a.isAvailable), tostring(a.rotationSpells)))
@@ -530,11 +595,11 @@ local function sampleReplicate(limit)
             end
             if #samples < 5 then
                 local parts = {}
-                for k = 1, info.n do parts[k] = k .. "=" .. tostring(info[k]) end
+                for k = 1, info.n do parts[k] = k .. "=" .. plain(info[k]) end
                 samples[#samples + 1] = {
                     index = i, returns = info.n,
-                    owner = tostring(owner), ownerFullName = tostring(ownerFull),
-                    tuple = table.concat(parts, " "):sub(1, 400),
+                    owner = plain(owner), ownerFullName = plain(ownerFull),
+                    tuple = plain(table.concat(parts, " ")),
                 }
             end
         end
@@ -897,19 +962,19 @@ end
 local function ahShapes()
     local shapes = {}
     local function record(name, fn)
-        local ok, v = pcall(function() return fn() end)
-        if not ok then shapes[name] = "ERR: " .. tostring(v):sub(1, 80); return end
-        if type(v) == "table" then
+        local ok, v = pcall(fn)
+        if not ok then shapes[name] = "ERR: " .. plain(v); return end
+        if type(v) == "table" and not (issecrettable and issecrettable(v)) then
             local parts = {}
             for k, val in pairs(v) do
-                parts[#parts + 1] = tostring(k) .. "=" .. tostring(val)
+                parts[#parts + 1] = plain(k) .. "=" .. plain(val)
                 if #parts >= 12 then break end
             end
-            shapes[name] = table.concat(parts, " "):sub(1, 300)
+            shapes[name] = plain(table.concat(parts, " "))
         else
-            shapes[name] = tostring(v)
+            shapes[name] = plain(v)
         end
-        out(("  %-22s %s"):format(name, tostring(shapes[name]):sub(1, 60)))
+        out(("  %-22s %s"):format(name, plain(shapes[name])))
     end
 
     -- Time-left bands are the whole basis of "is this listing about to expire",
@@ -1224,14 +1289,15 @@ local function runActionTests()
     -- succeeded, which would report a false "allowed" every time.
     local reads = {}
     local function readTest(name, fn)
-        -- The conversion happens INSIDE the pcall. A secret value throws on
-        -- tostring(), on comparison, and even on a boolean test, so converting
-        -- outside would take the whole probe down mid-run rather than recording
-        -- the restriction. Measured: in-combat aura reads throw, they do not
-        -- return nil.
-        local ok, v = pcall(function() return tostring(fn()) end)
-        reads[name] = ok and v or ("ERR: " .. tostring(v):sub(1, 80))
-        out(("  READ %-22s %s"):format(name, reads[name]:sub(1, 48)))
+        -- Two failure modes, and the second one is the subtle one:
+        --   a) the read throws            -> pcall catches it, record the error
+        --   b) the read returns a SECRET  -> pcall reports success and hands back
+        --      a value that throws on the next touch. plain() is what catches
+        --      that, and "<SECRET>" is a result in its own right: it means the
+        --      value exists and the addon may not look at it.
+        local ok, v = pcall(fn)
+        reads[name] = ok and plain(v) or ("ERR: " .. plain(v))
+        out(("  READ %-22s %s"):format(name, plain(reads[name])))
     end
 
     readTest("spellCooldownStart", function()
