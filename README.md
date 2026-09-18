@@ -68,7 +68,11 @@ fetched and queried — see `docs/findings.md` §0. Two things follow from it:
   functions, commodities included) and none of the Classic-era auction API. It is a Retail
   port. What is left to measure is the throttle and result caps, which is what
   `/fprobe ah scan` is for.
-- **The bridge works, with a human in the loop.** The sandbox is intact (`io`/`os` absent)
-  and the inbound channel is still a generated `.lua` file, but `C_EncodingUtil` gives it
-  JSON/CBOR and compression, and `ReloadUI()` is protected — so every refresh costs a
-  manual `/reload`.
+- **The bridge works, with a human in the loop** — now measured on our own client, both
+  directions (§P.9). Outbound: the SavedVariables file lands on disk and an external
+  process reads it. Inbound: a generated `.lua` is executed as addon code. The client does
+  not read its own saves back on this build, which costs the design nothing. `ReloadUI()`
+  is protected, so each refresh costs a manual `/reload`.
+- **The restriction rules are not what the doctrine says** (§P.10). Out of combat, auras
+  and cooldowns — named as removed — are readable, while class resources, explicitly
+  promised as readable, come back `<SECRET>`. Neither live plan reads any of it.

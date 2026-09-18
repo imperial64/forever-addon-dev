@@ -1350,6 +1350,10 @@ local function runActionTests()
                 clog.eventFired or 0, clog.count, clog.inCombatCount, (function()
             local n = 0; for _ in pairs(clog.subevents) do n = n + 1 end; return n
         end)()))
+    -- Printed again HERE, not only in probeSurfaces: the action tests are what
+    -- actually provoke blocks, so the earlier summary always said "none this
+    -- session" and was immediately contradicted by the next three lines.
+    printBlocked()
     out(("recorded as '%s'"):format(label))
 end
 

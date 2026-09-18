@@ -180,6 +180,81 @@ sideband that §0.2 listed as a candidate.
 
 ---
 
+### P.9 The bridge, decided: outbound works, the round trip does not
+
+Measured 2026-09-18 on our own client, and this settles the second live plan.
+
+**Outbound works.** `WTF/Account/130656239#1/SavedVariables/ForeverProbe.lua` exists on
+disk, 303 KB, written on logout. Everything the probe recorded — the full global dump, the
+namespace map, the secrecy gates, the auction surface — came back out of the client in a
+file an external process can read. That is the entire outbound requirement.
+
+**The in-client round trip does not.** `bridge.loads` reads 1 in every session, and
+`tokenFromPreviousSession` is `nil` after a `/reload` that definitely happened. The client
+writes the file and never reads it back, exactly as §0.2 reported from someone else's
+testing, now confirmed here.
+
+**The inbound channel works.** `bridge.inboxEntries = 1` with `untouched = true`: the
+shipped `BridgeData.lua` was executed as addon code and its receiver ran. The mechanism is
+live — it has simply never been written to by an external process yet.
+`scripts/write-bridge-data.ps1` then `/reload` is what closes that loop.
+
+**So the bridge is buildable in exactly the shape §0.2 predicted**, and the SavedVariables
+bug costs it nothing, because nothing in the design needed the client to read its own
+saves. Claude Code writes a `.lua` file; the player types `/reload`; the addon answers into
+SavedVariables; Claude Code reads that. The `/reload` is the price, and `ReloadUI()` being
+protected is what keeps it manual.
+
+### P.10 The secrecy gates, read properly
+
+With the argument arity fixed, the gates answer cleanly. Out of combat, standing in a
+field:
+
+| Gate | Value |
+|---|---|
+| `HasSecretRestrictions()` | **true** |
+| `ShouldUnitPowerBeSecret("player")` | **true** |
+| `ShouldAurasBeSecret()` | false |
+| `ShouldCooldownsBeSecret()` | false |
+| `ShouldActionCooldownBeSecret(1)` | false |
+| `ShouldUnitIdentityBeSecret("player")` | false |
+| `ShouldUnitHealthMaxBeSecret("player")` | false |
+| `ShouldUnitStatsBeSecret()` | false |
+| `C_CombatLog.IsCombatLogRestricted()` | **true** |
+| `C_RestrictedActions.GetAddOnRestrictionState()` | 0 |
+| `C_ChatInfo.AreOutgoingAddonChatMessagesRestricted()` | **true** |
+| `C_ChatInfo.InChatMessagingLockdown()` | false |
+
+Blizzard's own gate agrees with the crash in §P.2: `ShouldUnitPowerBeSecret("player")` is
+**true out of combat**, and the matching read returns `<SECRET>`. Meanwhile the reads §3
+says are gone are available — `playerAura1` returned "Seal of Righteousness" by name.
+
+So the doctrine's published description and this client disagree in both directions at
+once. Auras and cooldowns, named as removed, are readable out of combat. Class resources,
+explicitly promised as "fully non-secret", are not. Whatever rule is actually implemented,
+§3 is not a reliable guide to it, and neither is any press summary of §3.
+
+`GetAddOnRestrictionState()` returning 0 with `IsAddOnRestrictionActive()` false, while
+`HasSecretRestrictions()` is true, suggests the two systems are independent: a general
+addon-restriction state that is currently off, and per-category secrecy that is already on.
+
+### P.11 Our surface matches the capture exactly
+
+The probe's own global dump was diffed against §0's third-party capture. Every namespace
+this project cares about is **identical**: `C_AuctionHouse` 85 functions, `C_Secrets` 27,
+`C_ChatInfo` 45, `C_EncodingUtil` 10, `C_CVar` 12, `C_AssistedCombat` 4, `C_CombatLog` 11,
+`C_RestrictedActions` 3. All 269 namespaces present on both sides, none missing either way.
+
+The only difference is 88 global functions the capture has and we do not, and they are that
+author's own addons leaking into their dump — `_EBS_InCombat`, `_ECL_ApplyCombatOnlyEvents`,
+`_EUF_ReloadFrames`, `Addon_GetBankType`. Worth knowing as a methodological caveat: the
+capture's *namespace* lists are clean, its *global function* list is polluted by whatever
+was loaded at the time. Ours has one global the capture lacks, for the same reason.
+
+§0 is therefore confirmed rather than merely trusted, on a build one patch newer.
+
+---
+
 ### P.7 Consequences of P.1
 
 - **Neither live plan is touched.** The economy addon and the bridge read auction data,
@@ -560,11 +635,12 @@ presence rows are now confirmations rather than discoveries.
      which decides whether listings can be attributed at all
    - how long a full scan takes end to end, and whether it stalls the client
    `auction-addon-architecture.md` §2 and §9.
-2. **Answered 2026-09-18 (§0.2), with two caveats.** The sandbox is intact, the inbound
-   channel is the generated `.lua` file executed at load, and `C_EncodingUtil` gives both
-   directions a real wire format. The caveats are the open work: SavedVariables are not
-   read back on this build, and `ReloadUI()` is protected, so every refresh costs a human
-   typing `/reload`. `auction-addon-architecture.md` §5.
+2. **Closed 2026-09-18 by measurement (§P.9).** Outbound works — the SavedVariables file
+   is on disk and an external process can read it. Inbound works — the generated `.lua` is
+   executed as addon code and the receiver runs. The client not reading its own saves back
+   costs the design nothing, because nothing in it needed that. The price is a manual
+   `/reload` per refresh, because `ReloadUI()` is protected. The bridge is buildable; what
+   is left is building it. `auction-addon-architecture.md` §5.
 2a. Will Forever expose auction data through Blizzard's Game Data API? No Classic title
    has since late 2024, and TSM's entire architecture depends on that feed. This gates
    what *kind* of economy addon is possible, independently of question 1.
