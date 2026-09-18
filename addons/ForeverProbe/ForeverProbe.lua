@@ -59,22 +59,52 @@ end
 
 local function out(msg) DEFAULT_CHAT_FRAME:AddMessage("|cff44ddffFProbe|r " .. tostring(msg)) end
 
--- Event registration ----------------------------------------------------------
--- RegisterEvent on an event this client does not know raises an error, and an
--- error in the main chunk aborts the rest of the file - which would silently
--- remove /fprobe entirely. Every registration goes through here instead, and the
--- failures are themselves a finding worth saving.
-local registerFailures = {}
-local function safeRegister(frame, event)
-    local ok, err = pcall(frame.RegisterEvent, frame, event)
-    if not ok then
-        registerFailures[#registerFailures + 1] = event .. " (" .. tostring(err):sub(1, 60) .. ")"
+-- Block capture ---------------------------------------------------------------
+-- Declared up here rather than next to the watcher frame because safeRegister
+-- below needs to attribute blocks to the registration that caused them, and a
+-- local declared later would leave it writing to a nil global instead.
+local activeTest, blockLog = nil, {}
+
+local function blocksFor(test)
+    local hits = {}
+    for _, b in ipairs(blockLog) do
+        if b.test == test then hits[#hits + 1] = b.event .. ":" .. tostring(b.func) end
     end
-    return ok
+    return hits
 end
 
--- Block capture ---------------------------------------------------------------
-local activeTest, blockLog = nil, {}
+-- Event registration ----------------------------------------------------------
+-- Two separate things can go wrong here, and they look nothing alike:
+--
+--   1. The event does not exist on this client. RegisterEvent RAISES, and an
+--      error in the main chunk aborts the rest of the file - which would silently
+--      remove /fprobe entirely.
+--   2. The event exists but addons are not allowed to have it. Nothing is raised.
+--      The client fires ADDON_ACTION_FORBIDDEN, pops the "blocked from an action
+--      only available to the Blizzard UI" dialog, and the registration quietly
+--      does not happen. Observed at load on 2026-09-18.
+--
+-- (2) is the exact trap CLAUDE.md warns about: a pcall alone reports success.
+-- So each registration is wrapped AND attributed, and the result of both paths is
+-- recorded, because which events an addon may not even listen to is a finding in
+-- its own right.
+local registerFailures, registerBlocked = {}, {}
+local function safeRegister(frame, event)
+    local tag = "RegisterEvent:" .. event
+    activeTest = tag
+    local ok, err = pcall(frame.RegisterEvent, frame, event)
+    activeTest = nil
+    if not ok then
+        registerFailures[#registerFailures + 1] = event .. " (" .. tostring(err):sub(1, 60) .. ")"
+        return false
+    end
+    local blocked = blocksFor(tag)
+    if #blocked > 0 then
+        registerBlocked[event] = blocked[1]
+        return false
+    end
+    return true
+end
 
 local watcher = CreateFrame("Frame")
 safeRegister(watcher, "ADDON_ACTION_BLOCKED")
@@ -90,10 +120,28 @@ watcher:SetScript("OnEvent", function(_, event, addon, func)
         db.bridge.tokenWrittenThisSession = nil
         db.bridge.loads = (db.bridge.loads or 0) + 1
         out("loaded. /fprobe out of combat, then /fprobe combat mid-fight.")
+        -- The forbidden-action dialog can appear before the player types anything,
+        -- so point at the command that explains it rather than leaving the popup
+        -- looking like a fault. Deferred one tick so the block log is settled.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(1, function()
+                if #blockLog > 0 then
+                    out(("|cffffaa00%d blocked/forbidden action(s) at load|r - press Ignore on the popup,")
+                        :format(#blockLog))
+                    out("  then |cffffffff/fprobe blocked|r to see which call it was. This is data, not a fault.")
+                end
+            end)
+        end
         return
     end
     if addon == "ForeverProbe" or activeTest then
-        blockLog[#blockLog + 1] = { event = event, addon = addon, func = func, test = activeTest }
+        blockLog[#blockLog + 1] = {
+            event = event, addon = addon, func = func,
+            test = activeTest or "AT LOAD, no test running",
+        }
+        -- Straight to the DB, not at the end of a run: a block that happens at
+        -- load is the one most likely never to reach SavedVariables otherwise.
+        db.blockLog = blockLog
     end
 end)
 
@@ -136,14 +184,6 @@ clogFrame:SetScript("OnEvent", function()
     end
     clog.subevents[sub] = clog.subevents[sub] + 1
 end)
-
-local function blocksFor(test)
-    local hits = {}
-    for _, b in ipairs(blockLog) do
-        if b.test == test then hits[#hits + 1] = b.event .. ":" .. tostring(b.func) end
-    end
-    return hits
-end
 
 -- Presence scanning -----------------------------------------------------------
 local function lookup(path)
@@ -948,6 +988,28 @@ local function printBridge()
     out("  wrote token " .. db.bridge.tokenWrittenThisSession .. " - it should reappear after /reload")
 end
 
+local function printBlocked()
+    out("|cff44ddffBLOCKED / FORBIDDEN actions captured|r")
+    if #blockLog == 0 then
+        out("  none this session")
+    end
+    for i, b in ipairs(blockLog) do
+        out(("  %d. |cffff4444%s|r func=%s during: %s")
+            :format(i, tostring(b.event), tostring(b.func), tostring(b.test)))
+    end
+    local anyReg = false
+    for event, hit in pairs(registerBlocked) do
+        anyReg = true
+        out(("  |cffffaa00addons may not register|r %s  [%s]"):format(event, hit))
+    end
+    if anyReg then
+        out("  ^ this is a READ restriction at the event level - the addon is not")
+        out("  allowed to listen at all, which is stronger than masked return values.")
+    end
+    db.blockLog = blockLog
+    db.registerBlocked = registerBlocked
+end
+
 local function probeSurfaces()
     local sections = {
         read = READ_SURFACE, execute = EXECUTE_SURFACE,
@@ -966,8 +1028,9 @@ local function probeSurfaces()
     probeSecrecy("outofcombat")
     if #registerFailures > 0 then
         db.registerFailures = registerFailures
-        out("|cffffaa00events this client rejected:|r " .. table.concat(registerFailures, ", "):sub(1, 200))
+        out("|cffffaa00events this client does not have:|r " .. table.concat(registerFailures, ", "):sub(1, 200))
     end
+    printBlocked()
 
     -- Verdicts for the two live plans, so one out-of-combat run settles them
     -- without needing the combat pass at all.
@@ -1250,6 +1313,7 @@ SlashCmdList.FPROBE = function(arg)
     local cmd, sub, extra = ((arg or ""):lower()):match("^%s*(%S*)%s*(%S*)%s*(%S*)")
     cmd, sub = cmd or "", sub or ""
     if cmd == "report" then return printReport() end
+    if cmd == "blocked" then return printBlocked() end
     if cmd == "bridge" then return printBridge() end
     if cmd == "ah" then
         if sub == "scan" then return ahReplicateScan() end
