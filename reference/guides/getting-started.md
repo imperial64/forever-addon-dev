@@ -95,5 +95,6 @@ the version-check trap.
 
 - `guides/pitfalls.md` — the five things that will bite you, all measured
 - `guides/savedvariables.md` — persistence, and why it is broken on this build
+- `guides/packaging.md` — the `.toc`, the interface number, and shipping it
 - `restrictions/` — what the client will refuse, and how it refuses
 - `reference/api/` — every function, generated from the client's own documentation

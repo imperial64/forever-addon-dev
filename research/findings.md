@@ -1,6 +1,6 @@
 # Findings — WoW Forever addon capabilities
 
-Last updated 2026-09-18. This is the evidence base behind the restriction data this plugin
+Last updated 2026-09-20. This is the evidence base behind the restriction data this plugin
 ships. §P is a probe run on the beta client, and outranks everything. §0 is a third-party
 capture of the same build, fetched and queried here, which outranks every press source
 below it. The numbered sections are press and developer statements, kept for context and
@@ -17,7 +17,7 @@ fetched · **[UNVERIFIED]** surfaced in search, not independently confirmed ·
 
 ---
 
-## P. Measured on a live client (2026-09-18)
+## P. Measured on a live client (2026-09-18, extended 2026-09-20)
 
 **[PROBE — ForeverProbe, beta build 1.60.1.69913, character in Elwynn Forest, out of
 combat]** This outranks everything below it, including §0: it is behaviour observed on a
@@ -513,6 +513,10 @@ silent.
 
 ### P.21 A workflow constraint worth writing down
 
+**Superseded in part by §P.27** — a per-character saved variable *does* survive a
+`/reload`, so this constraint is liftable by moving the probe's DB to
+`## SavedVariablesPerCharacter`. Not yet done; recorded as written.
+
 `/fprobe report` needs both runs, and this build never reads SavedVariables back, so the
 out-of-combat run does not survive a `/reload`. **Both passes have to happen in one
 session**: `/fprobe`, then pull something, then `/fprobe combat`, then `/fprobe report`.
@@ -583,6 +587,410 @@ than assume.
 So an addon may drive display brightness and contrast smoothly, at frame rate, from Lua.
 
 ---
+
+### P.23 SavedVariables: the account-wide path restores nothing, and the addon-side theory is wrong
+
+**[PROBE — 2026-09-20, build 1.60.1.69913, capture
+`research/captures/ForeverProbe_2026-09-20_121944_post-sv-port-secrets.lua`]** This
+settles §12 explanation C. Read it together with **§P.27**, which was measured forty
+minutes later and narrows explanation A to the account-wide path only — two of the
+statements below are corrected there, in place.
+
+`addons/ForeverProbe/SavedVars.lua` watched four saved globals bound four different ways,
+recording each table's address at four phases. The addresses are the measurement:
+
+| Global | Binding idiom | file scope | ADDON_LOADED | PLAYER_LOGIN | ENTERING_WORLD |
+|---|---|---|---|---|---|
+| `ForeverProbeDB` | `X = X or {}` at file scope | **nil** | `…513870`, 0 keys | `…513870` | `…513870` |
+| `ForeverProbeBind` | bound only on `ADDON_LOADED` | **nil** | **nil** before bind | `…51ADE0` | `…51ADE0` |
+| `ForeverProbeClobber` | reassigned at file scope | **nil** | `…448BBB0`, 1 key | `…448BBB0` | `…448BBB0` |
+| `ForeverProbeChar` | per-character, on `ADDON_LOADED` | **nil** | **nil** before bind | `…51AE30` | `…51AE30` |
+
+Both files had been written by the previous session and were on disk when this one started
+— the account-wide one at 13.2 KB, the per-character one at 0.1 KB.
+
+**Explanation A is confirmed: the client restores nothing.** Every global is `nil` at file
+scope, which is the earliest moment addon code can look, and `ForeverProbeDB` is a table
+with **zero keys** by `ADDON_LOADED`. A table with zero keys is one this addon just created
+with `or {}`, not one the client filled.
+
+**Explanation C is refuted.** `ForeverProbeBind` is the exact idiom the
+forever-quest-markers PR prescribes — never assigned at file scope, bound and mutated only
+inside `ADDON_LOADED`. It was `nil` when that handler looked. Binding on `ADDON_LOADED`
+does not recover anything, because there is nothing there to recover. The clobber control
+behaved no differently from the safe idioms, which is what you would expect when the
+restore never happens in the first place.
+
+**§11 item 2 is wrong for this build.** Saved variables are *not* restored before addon
+Lua executes; at file scope there is nothing. And no address changes between any two
+phases, so the client never swapped a global out from under the addon at any point either.
+
+**That clears §P.9's method.** The worry recorded in §12 — that the probe's own file-scope
+`local db` might have been pointing at an orphan and manufacturing the whole result — is
+answered: the address is stable from `ADDON_LOADED` to logout, so the table the probe wrote
+into is the table the client serialised. §P.9 stands as measured.
+
+**Per-character looked dead too — that was wrong, see §P.27.** This run recorded
+`ForeverProbeChar` as `nil` at every phase and concluded it behaved like the rest. The
+conclusion did not survive: `## SavedVariablesPerCharacter` had been added to the `.toc` in
+the same edit as the probe code, so **no per-character file existed on disk when this
+session loaded**. The first session after declaring a new saved variable can never show
+restoration, and this one was read as if it could. §P.27 is the same test run once a file
+was actually there, and it comes out the other way.
+
+**Explanation B is not just open, it is the answer** — see §P.27, which was not known
+when this section was written. `ForeverProbeSeed` — the
+global this addon never writes — came back `nil`, because `scripts/seed-savedvars.ps1` had
+not been run. That is the remaining experiment: seed all four candidate WTF paths, restart,
+`/fprobe sv`.
+
+A note on the counter in this capture: `session` reads 3 on every writable global. That is
+a bug in the probe, not three sessions — `stamp()` ran once per phase and incremented each
+time. The addresses and the zero key count are the evidence; the counter is not. Fixed for
+the next run.
+
+### P.27 Per-character SavedVariables survive a `/reload` but not a restart
+
+**[PROBE — 2026-09-20 12:43 and 13:20, build 1.60.1.69913, captures
+`ForeverProbe_2026-09-20_124301_sv-restored*.lua` and `…_132303_coldstart*.lua`]**
+
+**Read the second half of this section before acting on the first.** The 12:43 run was
+taken across `/reload`s inside one client run and looked like a straightforward answer to
+§12 explanation B. The 13:20 run was taken across a full client restart and does not
+agree. The honest result is narrower than the first half alone suggests, and the first
+write-up of this section over-claimed it.
+
+One addon, one session, one load. Two saved globals, **bound by identical code** — both
+untouched at file scope, both `X = X or {}` inside the same `ADDON_LOADED` handler. The
+only difference between them is which `.toc` directive declares them, and therefore which
+file on disk they live in.
+
+`ForeverProbeChar`, declared with `## SavedVariablesPerCharacter`:
+
+```lua
+["restoredToken"]   = "124043-3623",   -- written by this addon at 12:40:43, three minutes earlier
+["restoredSession"] = 33,
+["session"]         = 34,
+["boundAt"]         = "ADDON_LOADED",
+```
+
+`ForeverProbeBind`, declared with `## SavedVariables`, in the same addon, in the same
+session:
+
+```lua
+["restoredSession"] = 0,
+["session"]         = 1,
+```
+
+`restoredToken` is captured once, before this session writes anything, so a value in it can
+only have come off disk. It holds a token from an earlier session, and the session counter
+has accumulated to 34 across previous runs. **The per-character file is read back. The
+account-wide file is not.**
+
+**So the binding idiom was never the variable, and neither was the load order.** §P.23
+controlled for the idiom and found nothing restored; this controls for it again and finds
+one of two restored. What changed is the file. The bug is scoped to
+`WTF\Account\<account>\SavedVariables\`, and `WTF\Account\<account>\<realm>\<character>\SavedVariables\`
+works.
+
+#### And then the cold start, which does not agree
+
+Run again at 13:20 after the client was **fully exited and restarted**, same addon, same
+character, with the previous session's file sitting on disk carrying token `124301-3338`:
+
+```lua
+ForeverProbeChar = {
+    ["restoredSession"] = 0,
+    ["session"]         = 1,          -- no restoredToken at all
+}
+```
+
+**Nothing was restored, per-character included.** Every global is `nil` at file scope and
+at `ADDON_LOADED-before-bind`, exactly as in §P.23.
+
+So the two runs together say:
+
+| Across | account-wide | per-character |
+|---|---|---|
+| `/reload`, inside one client run | not restored | **restored** |
+| full client restart | not restored | **not restored** |
+
+**What this means for an addon today.** Not what the first half of this section said. Settings
+do **not** survive logging out, on either directive, so there is still no persistence story
+for user configuration. What per-character buys is narrower and worth knowing anyway:
+**state survives a `/reload` within a session.**
+
+**That is not nothing — it lifts §P.21.** The two-pass probe workflow is constrained to a
+single session precisely because `/reload` discards the first pass. A per-character saved
+variable survives a `/reload`, so the out-of-combat and in-combat passes could be written
+to one and reconciled after, instead of being reconstructed by hand across captures. That
+is worth doing.
+
+**Why the two differ is not established, and the obvious guess is wrong.** "The client
+keeps globals in memory across a `/reload`" would explain the per-character result, but it
+predicts that `ForeverProbeBind` survives too, in the same Lua state — and it does not. So
+something is reading the per-character file on a reload and not on a cold start, or
+caching it per character in a way it does not for the account file. A plausible mechanism
+is that the character is not yet known at the point saved variables load on a cold start,
+but that is a guess and is labelled as one.
+
+**This also vindicates the write-once fix.** The counter and token in §P.23 were stamped
+once per phase, which overwrote `previousToken` with the current session's value and
+destroyed exactly this evidence. Had that bug still been in place, this run would have
+printed the same ambiguous `session = 3` and the finding would have been missed again.
+
+**§12 explanation B is answered: no.** The 13:20 cold start was the clean version of that
+test — seeds were sitting at `WTF\Account\SavedVariables\` and `WTF\SavedVariables\`
+and nowhere else, planted before the client started. `ForeverProbeSeed` came back `nil`,
+and both seed files are still on disk untouched afterwards. The client neither reads nor
+writes those two paths. There is no exotic WTF folder that works.
+
+### P.24 The porting checks, measured
+
+**[PROBE — same run.]** `/fprobe port`, on Abla-Imperial, realm "Classic Beta PvE" (id
+4618), build 69913, interface 16001.
+
+**The interface formula holds.** `GetBuildInfo()` gives version `1.60.1` and interface
+`16001`; `%d%02d%02d` of the triple computes `16001`; `interfaceFormulaHolds` is **true**.
+§9 confirmed on the client.
+
+**There is no Forever `WOW_PROJECT_*` constant, exactly as §10 reported.** The global table
+holds precisely three:
+
+| Constant | Value |
+|---|---|
+| `WOW_PROJECT_ID` | **1** |
+| `WOW_PROJECT_MAINLINE` | 1 |
+| `WOW_PROJECT_CLASSIC` | 2 |
+
+So `WOW_PROJECT_ID == WOW_PROJECT_MAINLINE` is **true** on this client and
+`== WOW_PROJECT_CLASSIC` is **false**, on a client that is on the Classic progression
+line. There is nothing to detect Forever with. `project-id-detection` is the right lint.
+
+**`camelot` is visible in the client's own global table.** Scanning `_G` for game-type
+shaped names returned `C_GameRules`, `GameRulesUtil`, the four `WarGameType` functions —
+and **`CamelotBankPanelItemButtonMixin`**. That is first-party confirmation of the codename
+from inside the running client, not from a branch reading. Note it is a *mixin in the UI
+code*, not a game-type accessor: nothing in `_G` reports the game type as a value, which
+is consistent with §10's "Blizzard gates on the `.toc` directive instead".
+
+**`GetCurrentRegionName()` returns an empty string.** §11 item 3 confirmed. `GetCurrentRegion()`
+returns **90**, which is not a retail region id (retail uses 1–5). Both are worth a wide
+berth.
+
+**`GetNamePlateForUnit()` raises on target-of-target, deliberately.** §11 item 4 confirmed,
+and the error message shows it is a designed refusal rather than an accident:
+
+> `bad argument #1 to '?' (Target-of-target unit tokens are not allowed for this call. -
+> Usage: local nameplate = C_NamePlate.GetNamePlateForUnit(unitToken [, includeForbidden]))`
+
+`target` returned a frame; `focus`, `mouseover` and `nameplate1` returned `nil` cleanly.
+So the raise is specific to the token, not to the call.
+
+**Realm identity: not settled, and one anomaly.** `GetRealmName()` is "Classic Beta PvE",
+`GetNormalizedRealmName()` is "ClassicBetaPvE", `GetRealmID()` is 4618, and the player GUID
+is `Player-4618-00C20142` — all stable-looking within one session, so §11 item 5 is not
+reproduced here and cannot be from a single read. But two things are odd and want another
+look:
+
+- `UnitName("player")` returned **"Abla Imperial"**, with a space, where the character's
+  WTF folder is `Abla-Imperial`. The port diary that reported realm-name instability gave
+  `"Per Ro - PvP"` as their broken key — a name with the same inserted space. That is a
+  shape, not a conclusion.
+- The WTF path uses `…\<account>\70\Abla-Imperial\…`: the realm directory is **`70`**, not
+  any form of the realm name. So the on-disk realm identity and the Lua-visible realm name
+  genuinely do not match, which is at least adjacent to what was reported.
+
+Re-run 13:20 with both return values captured: `UnitFullName("player")` gives
+**`Abla Imperial` / `ClassicBetaPvE`**. So the realm half is normal and stable, and the
+space is genuinely in the *character name* rather than being a realm string leaking into
+it — this client appears to allow a two-part name, which is itself worth knowing for
+anything that parses `name-realm`. `GetRealmName`, `GetNormalizedRealmName`, `GetRealmID`
+and the GUID all agree with each other across sessions.
+
+**§11 item 5 is not reproduced.** Realm identity looks stable here. Their AceDB key
+`"Per Ro - PvP"` now reads like the same two-part-name effect rather than realm
+instability: a name with a space, split by a key builder that assumed one word.
+
+### P.25 Unit health IS secret, out of combat — and `type()` does not reveal it
+
+**[PROBE — same run, `/fprobe secrets` out of combat and again in combat.]** This is a
+correction to this document, and it means §14 was substantially right on the point it made.
+
+Out of combat, with no target; in combat, with a target:
+
+| Read | player, out of combat | player, in combat | target, in combat |
+|---|---|---|---|
+| `UnitHealth` | **secret** | **secret** | **secret** |
+| `UnitHealthMax` | plain | plain | **secret** |
+| `UnitPower` | **secret** | **secret** | **secret** |
+| `UnitPowerMax` | plain | plain | **secret** |
+| `UnitLevel` | plain | plain | plain |
+| `UnitName`, `UnitGUID`, `UnitClass` | plain | plain | plain |
+
+Three findings, in order of how much they change.
+
+**1. `UnitHealth("player")` is secret out of combat.** This document did not have that.
+§P.3 measured `UnitPower` secret at all times and framed the doctrine as backwards for
+power specifically; health was never separately measured in both states. It behaves exactly
+like power. The always-on health gate reported in §14 is **confirmed for `UnitHealth`**.
+
+**2. `type()` reports "number" on a secret, and every numeric operation throws.** For every
+secret read above, `type(value)` is `"number"`, and each of these throws in its own `pcall`:
+
+```lua
+value > 0      -- throws
+value + 1      -- throws
+value == value -- throws
+```
+
+Equality throwing is the nasty one, because `if value == nil then` is the guard people
+write by reflex and it is not safe. **`type()` is not a secrecy check and neither is a
+comparison against nil — only `issecretvalue()` is.** This is the fourth failure shape,
+and §14's description of it — "typed as a number" but not comparable — turns out to be
+precisely accurate.
+
+`tostring()` succeeded on every secret and returned a **secret string** every time
+(`tostringSecret` true), which re-confirms §P.2 on a second class of read.
+
+**3. The gate is per unit, not only per category and combat state.** The player's own
+`UnitHealthMax` and `UnitPowerMax` stay plain in both combat states, while the target's are
+secret. So a health *fraction* is impossible for a target and half-possible for the player:
+the numerator is secret either way, and only the player's denominator is readable.
+
+**This corrects `research/restrictions.yaml`.** The `unit-power-secrecy` entry listed
+`UnitPowerMax` alongside `UnitPower` as secret at all times. On the player it is not
+secret in either state. The entry has been split accordingly.
+
+**One confound, stated plainly.** The out-of-combat pass had no target, so there are no
+out-of-combat target rows. Every target reading here was taken in combat, which means
+"secret because in combat" and "secret because it is another unit" are **not separated**
+by this run. Repeating `/fprobe secrets` out of combat with a target selected costs one
+command and would separate them.
+
+### P.26 The restriction surface is a documented taxonomy, and it is generable
+
+**[PROBE — same run, `/fprobe docs secrets`.]** §13's claim reproduces in substance, and
+the shape is more useful than the number.
+
+**29,416 documented entries walked, 5,145 of them carry a Secret-shaped key**, spread over
+**38 distinct key names**. The reported figure of 4,025 does not reproduce exactly; the
+closest bucket is the 4,076 *functions* that carry one. Different build or different
+counting — the discrepancy is not worth chasing, because the taxonomy is the finding.
+
+Discovering the key name rather than assuming it was load-bearing. There is no plain
+`Secret` field: the most common keys are `SecretArguments` (3,929 entries) and
+`NeverSecret` (942). Guessing `Secret` would have counted 12 and read as "the report is
+wrong".
+
+By kind: Function 4,076 · Payload 832 · Event 93 · Field 74 · Argument 50 · Return 20.
+
+The conditional keys are the interesting part, because they are the restriction model
+written down by Blizzard rather than inferred by us:
+
+| Key | Entries |
+|---|---|
+| `SecretInChatMessagingLockdown` | 99 |
+| `SecretReturnsForAspect` | 92 |
+| `SecretWhenUnitStatsRestricted` | 58 |
+| `SecretArgumentsAddAspect` | 55 |
+| `ConstSecretAccessor` | 46 |
+| `SecretWhenUnitIdentityRestricted` | 34 |
+| `SecretWhenAnchoringSecret` | 23 |
+| `SecretWhenUnitAuraRestricted` | 22 |
+| `SecretWhenUnitSpellCastRestricted` | 21 |
+| `ConditionalSecret` | 19 |
+| `SecretReturns` | 18 |
+| `ReturnsNeverSecret` | 16 |
+| `SecretWhenCooldownsRestricted` | 15 |
+| `SecretValue` | 12 |
+| `SecretWhenCurveSecret` | 8 |
+| `SecretWhenUnitPowerRestricted`, `SecretPayloads` | 7 each |
+| **`SecretWhenInCombat`** | **4** |
+| `SecretWhenNumericFormatterSecret`, `RequiresNonSecretAura`, `SecretWhenLuaTableHasSecretKeys`, `SecretWhenEncounterEvent`, `SecretWhenLossOfControlInfoRestricted` | 3 each |
+| `SecretWhenUnitThreatValuesRestricted`, `SecretWhenUnitThreatStateRestricted`, `SecretInActivePvPMatch`, `NeverSecretContents`, `SecretWhenUnitPossessionRestricted`, `SecretWhenTotemSlotSecret` | 2 each |
+| `SecretWhenUnitHealthMaxRestricted`, `SecretWhenUnitComparisonRestricted`, `SecretWhenAurasRestricted`, `SecretWhenUnitNameIdentityRestricted`, `SecretWhenUnitPowerMaxRestricted`, `ConditionalSecretContents` | 1 each |
+
+Three things follow.
+
+**The per-category gating model this repo measured is Blizzard's own model.** There is a
+distinct condition per category — power, power max, aura, auras, cooldowns, stats,
+identity, name identity, spell cast, threat state, threat values, health max, possession,
+loss of control, totem slot. §P.10 and §P.18 inferred that shape from the outside; here it
+is, named.
+
+**`SecretWhenInCombat` applies to only four entries.** Combat is a minor axis in this
+system, not the organising one — which is the same conclusion §P.3 and §P.25 reached by
+measurement, and the opposite of how the restriction is usually described in press
+coverage.
+
+**`SecretWhenUnitHealthMaxRestricted` exists as its own condition**, separate from anything
+for health itself. That is exactly the split §P.25 measured: health and health-max are
+gated independently.
+
+**Consequence for this repo.** The machine-readable half of `research/restrictions.yaml`
+can be *generated* from a documentation dump rather than hand-maintained one probe at a
+time, with the hand-written verdicts and prose layered on top. `/fprobe docs dump` already
+captures the projection, and `projectField`/`projectFunction` now carry a `Secret` field —
+which, given this taxonomy, should be widened to carry every key matching the pattern. Not
+done yet; recorded here as the design that the measurement now supports.
+
+### P.28 The secrecy axis is the unit, not combat
+
+**[PROBE — 2026-09-20 13:20, `/fprobe secrets` out of combat with a target selected, run
+twice: once on a friendly NPC and once on a hostile one.]** This closes the confound
+§P.25 left open, and it moves the answer.
+
+§P.25 could not separate "secret because in combat" from "secret because it is another
+unit", because the out-of-combat pass had no target. With a target selected and **no
+combat at all**:
+
+| Read | player | target (friendly NPC) | target (hostile) |
+|---|---|---|---|
+| `UnitHealth` | **secret** | **secret** | **secret** |
+| `UnitHealthMax` | plain (58) | **secret** | **secret** |
+| `UnitPower` | **secret** | **secret** | **secret** |
+| `UnitPowerMax` | plain (110) | **secret** | **secret** |
+| `UnitLevel` | plain | plain (5) | plain (1) |
+| `UnitName`, `UnitGUID`, `UnitClass` | plain | plain | plain |
+
+**Combat is not the axis. The unit is.** A target's max health and max power are secret
+standing in Elwynn Forest with nothing happening, and hostility makes no difference either
+— a friendly quest NPC and a wolf give identical results. §P.25 recorded these as
+`in-combat` only because that was the only state in which a target existed.
+
+`research/restrictions.yaml`'s `other-unit-max-values` entry has been moved from
+`in-combat` to `always` on the strength of this.
+
+**What an addon can actually read about another unit:** its level, name, GUID and class.
+Nothing numeric about its health or power, in any combat state. A target health bar is not
+buildable; a target *nameplate* with name, level and class is.
+
+**And the player keeps its own denominators.** `UnitHealthMax` and `UnitPowerMax` are plain
+on the player in every state measured, while `UnitHealth` and `UnitPower` are secret in
+every state. So even for yourself the fraction is unavailable — you can read the maximum
+and never the current value.
+
+#### Concatenation does not throw, which is how the taint spreads
+
+The per-operation flags are worth reading carefully. For every secret value, across both
+runs:
+
+```
+S . . . c        S = issecretvalue    > = comparison   + = arithmetic
+                 = = equality         c = concatenation
+                 . = that operation threw
+```
+
+Comparison, arithmetic **and equality** all throw. Concatenation does **not** — `"" .. value`
+succeeds and hands back a secret string, which is §P.2's contagion arriving through a
+second door. Together with `tostring()`, that is two silent conversions and three loud
+ones, and the silent pair are the ones an addon writes by accident in a `print` or a
+`format`.
+
+This is also a correction to how the probe measured it. Until this run the concat test was
+`"" .. tostring(value)`, which tests the `tostring` trap rather than concatenation; raw
+concatenation had never actually been tried.
 
 ### P.13 Consequences of P.1
 
@@ -898,6 +1306,282 @@ confirmed firsthand. Relevant to a notification addon if true.
 
 ---
 
+## 9. Packaging and the `.toc`: `16001` is derived, and one file covers every flavour
+
+**[PRIMARY]** Two maintained retail addons added Forever to their `.toc` in the first days
+of the beta, and both wrote down how. Fetched and read directly.
+
+- [McTalian-WoW-Addons/RPGLootFeed#617](https://github.com/McTalian-WoW-Addons/RPGLootFeed/pull/617),
+  merged 2026-09-17, shipped in v1.36.1 — credit to the RPGLootFeed maintainers.
+- [wyomarus/Wayfinder#8](https://github.com/wyomarus/Wayfinder/pull/8) — a second,
+  independent worked example, which confirms the same interface number "directly against
+  Blizzard's public version CDN" and moves to `.pkgmeta` + `@project-version@` packaging.
+
+Three things they settle between them. None needs a running client, which is why they are
+recorded here rather than queued for the probe.
+
+**The number is derived, not assigned.** From RPGLootFeed#617:
+
+> "WoW Forever beta (wow_classic_beta, 1.60.1) first appeared on wago.tools today;
+> interface version is 16001."
+
+> "BuildInfo.GetInterfaceVersion formats %d%02d%02d, so 1.60.1 -> 16001."
+
+So `16001` is a function of the version triple and will move with it. An addon that
+hardcodes it is hardcoding 1.60.1, not "Forever" — `/fprobe port` recomputes the formula
+against the client's own `GetBuildInfo()` every run, so a build bump shows up as a
+disagreement rather than as silence.
+
+**One `.toc` carries every flavour.** RPGLootFeed "packages a single TOC carrying all six
+interface versions; no per-flavor TOC splitting is involved". A comma-separated
+`## Interface` line is the answer; a `-Mainline.toc` / `-Classic.toc` split is not needed,
+and this plugin should not suggest one.
+
+**Every ordinal interface comparison silently skips Forever.** This is the one that costs
+an afternoon, and it is a build-tooling bug rather than an addon bug. RPGLootFeed's
+nightly `.toc` updater reported no work to do:
+
+> "skips a beta whose interface is numerically lower than its live product
+> (50504 > 16001), so the nightly toc-updater reports no updates."
+
+16001 sits below every live product number — retail is 120100 and climbing. Any updater,
+CI check or compatibility gate that treats a higher interface as a newer client classifies
+Forever as stale, does nothing, and reports success. The in-addon form of the same mistake,
+`select(4, GetBuildInfo()) >= 100000`, is §0.5 and the linter's `version-check-trap`; the
+build-tooling form is new here and has no automated check, because it lives in whatever
+CI the addon happens to use.
+
+**Distribution.** **[REPORTED]**
+[Auctioneer Crusade on CurseForge](https://www.curseforge.com/wow/addons/auctioneer-crusade-forever),
+updated 2026-09-18, ships under a distinct **Forever flavour** with its own download
+channel. This supersedes the earlier position that no addon site carried one. What
+CurseForge's Forever channel accepts in a `.toc` has not been checked here.
+
+---
+
+## 10. Client identity: the game type is `camelot`, and there is no `WOW_PROJECT_*` for it
+
+**[PRIMARY]** [fooxytv/CooldownManagerClassic#80](https://github.com/fooxytv/CooldownManagerClassic/issues/80)
+— the maintainer reading the `forever` branch of Blizzard's own published interface code.
+The reading is theirs; it is quoted here because it answers a question this plugin could
+not otherwise answer at all.
+
+> "Interface version `16001`, from game version 1.60.1." / "Game type `camelot`"
+
+> "`Blizzard_CooldownViewer` is `AllowLoadGameType: standard, camelot`"
+
+> "No new `WOW_PROJECT_*` constant appears anywhere in the `forever` branch"
+
+> "Forever runs the modern API surface. `C_Spell` appears in 113 files on that branch,
+> `C_SpellBook` in 40, `C_UnitAuras` in 29." / "It rides the `wow_classic` progression
+> line but shares Mainline's UI architecture."
+
+Corroborated independently by [danielcosta42/guildos#18](https://github.com/danielcosta42/guildos/pull/18),
+which describes build 1.60.1.69893 as "camelot, on the retail UI".
+
+**Why this matters more than it looks.** §0 records this client reporting `project = 1`,
+which is `WOW_PROJECT_MAINLINE` — the same value retail reports. Put together with "no new
+`WOW_PROJECT_*` constant", that gives three consequences:
+
+- **`WOW_PROJECT_ID` cannot detect Forever.** It answers `WOW_PROJECT_MAINLINE`, exactly as
+  retail does. An addon branching on it takes its retail path on both clients, which is
+  right by accident for the API surface and wrong for everything in §11.
+- **`WOW_PROJECT_ID == WOW_PROJECT_CLASSIC` is false here**, so a Classic-line addon
+  detecting its own flavour that way will not recognise the Classic-line client it is
+  running on.
+- **Blizzard's own modules gate on the `.toc` instead**, with
+  `## AllowLoadGameType: standard, camelot`. That is a load-time directive, not a runtime
+  test, and it is the mechanism the client itself uses.
+
+The linter now flags `WOW_PROJECT_ID` comparisons as `project-id-detection`. Whether a
+*third-party* `.toc` is honoured when it carries `AllowLoadGameType: camelot` is
+unmeasured — Blizzard's own modules using it does not prove the client reads it from an
+addon.
+
+---
+
+## 11. A port diary: five client differences another developer hit
+
+**[PRIMARY]** [perriekkola/perskan#22](https://github.com/perriekkola/perskan/pull/22) —
+"WoW Forever support: port fixes, hidden options, and relevance-based nameplate names". A
+real port of a nameplate addon with its failures itemised. Credit to that author: this is
+the most useful single document another developer has published about porting to this
+client.
+
+> "Forever is a Classic-line client (`_classic_beta_`, interface `16001` — 1.60.x), now
+> the third `## Interface` entry behind the two retail ones."
+
+**These are their measurements, not ours.** None has been reproduced on a client here, so
+none of them is in `research/restrictions.yaml`. Each is named below with the probe command
+that will settle it.
+
+1. **`.toc` directives must stay contiguous.** "A blank line sat between `## IconTexture`
+   and `## SavedVariables`" — the directive went unrecognised and **all saved data was
+   unloaded at login**. The header ends at the first non-directive line. This one needs no
+   client to act on: it is now the linter's `toc-header-break`, an error.
+2. **Saved variables are restored *before* addon Lua executes** — the opposite of retail. A
+   file-scope `BindPadVars = {...}` therefore overwrites restored data instead of providing
+   a stub. This is the most consequential claim in the PR and it is what §12 turns on.
+   `/fprobe sv`.
+3. **`GetCurrentRegionName()` returns an empty string** rather than a region identifier.
+   `/fprobe port`.
+4. **`GetNamePlateForUnit()` raises** on target-of-target tokens instead of returning nil.
+   `/fprobe port`.
+5. **The realm name is not a stable identity.** Their AceDB fix applies a different key
+   ruleset "on any client whose interface version is between 16000 and 20000", producing
+   keys like `"Per Ro - PvP"`. `/fprobe port`.
+
+One internal tension worth keeping in view: the PR repeats the flat claim that Forever
+"writes SavedVariables on exit and never reads them back" **while simultaneously describing
+a load order in which they are read**. Both cannot be true as stated. §12 is that thread.
+
+---
+
+## 12. The SavedVariables failure is a tracked beta bug, and its cause is contested
+
+§P.9 measured it here: the client writes the file and never reads it back. That is still
+this repo's position. What is new is that it is **filed as a bug rather than settled
+behaviour**, and that three published explanations disagree about the cause — two of which
+would make it the addon's fault, and therefore avoidable.
+
+**It is tracked and unfixed.** **[PRIMARY]**
+[ClassicWoWCommunity/forever-bugs#34](https://github.com/ClassicWoWCommunity/forever-bugs/issues/34),
+"Addon settings reset after reload despite SavedVariables being written to disk", opened
+2026-09-18 against build 69913 / interface 16001 — the same build as §P, which is a useful
+corroboration of the build — **still open, no Blizzard acknowledgement**, multiple addons,
+cross-platform. So any guidance built on this carries an expiry and should be re-checked
+on every new build.
+
+**Explanation A: the client restores nothing.** What §P.9 measured, and what the official
+forum threads describe. **[PRIMARY]**
+[EU forums, 2026-09-18](https://eu.forums.blizzard.com/en/wow/t/wow-forever-game-not-save-any-addons-settings/629470)
+— fetched, no staff reply — carries a clean minimal repro: a bare test addon, everything
+else disabled, writes `["test"] = 6`; after a fresh restart `/dump` returns empty, and the
+next client close overwrites the file with empty values. A bare test addon should not be
+hitting explanation C, which is what makes this the strongest evidence for A.
+
+**Explanation B: only some WTF paths are read.** **[PRIMARY]**
+[US forums, 2026-09-18](https://us.forums.blizzard.com/en/wow/t/uiaddon-settings-wiped-on-client-restart/2353992)
+— fetched, no staff reply. User UDrew reports that only top-level `WTF\SavedVariables`
+files load, while the account-scoped ones are ignored. Note that the EU repro above used
+`WTF\Account\SavedVariables\` — directly under `Account`, with no account segment — so
+there are at least three candidate paths in circulation and the reports do not agree on
+which one the client writes, let alone which it reads.
+
+**Explanation C: the addon clobbers the restored table.** **[REPORTED]**
+[TylerAkins/forever-quest-markers#21](https://github.com/TylerAkins/forever-quest-markers/pull/21),
+"Fix options not sticking by binding SavedVariables in place":
+
+> "Previous fixes replaced the SavedVariables table or delayed creating it until
+> PLAYER_ENTERING_WORLD. Forever then serialized the original empty table. **Working
+> addons bind the TOC global on `ADDON_LOADED` and only mutate that table.**"
+
+Read together with §11 item 2, this is coherent: the client *does* restore the table, the
+addon's own file-scope initialiser replaces it, and exit serialises the replacement.
+**Do not over-read it.** By its own admission the PR was not tested against the live beta,
+and what actually fixed their persistence was unrelated — "Deleting the leftover
+`ForeverQuestPins.lua` files fixed persist on current main, without this PR." The PR calls
+itself defensive hardening.
+
+**Why this is not already answered here.** §P.9 and `reference/guides/savedvariables.md`
+record a pre-seeded file that never arrived and a load counter stuck at 1, which argues for
+A. But the probe reached that result through `ForeverProbeDB = ForeverProbeDB or {}` at
+file scope, and whether that idiom is safe depends entirely on the load order in §11 item 2
+— which nobody has measured. Under retail's order the `local db` taken on the next line
+points at an orphaned table, and the counter would read 1 forever *even if the client
+restored perfectly*. The existing measurement cannot tell that apart from A.
+
+**What settles it.** `addons/ForeverProbe/SavedVars.lua`, reported by `/fprobe sv`. It
+loads first in the `.toc` and records four saved globals bound four different ways —
+including each table's **address** — at file scope, `ADDON_LOADED`, `PLAYER_LOGIN` and
+`PLAYER_ENTERING_WORLD`. An address that changes between phases is the client swapping the
+global out from under the addon, which reads the load order directly rather than inferring
+it. `scripts/seed-savedvars.ps1` covers B by writing a differently tokenised file into all
+four candidate WTF paths at once, so whichever token arrives names the path that works.
+One session settles A, B and C together.
+
+---
+
+## 13. The Secret surface may be countable from the client's own documentation
+
+**[PRIMARY]** [danielcosta42/guildos#18](https://github.com/danielcosta42/guildos/pull/18)
+— "Ready for the WoW: Forever beta: Secret Values, the client read from the build, and the
+probe". Credit to that author for both figures below.
+
+> "Forever runs the retail Secret Values system (4,025 documented entries carry Secret
+> fields; Anniversary has 3)."
+
+> "In chat messaging lockdown a `CHAT_MSG_*` line and its sender arrive secret."
+
+It also states that a restricted unit's "name, class and GUID, and stats **while
+restricted**" can arrive as secret values — conditional wording, consistent with this
+repo's per-category gating rather than a blanket rule.
+
+Their generator method is a second, independent path to the reference this plugin builds:
+
+> "`tools/forever-scan/` does it again for a new build: API documentation from wago.tools'
+> CASC endpoint for both clients, indexed with luajit, compared with the probe's inventory
+> and checked against Blizzard's Lua and both executables."
+
+Two consequences worth acting on:
+
+- **If 4,025 reproduces, the restriction list becomes a build artefact.** Today
+  `research/restrictions.yaml` is hand-maintained from black-box probing, one function at a
+  time. A `Secret` field on the documented entries would mean the machine-readable part can
+  be *generated*, leaving only the verdicts and the prose hand-written. `/fprobe docs
+  secrets` counts it — and *discovers* the key name rather than assuming it is spelled
+  `Secret`, because assuming the retail name is exactly how §P.22 would have gone wrong.
+- **The wago.tools CASC endpoint is a second source for the reference** that needs no
+  running client, which matters for regenerating against a build nobody has logged into
+  yet.
+
+The chat-lockdown line also gives the first concrete behaviour behind the
+`InChatMessagingLockdown` / `AreOutgoingAddonChatMessagesRestricted` flags already recorded
+in §0.3. Unmeasured here.
+
+---
+
+## 14. A contradicted claim: that unit health is secret at all times
+
+**[UNVERIFIED]** [wowforeverbuilds.com, 2026-09-18](https://wowforeverbuilds.com/news/what-the-wow-forever-beta-breaks-for-addons-secret-health-values-dead-secure-sni)
+— bylined only "WoW Forever Builds News Desk". Unknown site, no named author; not on the
+excluded-SEO list, but not established either. Fetched and read, not taken from a snippet.
+It claims hands-on testing against build 1.60.1.69913, the same build as §P.
+
+> "Unit health comes back as a secret value that addons cannot compare or calculate with."
+
+It frames the restriction as **always-on rather than combat-only**, says
+`UnitHealth("player")` returns something typed as a number that addons "cannot compare or
+do arithmetic with", and adds that "Blizzard's own frames are unaffected — the restriction
+targets tainted addon code".
+
+**This contradicts §P.3, §P.10 and §P.18 in a specific, testable way.** ForeverProbe
+measured, out of combat, that `ShouldUnitPowerBeSecret(player)` is true while auras and
+cooldowns are not — the published doctrine backwards in both directions, gated per
+category. A blanket always-on health gate is a different model of the same client. It is
+recorded here rather than dismissed because the *shape* of the claim is new and useful: a
+value that is typed as a number and still refuses comparison is a fourth failure mode this
+repo's read tests could not have detected, because they only record what came back.
+
+**How it gets settled.** `/fprobe secrets`, in and out of combat. It separates masked (a
+plain value that may still be a lie), secret (comparison and arithmetic both throw),
+half-secret (secret, but arithmetic works — which is what this article actually describes)
+and plain, per unit and per read, with each operation in its own `pcall`. Until that runs,
+treat the claim as a lead. If it is wrong, it is another instance of confident secondary
+reporting that the restriction chapter should contradict by name.
+
+One part of the article corroborates something already on file, with a new detail — the
+missing `loadstring_untainted`:
+
+> "Blizzard's restricted-environment code, `RestrictedExecution.lua`, fetches an engine
+> function called `loadstring_untainted` at line 22 and calls it at line 79. The Forever
+> client never provides it."
+
+— producing "`RestrictedExecution.lua:79: attempt to call a nil value`". That file and line
+number are new, and they match the GSE #2110 report already recorded in §0.2.
+
+---
+
 ## What is still unmeasured
 
 Everything above is either measured or attributed. These are the gaps, listed so that
@@ -930,3 +1614,27 @@ nothing here is mistaken for a complete account of the client.
   restrictions" (§1) is as specific as the on-record statements get. Everything in this
   document about what is permitted comes from measurement, which is why it is measurement
   rather than citation.
+
+Sections 9 to 14 are other developers' findings, fetched and credited. Most were measured
+here on 2026-09-20 (§P.23 to §P.26); what remains open is listed below. Nothing from those
+sections entered `research/restrictions.yaml` until it had been measured — §P.25 is the one
+that did, and it both added an entry and corrected an existing one.
+
+- **Why per-character survives a `/reload` and not a cold start** (§P.27). The behaviour is
+  measured; the mechanism is not, and the obvious explanation (globals kept in memory
+  across a reload) is refuted by the account-wide global in the same Lua state not
+  surviving. Not blocking anything, but it decides how much to trust the reload case.
+- **Moving the probe's own DB to `## SavedVariablesPerCharacter`** to lift §P.21's
+  one-session constraint. Measured as possible, not yet done.
+- **Whether a target's max values are secret out of combat** — answered, §P.28: yes, and
+  hostility makes no difference. Listed here only because §P.25 left it open.
+- **Whether a third-party `.toc` honours `## AllowLoadGameType: camelot`** (§10). Nothing
+  in `_G` reports the game type as a value, so the directive is the only candidate
+  mechanism and it is untested from an addon.
+- **Whether the restriction data can actually be generated from the documentation**
+  (§P.26). The taxonomy is measured; the generator does not consume it yet.
+  `projectField`/`projectFunction` capture a single `Secret` field and should be widened to
+  every key matching the pattern.
+- **`SecureActionButtonTemplate:SetAttribute` in combat**, the three `C_Secrets` gates with
+  no out-of-combat value, `/fprobe video` in combat, exclusive fullscreen, beta-realm
+  scale, and the `ReplicateItems` throttle bracket — all as listed above, unchanged.

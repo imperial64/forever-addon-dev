@@ -2,6 +2,11 @@
 
 # UnitHealth
 
+> **SECRET — measured, at all times.** Unit health is secret at ALL times, including out of combat.
+> Measured 2026-09-20 on build 69913. Evidence: §P.25, §P.28 in [findings](../../../../research/findings.md).
+> 
+> _Workaround:_ None for the number. The player's own UnitHealthMax is readable, so a denominator is available while the numerator is not; for any other unit neither is. Hand values to Blizzard's own widgets rather than reading them.
+
 ```lua
 result = UnitHealth(unit, usePredicted)
 ```

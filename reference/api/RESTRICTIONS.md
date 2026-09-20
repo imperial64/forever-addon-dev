@@ -12,12 +12,14 @@ Everything here was measured against a running client. Blizzard's own documentat
 | `C_AssistedCombat.IsAvailable`, `C_AssistedCombat.GetRotationSpells` | **PERMITTED** | always | C_AssistedCombat exists but reports itself unavailable. |
 | `COMBAT_LOG_EVENT`, `COMBAT_LOG_EVENT_UNFILTERED` | **FORBIDDEN** | always | Addons may not register for the combat log, in either form. |
 | `C_CVar.SetCVar`, `SetCVar` | **PERMITTED** | always | Display brightness and contrast ARE addon-writable, live, at frame rate. |
+| `UnitHealthMax`, `UnitPowerMax` | **SECRET** | always | Another unit's max health and max power are secret at ALL times; the player's own are never secret. |
 | `ReloadUI` | **FORBIDDEN** | always | An addon cannot reload the UI. A human must type /reload. |
 | `C_AuctionHouse.ReplicateItems` | **FAILS SILENTLY** | always | A throttled full scan returns an EMPTY MARKET, not an error. |
 | `retail-graphics-cvar-names-absent` | **CAUTION** | always | gxBrightness, gxContrast and gxGamma do NOT exist on this client. |
-| `savedvariables-not-read-back` | **BROKEN ON THIS BUILD** | always | The client writes SavedVariables and never reads them back. |
+| `savedvariables-not-read-back` | **BROKEN ON THIS BUILD** | always | The client writes ACCOUNT-WIDE SavedVariables and never reads them back. Per-character saved variables are read back normally. |
 | `secret-value-contagion` | **CAUTION** | always | tostring() on a secret value returns a SECRET STRING. The taint survives conversion. |
-| `UnitPower`, `UnitPowerMax` | **SECRET** | always | Unit power is secret at ALL times, including out of combat. |
+| `UnitHealth` | **SECRET** | always | Unit health is secret at ALL times, including out of combat. |
+| `UnitPower` | **SECRET** | always | Unit power is secret at ALL times, including out of combat. |
 | `unknown-event-registration-throws` | **CAUTION** | always | RegisterEvent on an event this client does not have RAISES, aborting the rest of the file. |
 | `UseAction` | **FORBIDDEN** | always | UseAction fires ADDON_ACTION_FORBIDDEN in and out of combat. |
 | `C_UnitAuras` | **SECRET** | in-combat | Aura reads RAISE in combat. They do not return nil. |
@@ -92,13 +94,21 @@ Brightness, Contrast and Gamma carry no lock flags - GetCVarInfo reports isLocke
 
 _Evidence: §P.22 in `research/findings.md`._
 
+## other-unit-max-values
+
+Another unit's max health and max power are secret at ALL times; the player's own are never secret.
+
+Measured 2026-09-20. On the player, UnitHealthMax and UnitPowerMax are plain numbers in every state measured. On a target, both are secret in every state measured - including standing out of combat, on a friendly quest NPC and on a hostile mob alike. Hostility makes no difference. So the axis is the UNIT, not combat. This was first recorded as in-combat because the out-of-combat pass had no target selected; re-running it with one moved the scope to always. What stays readable about another unit: level, name, GUID and class.
+
+_Evidence: §P.25, §P.28 in `research/findings.md`._
+
 ## readable-in-combat
 
 Unit identity, max health, spell casts and threat state stay readable in combat.
 
-Measured false on their gates while in combat: ShouldUnitIdentityBeSecret, ShouldUnitHealthMaxBeSecret, ShouldUnitSpellCastBeSecret, ShouldUnitThreatStateBeSecret. Cast bars work. Recorded because "addons cannot see combat" is the common summary and it is wrong.
+Measured false on their gates while in combat: ShouldUnitIdentityBeSecret, ShouldUnitHealthMaxBeSecret, ShouldUnitSpellCastBeSecret, ShouldUnitThreatStateBeSecret. Cast bars work. Recorded because "addons cannot see combat" is the common summary and it is wrong. Max health is readable ON THE PLAYER. Measured 2026-09-20 by value, a TARGET's UnitHealthMax is secret in combat while the player's is not, so ShouldUnitHealthMaxBeSecret answers per unit and the gate above was read for the player. See other-unit-max-values. Unit identity holds up by value too: UnitName, UnitGUID, UnitClass and UnitLevel are all plain on both the player and the target, in and out of combat.
 
-_Evidence: §P.18 in `research/findings.md`._
+_Evidence: §P.18, §P.25 in `research/findings.md`._
 
 ## reloadui-protected
 
@@ -130,23 +140,23 @@ _Evidence: §P.22 in `research/findings.md`._
 
 ## savedvariables-not-read-back
 
-The client writes SavedVariables and never reads them back.
+The client writes ACCOUNT-WIDE SavedVariables and never reads them back. Per-character saved variables are read back normally.
 
-Every addon starts from defaults on every launch. Measured: the load counter stays at 1 across sessions and no token survives a /reload, while the file itself lands on disk correctly. Outbound works; the in-client round trip does not. Reported as a beta bug rather than a policy decision.
+An addon declaring ## SavedVariables starts from defaults on every launch. Measured: the load counter stays at 1 across sessions and no token survives a /reload, while the file itself lands on disk correctly. Outbound works; the in-client round trip does not. Reported as a beta bug rather than a policy decision. Partly scoped on 2026-09-20, and the scope depends on WHAT you reload. Across a /reload inside one client run, a per-character global came back carrying a token from an earlier session while an account-wide global bound by identical code in the same handler came back empty. Across a full client restart, neither came back. So the account-wide path is dead in both cases, and the per-character path works only within a client run. Also measured: the two exotic WTF paths other developers named - WTF\Account\SavedVariables\ and WTF\SavedVariables\ - are neither read nor written. Files seeded there before a cold start were still untouched afterwards.
 
-**Workaround.** An external process writes Lua into the AddOns folder and the client executes it as addon code at load. That inbound channel works; it costs a manual /reload per refresh.
+**Workaround.** None for persistence across sessions. ## SavedVariablesPerCharacter does NOT survive logging out either - measured on a cold start - so there is no way to keep user settings between play sessions on this build. It does survive a /reload, which the account-wide path does not. That is worth using for state an addon needs to carry across a reload inside one session, and it is what lifts the one-session constraint on the probe's own two-pass workflow (P.21). For data coming from outside the game, an external process writes Lua into the AddOns folder and the client executes it as addon code at load. That inbound channel works; it costs a manual /reload per refresh.
 
-_Evidence: §P.9, §0.2 in `research/findings.md`._
+_Evidence: §P.9, §P.23, §P.27, §0.2 in `research/findings.md`._
 
 ## secret-value-contagion
 
 tostring() on a secret value returns a SECRET STRING. The taint survives conversion.
 
-A pcall around the read reports success and hands back a value that throws later, wherever it is next indexed - usually a print or a format, far from the read. This took the probe down mid-run. Worse, a secret string stored in SavedVariables would take the whole flush with it.
+A pcall around the read reports success and hands back a value that throws later, wherever it is next indexed - usually a print or a format, far from the read. This took the probe down mid-run. Worse, a secret string stored in SavedVariables would take the whole flush with it. Two things measured 2026-09-20 that make this harder to spot than it looks. type() reports "number" on a secret number, so a type check is NOT a secrecy check. And EQUALITY throws: `value == value` raises, which means the reflexive `if value == nil then` guard is itself unsafe on a secret. Comparison and arithmetic throw as expected; equality throwing is the one that catches people, because it is the guard they wrote to be careful.
 
-**Workaround.** Use issecretvalue before AND after conversion. The client also provides issecrettable, hasanysecretvalues, scrub, scrubsecretvalues, canaccesssecrets, secretwrap and dropsecretaccess.
+**Workaround.** issecretvalue is the only safe test - not type(), not a comparison against nil. Use it before AND after conversion. The client also provides issecrettable, hasanysecretvalues, scrub, scrubsecretvalues, canaccesssecrets, secretwrap and dropsecretaccess.
 
-_Evidence: §P.2 in `research/findings.md`._
+_Evidence: §P.2, §P.25, §P.28 in `research/findings.md`._
 
 ## secure-setattribute-in-combat
 
@@ -164,13 +174,23 @@ ShouldUnitThreatValuesBeSecret() is true in combat while ShouldUnitThreatStateBe
 
 _Evidence: §P.18 in `research/findings.md`._
 
+## unit-health-secrecy
+
+Unit health is secret at ALL times, including out of combat.
+
+Measured 2026-09-20 on the player, standing still with no target and again in combat: UnitHealth("player") is a secret value in both states, and so is a target's. It behaves exactly like UnitPower. This was added late. Earlier runs measured power in both states and health only incidentally, so the document carried an always-on gate for power and nothing for health. A secondary report claiming health was always secret turned out to be right on that point.
+
+**Workaround.** None for the number. The player's own UnitHealthMax is readable, so a denominator is available while the numerator is not; for any other unit neither is. Hand values to Blizzard's own widgets rather than reading them.
+
+_Evidence: §P.25, §P.28 in `research/findings.md`._
+
 ## unit-power-secrecy
 
 Unit power is secret at ALL times, including out of combat.
 
-ShouldUnitPowerBeSecret("player") is true standing still with no target, and UnitPower("player") returns a secret value in both combat states. This directly contradicts Blizzard's published doctrine, which promises that "all class secondary resources remain fully non-secret". Measured twice, in both states, by gate and by value. Either the doctrine does not describe this client or this is a beta bug.
+ShouldUnitPowerBeSecret("player") is true standing still with no target, and UnitPower("player") returns a secret value in both combat states. This directly contradicts Blizzard's published doctrine, which promises that "all class secondary resources remain fully non-secret". Measured twice, in both states, by gate and by value. Either the doctrine does not describe this client or this is a beta bug. UnitPowerMax was listed here until 2026-09-20 and has been moved out: on the PLAYER it is not secret in either combat state. See other-unit-max-values.
 
-_Evidence: §P.3, §P.10, §P.18 in `research/findings.md`._
+_Evidence: §P.3, §P.10, §P.18, §P.25 in `research/findings.md`._
 
 ## unit-stats-secrecy
 
