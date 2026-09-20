@@ -12,8 +12,12 @@ It will therefore miss things. It is built to be quiet and specific rather than
 thorough: a linter that cries wolf on a probe addon gets turned off, and then it
 catches nothing at all.
 
+The `.toc` is linted too, because two of the mistakes that cost other porters a
+day are header mistakes, not code mistakes.
+
 Usage:
     python tools/lint_addon.py path/to/Addon.lua [more.lua ...]
+    python tools/lint_addon.py path/to/Addon.toc
     python tools/lint_addon.py path/to/AddonFolder/
 
 Suppressing a finding. Some addons call forbidden things deliberately - a probe
@@ -23,7 +27,10 @@ the line above it:
     UseAction(1)  -- lint-allow: forbidden-call - measuring the refusal on purpose
 
 The reason is required. A bare suppression is itself reported, because a
-suppression with no stated reason is indistinguishable from a mistake.
+suppression with no stated reason is indistinguishable from a mistake. In a
+`.toc` the same suppression is written with the `.toc` comment marker:
+
+    # lint-allow: toc-no-forever-interface - retail-only build of this addon
 """
 
 from __future__ import annotations
@@ -39,6 +46,17 @@ REPO = Path(__file__).resolve().parent.parent
 
 # A Lua comment may sit on the offending line or the line above it.
 _SUPPRESS = re.compile(r"--\s*lint-allow:\s*([\w-]+)\s*(?:-+\s*(?P<reason>.+))?$")
+# The same thing spelled for a .toc, whose comment marker is `#`. Kept separate
+# from _SUPPRESS rather than folded into it: `#` is Lua's length operator, and a
+# shared pattern would let `#t -- lint-allow: ...` mean two things at once.
+_TOC_SUPPRESS = re.compile(r"#\s*lint-allow:\s*([\w-]+)\s*(?:-+\s*(?P<reason>.+))?$")
+
+# `## Directive: value` in a .toc. Anything else is a comment, a file entry or
+# blank, and the difference is what the header-break rule turns on.
+_TOC_DIRECTIVE = re.compile(r"^##\s*([A-Za-z][\w-]*)\s*:\s*(.*)$")
+
+# The directives that name a global the client will restore and re-serialise.
+_SV_DIRECTIVES = ("savedvariables", "savedvariablespercharacter")
 
 # Call sites: C_Foo.Bar( ... ) and bare Baz( ... ). Deliberately not trying to
 # handle method calls or aliases - see the module docstring.
@@ -55,6 +73,14 @@ _VERSION_TRAP = re.compile(
 
 # tostring() wrapped straight around a read that can return a secret.
 _TOSTRING = re.compile(r"\btostring\s*\(\s*([A-Za-z_][\w.]*)\s*\(")
+
+# An assignment at column 0 - file scope, near enough for a regex. The RHS is
+# deliberately not captured: strings are blanked before matching, so the RHS has
+# to be read back off the raw line. `=(?!=)` keeps `==` out.
+_FILE_SCOPE_ASSIGN = re.compile(r"^([A-Za-z_]\w*)\s*=(?!=)\s*")
+
+# WOW_PROJECT_ID on either side of a comparison.
+_PROJECT_ID = re.compile(r"\bWOW_PROJECT_ID\b\s*[=~]=|[=~]=\s*\bWOW_PROJECT_ID\b")
 
 # Strings and comments, blanked before matching so a mention is not a call.
 #
@@ -140,30 +166,35 @@ class Rules:
         return "findings " + ", ".join(str(r) for r in refs) if refs else ""
 
 
-def _suppressions(lines: list[str]) -> dict[int, tuple[str, str | None]]:
-    """Map line number -> (rule, reason) for suppressions that apply to it."""
+def _suppressions(lines: list[str], pattern: re.Pattern[str] = _SUPPRESS,
+                  comment: str = "--") -> dict[int, tuple[str, str | None]]:
+    """Map line number -> (rule, reason) for suppressions that apply to it.
+
+    The pattern and comment marker are arguments only so a .toc can be scanned
+    with `#`; the Lua defaults are the ones every caller but lint_toc wants.
+    """
     found: dict[int, tuple[str, str | None]] = {}
     for index, raw in enumerate(lines, start=1):
-        match = _SUPPRESS.search(raw)
+        match = pattern.search(raw)
         if not match:
             continue
         rule = match.group(1)
         reason = (match.group("reason") or "").strip() or None
         found[index] = (rule, reason)
         # A suppression on its own line covers the line below it.
-        if raw.strip().startswith("--"):
+        if raw.strip().startswith(comment):
             found[index + 1] = (rule, reason)
     return found
 
 
-def lint_file(path: Path, rules: Rules) -> list[Finding]:
-    text = path.read_text(encoding="utf-8", errors="replace")
-    lines = text.split("\n")
-    suppressed = _suppressions(lines)
-    code = _blank_out(text)
-    code_lines = code.split("\n")
-    findings: list[Finding] = []
+def _adder(path: Path, suppressed: dict[int, tuple[str, str | None]],
+           findings: list[Finding]):
+    """Build the `add` a linting pass reports through.
 
+    Shared by lint_file and lint_toc so the suppression rules - including that a
+    reasonless suppression is itself a finding - cannot drift apart between the
+    two file kinds.
+    """
     def add(line: int, rule: str, severity: str, message: str, evidence: str = "") -> None:
         held = suppressed.get(line)
         if held and held[0] == rule:
@@ -175,6 +206,39 @@ def lint_file(path: Path, rules: Rules) -> list[Finding]:
                 ))
             return
         findings.append(Finding(path, line, rule, severity, message, evidence))
+    return add
+
+
+def _declared_sv_globals(directory: Path) -> set[str]:
+    """Globals a sibling .toc asks the client to save and restore.
+
+    Every *.toc in the directory counts and they are unioned: an addon may ship
+    one .toc per flavour, and a global saved under any of them is still one this
+    file must not clobber.
+
+    Directives that land after a header break count too, even though the client
+    ignores them. lint_toc reports that break separately; taking the author at
+    their word here keeps one bug from hiding the other.
+    """
+    names: set[str] = set()
+    for toc in sorted(directory.glob("*.toc")):
+        text = toc.read_text(encoding="utf-8", errors="replace")
+        for raw in text.split("\n"):
+            match = _TOC_DIRECTIVE.match(raw.strip())
+            if match and match.group(1).lower() in _SV_DIRECTIVES:
+                names.update(part.strip() for part in match.group(2).split(",") if part.strip())
+    return names
+
+
+def lint_file(path: Path, rules: Rules) -> list[Finding]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = text.split("\n")
+    suppressed = _suppressions(lines)
+    code = _blank_out(text)
+    code_lines = code.split("\n")
+    findings: list[Finding] = []
+    add = _adder(path, suppressed, findings)
+    sv_globals = _declared_sv_globals(path.parent)
 
     raw_lines = lines
     for number, source in enumerate(code_lines, start=1):
@@ -234,6 +298,34 @@ def lint_file(path: Path, rules: Rules) -> list[Finding]:
                     "issecretvalue before and after conversion.",
                     "findings P.2")
 
+        # -- clobbering a restored SavedVariables table -------------------
+        #
+        # `Name = Name or {}` is the safe idiom and must stay silent: it keeps
+        # whatever was restored. Only an unconditional assignment is the bug.
+        assignment = _FILE_SCOPE_ASSIGN.match(source) if sv_globals else None
+        if assignment and assignment.group(1) in sv_globals:
+            name = assignment.group(1)
+            # Blanking preserves offsets, so the blanked match indexes the raw
+            # line - which is where the right-hand side has survived.
+            rhs = raw[assignment.end():].strip()
+            if not re.match(rf"{re.escape(name)}\s+or\b", rhs):
+                add(number, "sv-file-scope-init", "warning",
+                    f"`{name}` is declared in the .toc, and this client loads saved "
+                    "variables around addon file execution. An unconditional file-scope "
+                    "assignment replaces the restored table, and the client then "
+                    "serialises the empty one. Bind the global inside an ADDON_LOADED "
+                    "handler and only mutate it.",
+                    "findings 11, 12")
+
+        # -- WOW_PROJECT_ID cannot see Forever ----------------------------
+        if _PROJECT_ID.search(source):
+            add(number, "project-id-detection", "warning",
+                "Forever ships no `WOW_PROJECT_*` constant of its own and reports "
+                "`WOW_PROJECT_MAINLINE`, so `WOW_PROJECT_ID` cannot tell it from retail. "
+                "Blizzard's own modules gate on the .toc directive "
+                "`## AllowLoadGameType: standard, camelot` instead.",
+                "findings 10")
+
     return findings
 
 
@@ -262,12 +354,76 @@ def _report_entry(add, line: int, symbol: str, entry: dict[str, Any], rules: Rul
             f"`{symbol}`: " + summary, evidence)
 
 
+def lint_toc(path: Path, rules: Rules) -> list[Finding]:
+    """Check an addon's .toc header.
+
+    `rules` is unused. The signature matches lint_file so main can hand a path
+    to whichever suits its suffix, and nothing in the restriction data has
+    anything to say about a .toc yet.
+    """
+    lines = path.read_text(encoding="utf-8", errors="replace").split("\n")
+    findings: list[Finding] = []
+    add = _adder(path, _suppressions(lines, _TOC_SUPPRESS, "#"), findings)
+
+    interfaces: list[tuple[int, str]] = []
+    seen_directive = False
+    header_ended = False
+    for number, raw in enumerate(lines, start=1):
+        stripped = raw.strip()
+        directive = _TOC_DIRECTIVE.match(stripped)
+        if directive:
+            name, value = directive.group(1), directive.group(2).strip()
+            if header_ended:
+                add(number, "toc-header-break", "error",
+                    f"`## {name}` sits below the end of the header - a blank line or a "
+                    "file entry above it closed it. The client stops reading directives "
+                    "there and does not say so; a `## SavedVariables` below the break "
+                    "means the addon's saved data is dropped at login. Keep every "
+                    "directive contiguous at the top.",
+                    "findings 11")
+                # One report per break. The directives after it are contiguous
+                # with this one, and naming them all would bury the fix.
+                header_ended = False
+            seen_directive = True
+            if name.lower() == "interface":
+                interfaces.append((number, value))
+            continue
+        if stripped.startswith("#"):
+            continue  # a plain comment does not end the header
+        if seen_directive:
+            header_ended = True  # blank line, or the file list has started
+
+    if interfaces:
+        versions = {part.strip()
+                    for _, value in interfaces
+                    for part in value.split(",") if part.strip()}
+        if "16001" not in versions:
+            add(interfaces[0][0], "toc-no-forever-interface", "note",
+                "No `## Interface: 16001`, so this addon does not load on Forever. One "
+                ".toc may carry several comma-separated interface versions - "
+                "`## Interface: 110107, 16001` - so adding Forever does not mean "
+                "splitting the .toc per flavour.",
+                "findings 9")
+
+    return findings
+
+
 def iter_lua(targets: Iterable[Path]) -> list[Path]:
     files: list[Path] = []
     for target in targets:
         if target.is_dir():
             files.extend(sorted(target.rglob("*.lua")))
         elif target.suffix == ".lua":
+            files.append(target)
+    return files
+
+
+def iter_toc(targets: Iterable[Path]) -> list[Path]:
+    files: list[Path] = []
+    for target in targets:
+        if target.is_dir():
+            files.extend(sorted(target.rglob("*.toc")))
+        elif target.suffix == ".toc":
             files.append(target)
     return files
 
@@ -290,14 +446,17 @@ def main() -> int:
     rules = Rules(json.loads(args.api.read_text(encoding="utf-8")),
                   json.loads(args.restrictions.read_text(encoding="utf-8")))
 
-    files = iter_lua(args.targets)
-    if not files:
-        print("no .lua files found", file=sys.stderr)
+    lua_files = iter_lua(args.targets)
+    toc_files = iter_toc(args.targets)
+    if not lua_files and not toc_files:
+        print("no .lua or .toc files found", file=sys.stderr)
         return 2
 
     findings: list[Finding] = []
-    for path in files:
+    for path in lua_files:
         findings.extend(lint_file(path, rules))
+    for path in toc_files:
+        findings.extend(lint_toc(path, rules))
 
     order = {"error": 0, "warning": 1, "note": 2}
     findings.sort(key=lambda f: (str(f.path), f.line, order.get(f.severity, 3)))
@@ -307,7 +466,8 @@ def main() -> int:
     errors = sum(1 for f in findings if f.severity == "error")
     warnings = sum(1 for f in findings if f.severity == "warning")
     if not args.quiet:
-        print(f"\n{len(files)} file(s), {errors} error(s), {warnings} warning(s), "
+        print(f"\n{len(lua_files) + len(toc_files)} file(s), {errors} error(s), "
+              f"{warnings} warning(s), "
               f"{len(findings) - errors - warnings} note(s)")
         if not findings:
             print("clean against build "

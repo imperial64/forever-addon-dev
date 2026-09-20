@@ -45,3 +45,18 @@ C_AuctionHouse.QueryAuctionItems("list")
 
 -- A suppression with no reason is itself a finding.
 UseAction(2)  -- lint-allow: forbidden-call
+
+-- Declared `## SavedVariables` in BadAddon.toc. This client restores that table
+-- around addon file execution, so an unconditional assignment throws the
+-- restored data away and the client serialises the empty one at logout.
+BadAddonDB = {}
+
+-- The same thing done right, and the line that proves the rule does not
+-- over-fire: `X = X or {}` keeps whatever was restored. No finding here, and
+-- test_lint.py asserts that explicitly.
+BadAddonCharDB = BadAddonCharDB or {}
+
+-- There is no WOW_PROJECT_FOREVER; this client answers WOW_PROJECT_MAINLINE.
+if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+    local retail = true
+end
