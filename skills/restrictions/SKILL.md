@@ -59,12 +59,14 @@ whether it is currently restricted, instead of inferring it from a masked value.
 | Paired CVars (use<Name>) | **CAUTION** | always | A CVar's VALUE does not tell you whether it is in effect. The enable flag is a separate CVar. |
 | Brightness, Contrast, Gamma | **PERMITTED** | always | Display brightness and contrast ARE addon-writable, live, at frame rate. |
 | OnUpdate elapsed | **CAUTION** | always | The elapsed argument to an OnUpdate script is quantised to 1 ms. |
+| UnitHealthMax / UnitPowerMax on units other than the player | **SECRET** | always | Another unit's max health and max power are secret at ALL times; the player's own are never secret. |
 | `ReloadUI` | **FORBIDDEN** | always | An addon cannot reload the UI. A human must type /reload. |
 | `C_AuctionHouse.ReplicateItems` | **FAILS SILENTLY** | always | A throttled full scan returns an EMPTY MARKET, not an error. |
 | `retail-graphics-cvar-names-absent` | **CAUTION** | always | gxBrightness, gxContrast and gxGamma do NOT exist on this client. |
-| SavedVariables | **BROKEN ON THIS BUILD** | always | The client writes SavedVariables and never reads them back. |
+| SavedVariables (## SavedVariables, account-wide) | **BROKEN ON THIS BUILD** | always | The client writes ACCOUNT-WIDE SavedVariables and never reads them back. Per-character saved variables are read back normally. |
 | Any secret value | **CAUTION** | always | tostring() on a secret value returns a SECRET STRING. The taint survives conversion. |
-| `UnitPower`, `UnitPowerMax` | **SECRET** | always | Unit power is secret at ALL times, including out of combat. |
+| `UnitHealth` | **SECRET** | always | Unit health is secret at ALL times, including out of combat. |
+| `UnitPower` | **SECRET** | always | Unit power is secret at ALL times, including out of combat. |
 | RegisterEvent | **CAUTION** | always | RegisterEvent on an event this client does not have RAISES, aborting the rest of the file. |
 | `UseAction` | **FORBIDDEN** | always | UseAction fires ADDON_ACTION_FORBIDDEN in and out of combat. |
 | C_UnitAuras (all reads) | **SECRET** | in-combat | Aura reads RAISE in combat. They do not return nil. |
@@ -75,7 +77,7 @@ whether it is currently restricted, instead of inferring it from a masked value.
 | Threat values | **SECRET** | in-combat | Threat VALUES are secret in combat, but threat STATE is not. |
 | Unit stats | **SECRET** | in-combat | Unit stats become secret in combat. |
 
-Measured 2026-09-18 on client 1.60.1 build 69913. Detail and evidence for each: `reference/api/RESTRICTIONS.md`.
+Measured 2026-09-20 on client 1.60.1 build 69913. Detail and evidence for each: `reference/api/RESTRICTIONS.md`.
 <!-- END GENERATED restrictions-table -->
 
 ## Three refusal shapes, and only one is obvious

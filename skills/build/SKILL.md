@@ -146,6 +146,12 @@ subscriptions to refused events, reads that come back secret, protected actions,
 `tostring()`-on-a-secret trap, unguarded `RegisterEvent`, and the version-check trap. Each
 finding cites the evidence section it comes from.
 
+Point it at the **folder**, not just the Lua: it lints the `.toc` too, for the two header
+mistakes that cost other porters a day — a blank line inside the header silently dropping
+every directive after it, and no `16001` among the declared interface versions. It also
+flags an unconditional file-scope assignment to a declared saved global, and any attempt
+to detect this client with `WOW_PROJECT_ID`. See `reference/guides/packaging.md`.
+
 It is a **regex linter, not a Lua parser** — it cannot follow aliases, table lookups or
 dynamic calls, so a clean run is not a proof of correctness. It says so on every run.
 
@@ -171,9 +177,11 @@ Before writing against any function, two habits worth keeping:
 Longer form, written for someone who has not read the research:
 
 - `reference/guides/getting-started.md` — first addon, .toc, installing, enabling
-- `reference/guides/pitfalls.md` — the five above in detail, plus the CVar enable-flag trap
-  and the three failure shapes
+- `reference/guides/pitfalls.md` — the five above in detail, plus two `.toc` traps, the
+  CVar enable-flag trap and the three failure shapes
 - `reference/guides/savedvariables.md` — persistence, and moving data in and out
+- `reference/guides/packaging.md` — the `.toc` header, why the interface is 16001, and
+  why `WOW_PROJECT_ID` cannot detect this client
 - `reference/guides/performance.md` — measured per-call costs, and the two traps in
   measuring them yourself
 

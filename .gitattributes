@@ -11,3 +11,6 @@ data/*.json       text eol=lf
 skills/restrictions/SKILL.md text eol=lf
 *.lua             text eol=lf
 *.py              text eol=lf
+# The linter parses .toc headers line by line, and the test fixtures assert on
+# line numbers, so keep them the same bytes everywhere the tests run.
+*.toc             text eol=lf

@@ -1,8 +1,18 @@
 ## Interface: 16001
 ## Title: Forever Probe
 ## Notes: Dumps API surface and tests addon restrictions.
-## SavedVariables: ForeverProbeDB
+## SavedVariables: ForeverProbeDB, ForeverProbeBind, ForeverProbeClobber, ForeverProbeSeed
+## SavedVariablesPerCharacter: ForeverProbeChar
 
+# Directives must stay contiguous. A blank line between two ## lines ends the
+# header on this client and everything after it is ignored - one port diary lost
+# its whole SavedVariables declaration to exactly that. Comments are fine here,
+# below the header, where the file list starts.
+#
+# SavedVars.lua loads FIRST on purpose: it measures whether saved variables are
+# restored before or after addon Lua runs, and the earliest observable moment is
+# the measurement.
+SavedVars.lua
 DocsVersion.lua
 ForeverProbe.lua
 ExternalData.lua

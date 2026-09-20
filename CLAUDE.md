@@ -20,6 +20,10 @@ is whatever the client enforces.
   measurement on a live client and outranks everything; section 0 is a third-party capture
   of the same build; the numbered sections are press and developer statements. Read it
   before answering any question about what Forever permits.
+- `research/watch-findings.md` — an **inbox**, not evidence: unverified leads from the
+  daily watch, queued for investigation. Nothing here may be cited as a fact or promoted
+  into the restriction data until it has been measured, or fetched and written up in
+  `research/findings.md`.
 - `research/restrictions.yaml` — the same material as machine-readable entries. This is the
   single hand-maintained source: the generator emits page banners, `data/restrictions.json`
   and `reference/api/RESTRICTIONS.md` from it, so they cannot drift. **Edit restrictions
@@ -48,7 +52,7 @@ is whatever the client enforces.
 is always wrong. Determinism there is load-bearing: no per-symbol page carries a timestamp,
 so regenerating against a newer client produces a diff that *is* the patch delta.
 
-## Where this is up to (2026-09-18)
+## Where this is up to (2026-09-20)
 
 The plugin works end to end: it installs, the reference generates from a capture, the four
 skills route, and `tools/lint_addon.py` runs clean against `addons/ForeverProbe/ForeverProbe.lua`,
@@ -65,6 +69,36 @@ Two measurements to redo in game when convenient: `SecureActionButton:SetAttribu
 apparently succeeding **in combat** (P.20 — flagged `caution`, retail protects it), and the
 three `C_Secrets` gates with no out-of-combat value because the chat line truncated
 (`UnitSpellCast`, `UnitThreatState`, `UnitThreatValues`).
+
+**Ran 2026-09-20** across three sessions; captures `ForeverProbe_2026-09-20_*`, written up
+as §P.23 to §P.28. What changed:
+
+1. **SavedVariables: no persistence across sessions, on either directive.** Account-wide is
+   never read back; per-character survives a `/reload` but not a logout. Neither the
+   binding idiom nor the load order is the variable, and the exotic WTF paths other
+   developers named are neither read nor written. §P.23, §P.27
+2. **Secrecy is gated per UNIT, not by combat.** A target's health, max health, power and
+   max power are secret standing out of combat, on a friendly NPC and a hostile mob alike.
+   The player's own health and power are secret too, but its maxima are not. Level, name,
+   GUID and class stay readable on everything. §P.25, §P.28
+3. **`type()` says "number" on a secret, and `==` throws.** Comparison, arithmetic and
+   equality are loud; `tostring()` and `..` are silent and hand back secret strings. Only
+   `issecretvalue` is a test. §P.25, §P.28
+4. **The Secret surface is a 38-key taxonomy in the client's own documentation**, 5,145 of
+   29,416 entries, `SecretWhenInCombat` on four of them. Per-category gating is Blizzard's
+   own model. §P.26
+5. Interface formula, no `WOW_PROJECT_*`, empty `GetCurrentRegionName()`, and
+   `GetNamePlateForUnit` refusing target-of-target: confirmed. Realm identity is stable;
+   the character name genuinely contains a space, which is what the port diary's broken
+   AceDB key was really about. §P.24
+
+Worth doing next, in the repo rather than in game:
+
+1. **Move the probe's DB to `## SavedVariablesPerCharacter`** — §P.27 measured that this
+   survives a `/reload`, which lifts §P.21's "both passes in one session" constraint.
+2. **Teach the generator the Secret taxonomy** (§P.26). `projectField`/`projectFunction`
+   capture a single `Secret` field; widen to every key matching the pattern and the
+   machine-readable half of `restrictions.yaml` becomes generable.
 
 §Q is the one section no instrument in this repo can refresh. It is cost data measured by an
 addon in another repository, and `/fprobe` reproduces none of it, so a new build invalidates
@@ -97,8 +131,14 @@ can *write* `useMaxFPS` (Q.1 measured reads only), and what
   conversion, and always before storing: a secret string in the DB would take the whole
   SavedVariables flush with it. The probe's `plain()` helper is the only sanctioned way to
   turn a game read into text.
+- **`type()` and `==` do not reveal a secret either.** Measured 2026-09-20: `type()` on a
+  secret number returns `"number"`, and `value == value` THROWS — so `if v == nil then`,
+  the guard written out of caution, is itself unsafe. `issecretvalue` is the only test.
 - **Do not extend the in-combat restrictions to non-combat states** unless a source or
-  probe result explicitly says so. Several published claims conflate the two.
+  probe result explicitly says so. Several published claims conflate the two. Note the
+  converse bit too: §P.25 found `UnitHealth` secret *out* of combat, and the client's own
+  documentation marks only four entries `SecretWhenInCombat` (§P.26). Combat is a minor
+  axis in this system, not the organising one.
 - Known SEO junk sites producing confident unsourced claims — exclude them:
   warcraftforever.games, world-of-warcraft-forever.wiki, pewpewshop.pro, woweternity.com.
 - `ign.com` and `massivelyop.com` return 403 to plain fetching; use a browser tool.
@@ -124,6 +164,17 @@ Probe usage in-game:
   after a scan; the client announces it and the probe prints the measured gap
 - `/fprobe external` — the out-of-game data channel: inbound `ExternalData.lua` and the
   outbound SavedVariables flush
+- `/fprobe sv` — the SavedVariables experiment: load order, which binding idiom survives,
+  and which WTF path the client actually reads. Run `scripts/seed-savedvars.ps1` and
+  restart the client first; it seeds a differently tokenised file into all four candidate
+  paths at once, so whichever token arrives names the path that works. Settles
+  `research/findings.md` §12
+- `/fprobe port` — the porting checks: whether interface `16001` really is `%d%02d%02d` of
+  the version triple, which `WOW_PROJECT_*` constants exist, `GetCurrentRegionName()`,
+  `GetNamePlateForUnit()` on target-of-target, and realm identity. §9 to §11
+- `/fprobe secrets` — masked vs secret vs half-secret vs plain, per unit and per read, each
+  operation in its own `pcall`. Run it in both combat states; the delta is the finding.
+  §14
 - `/fprobe video` — the brightness/contrast CVars: whether they exist under the retail
   names, whether `GetCVarInfo` reports them locked, secure or read-only, whether a write
   survives a readback, and which display mode the measurement was taken in. Enumerates the
@@ -141,6 +192,9 @@ Probe usage in-game:
 - `/fprobe combat` — re-run the tests while actually in combat (pull a mob first)
 - `/fprobe report` — print the out-of-combat vs in-combat delta
 - `/fprobe docs` — does Blizzard's own API documentation load, and what shape is it
+- `/fprobe docs secrets` — how many documented entries carry a `Secret`-shaped key. If the
+  reported 4,025 reproduces, the restriction list becomes generable rather than
+  hand-probed. The key name is discovered, not assumed. §13
 - `/fprobe docs dump [start] [count]` — dump it into SavedVariables for the generator
 - `/fprobe docs version` — whether the shipped reference still matches this client
 
@@ -152,6 +206,11 @@ installed `ExternalData.lua` unless you pass `-ResetExternalData`.
 Both runs are required before the delta means anything, and **both must happen in one
 session**: this build writes SavedVariables and never reads them back, so a `/reload`
 discards whichever pass came first. `/reload` or log out to flush.
+
+That one-session constraint is **liftable and has not been lifted yet**. §P.27 measured
+that a `## SavedVariablesPerCharacter` global survives a `/reload` while an account-wide
+one does not, so moving the probe's DB would let the two passes span a reload. Until that
+change is made, the constraint above still applies as written.
 
 ## Cautions
 

@@ -1,7 +1,9 @@
-# Six things that will bite you
+# Eight things that will bite you
 
-Each of these cost real debugging time against a live client. They are in the order you are
-likely to hit them.
+Each of the first six cost real debugging time against a live client. The last two cost
+another developer their addon's saved data and a wrong code path respectively, and are
+credited in `research/findings.md` §10 and §11. They are in the order you are likely to
+hit them.
 
 ## 1. An unknown event aborts the whole file
 
@@ -28,6 +30,17 @@ wherever that string is next indexed, usually in a print or a `format`, far from
 A secret string written into SavedVariables takes the **entire flush** with it, so an addon
 can lose all of its saved data to one unguarded read.
 
+Two more, measured 2026-09-20, that make a secret harder to spot than it sounds:
+
+- **`type()` reports `"number"` on a secret number.** A type check is not a secrecy check.
+- **Equality throws.** `value == value` raises, which means `if value == nil then` — the
+  guard people write precisely because they are being careful — is itself unsafe.
+- **Concatenation does *not* throw.** `"" .. value` succeeds and hands back a secret
+  string. Comparison, arithmetic and equality are loud; `tostring()` and `..` are silent,
+  and those two are how the taint reaches a `print` far from the read.
+
+`issecretvalue()` is the only safe test. Not `type()`, not a comparison against nil.
+
 ```lua
 local function plain(v)
     if issecretvalue and issecretvalue(v) then return "<SECRET>" end
@@ -41,13 +54,15 @@ end
 
 Full detail: `restrictions/secret-values.md`.
 
-## 3. SavedVariables are written but never read back
+## 3. Account-wide SavedVariables are written but never read back
 
-On this build the client writes your saved file on logout or `/reload` and **never loads
-it**. Your addon starts from defaults every launch.
+On this build the client writes `## SavedVariables` to disk on logout or `/reload` and
+**never loads it**. Your addon starts from defaults every launch.
 
-This is reported as a beta bug rather than a policy decision, but you have to design around
-it today. See `guides/savedvariables.md`.
+**`## SavedVariablesPerCharacter` survives a `/reload`** — but not a logout, so it is not
+a settings story either. Measured side by side in one addon with identical binding code.
+Nothing about your binding idiom matters here; two published "fixes" claimed otherwise and
+both were tested and refuted. See `guides/savedvariables.md`.
 
 ## 4. `ReloadUI()` is protected
 
@@ -85,6 +100,33 @@ Two known instances is a pattern to check for, not a proven rule: read the paire
 `use<Name>` with `GetCVarBool` before trusting a value, and use `ConsoleGetAllCommands()` to
 find out whether a flag exists rather than assuming one does. See `research/findings.md`
 §Q.1.
+
+## 7. A blank line in the `.toc` header silently drops everything after it
+
+The header ends at the first line that is not a `##` directive. Put a blank line above
+`## SavedVariables` and the directive is never read, so the addon has no saved variables at
+all — which presents as *all settings wiped at login*, with no error anywhere.
+
+```
+## Interface: 16001
+## Title: My Addon
+                          <- this blank line ends the header
+## SavedVariables: MyDB   <- never read
+```
+
+Keep every directive contiguous, and put comments and the file list below them. The linter
+reports this as `toc-header-break`. Full header guidance: `guides/packaging.md`.
+
+## 8. You cannot detect this client with `WOW_PROJECT_ID`
+
+There is no `WOW_PROJECT_*` constant for Forever. It reports `WOW_PROJECT_MAINLINE`, the
+same value retail reports, so a check for mainline is true on both and a check for classic
+is false on a Classic-line client. Anything branching on it takes the wrong path on one
+client or the other.
+
+Bracket the interface version instead — `>= 16000 and < 20000` — or, better, test for the
+capability you actually need rather than for the client. The linter flags
+`WOW_PROJECT_ID` comparisons as `project-id-detection`. See `guides/packaging.md`.
 
 ## Three shapes of failure
 

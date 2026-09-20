@@ -3,7 +3,7 @@
 # GetCVar
 
 > **CAUTION — measured, at all times.** A CVar's VALUE does not tell you whether it is in effect. The enable flag is a separate CVar.
-> Measured 2026-09-18 on build 69913. Evidence: §Q.1, §P.22 in [findings](../../../../research/findings.md).
+> Measured 2026-09-20 on build 69913. Evidence: §Q.1, §P.22 in [findings](../../../../research/findings.md).
 > 
 > _Workaround:_ Before trusting a CVar's value, look for a paired use<Name> and read it with GetCVarBool. ConsoleGetAllCommands() enumerates the real names, which is how the graphics CVars in P.22 were found; do not assume a flag exists because a neighbouring CVar has one.
 

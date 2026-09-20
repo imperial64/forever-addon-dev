@@ -1,0 +1,11 @@
+# The header half of BadAddon.lua, wrong in the two ways a .toc can be wrong
+# here. Not installable; it exists to be linted. A plain `#` comment does not
+# end the header, which is why these three lines are not a finding.
+
+## Interface: 110107, 110105
+## Title: Bad Addon
+## SavedVariablesPerCharacter: BadAddonCharDB
+
+## SavedVariables: BadAddonDB
+
+BadAddon.lua

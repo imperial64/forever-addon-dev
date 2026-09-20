@@ -2,8 +2,8 @@
 
 # UnitPowerMax
 
-> **SECRET — measured, at all times.** Unit power is secret at ALL times, including out of combat.
-> Measured 2026-09-18 on build 69913. Evidence: §P.3, §P.10, §P.18 in [findings](../../../../research/findings.md).
+> **SECRET — measured, at all times.** Another unit's max health and max power are secret at ALL times; the player's own are never secret.
+> Measured 2026-09-20 on build 69913. Evidence: §P.25, §P.28 in [findings](../../../../research/findings.md).
 
 ```lua
 maxPower = UnitPowerMax(unitToken, powerType, unmodified)
