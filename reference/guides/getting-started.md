@@ -93,8 +93,10 @@ the version-check trap.
 
 ## What to read next
 
-- `guides/pitfalls.md` — the five things that will bite you, all measured
+- `guides/pitfalls.md` — the six things that will bite you, all measured
 - `guides/savedvariables.md` — persistence, and why it is broken on this build
 - `guides/packaging.md` — the `.toc`, the interface number, and shipping it
+- `guides/performance.md` — what calls cost, and why position polling is a garbage
+  problem rather than a time one
 - `restrictions/` — what the client will refuse, and how it refuses
 - `reference/api/` — every function, generated from the client's own documentation

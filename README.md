@@ -18,7 +18,8 @@ The plugin answers three questions:
 |---|---|
 | How do I build a Forever addon? | The gotchas that cost real debugging time, written as instruction |
 | What is the full API? | 6,577 functions with signatures, generated from the client's own documentation |
-| What am I not allowed to do? | 19 restrictions, each measured on a running client, with the evidence attached |
+| What am I not allowed to do? | 21 restrictions and measured behaviours, each established on a running client, with the evidence attached |
+| What does a call cost? | Per-call time and allocation for the calls where it changes a design, measured on a live client |
 
 It is addon-agnostic. There is no opinion here about what you should build — the reference
 covers the whole API surface, and the restriction list is whatever the client enforces.
@@ -68,11 +69,12 @@ records the measurement.
 skills/            what Claude loads: build, api, restrictions, regenerate
 reference/api/     generated: one page per symbol, path derivable from the name
 reference/guides/  hand-written authoring guidance
-data/              machine-readable: api.json, restrictions.json
+data/              machine-readable: api.json, restrictions.json, costs.json
 tools/             the generator, the linter, the SavedVariables parser
 addons/ForeverProbe/  the probe addon - also the doc generator
 scripts/           install to the client, collect results back
-research/          the measurement record the restriction data is drawn from
+research/          the measurement record; restrictions.yaml and costs.yaml are
+                   the two hand-maintained sources everything else generates from
 ```
 
 ## Checking an addon

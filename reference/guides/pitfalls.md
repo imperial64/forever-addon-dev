@@ -1,9 +1,9 @@
-# Seven things that will bite you
+# Eight things that will bite you
 
-Each of the first five cost real debugging time while building the probe this reference
-was measured with. The last two cost another developer their addon's saved data and a
-wrong code path respectively, and are credited in `research/findings.md` §10 and §11.
-They are in the order you are likely to hit them.
+Each of the first six cost real debugging time against a live client. The last two cost
+another developer their addon's saved data and a wrong code path respectively, and are
+credited in `research/findings.md` §10 and §11. They are in the order you are likely to
+hit them.
 
 ## 1. An unknown event aborts the whole file
 
@@ -81,7 +81,27 @@ Forever answers **16001**, so that test is false and the addon takes its Classic
 or refuses to start — while running on a client whose API is Retail's. If you are porting
 something, find this idiom first. The linter flags it.
 
-## 6. A blank line in the `.toc` header silently drops everything after it
+## 6. A CVar's value does not tell you whether it is in effect
+
+The slider value and the enable flag are **separate CVars**. Measured with the client
+running uncapped at 273.7 fps:
+
+```
+maxFPS    = 120      useMaxFPS    = 0
+targetFPS = 60       useTargetFPS = 0
+```
+
+`maxFPS` keeps the last slider position whether or not the limit is applied, so an addon
+reading it alone concludes the client is capped at 120 while it is running at more than
+twice that — and nothing errors, because nothing failed. `HDRBrightness`/`useHDRBrightness`
+pairs the same way.
+
+Two known instances is a pattern to check for, not a proven rule: read the paired
+`use<Name>` with `GetCVarBool` before trusting a value, and use `ConsoleGetAllCommands()` to
+find out whether a flag exists rather than assuming one does. See `research/findings.md`
+§Q.1.
+
+## 7. A blank line in the `.toc` header silently drops everything after it
 
 The header ends at the first line that is not a `##` directive. Put a blank line above
 `## SavedVariables` and the directive is never read, so the addon has no saved variables at
@@ -97,7 +117,7 @@ all — which presents as *all settings wiped at login*, with no error anywhere.
 Keep every directive contiguous, and put comments and the file list below them. The linter
 reports this as `toc-header-break`. Full header guidance: `guides/packaging.md`.
 
-## 7. You cannot detect this client with `WOW_PROJECT_ID`
+## 8. You cannot detect this client with `WOW_PROJECT_ID`
 
 There is no `WOW_PROJECT_*` constant for Forever. It reports `WOW_PROJECT_MAINLINE`, the
 same value retail reports, so a check for mainline is true on both and a check for classic

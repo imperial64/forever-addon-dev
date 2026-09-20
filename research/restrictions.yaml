@@ -18,13 +18,22 @@
 # governs a whole namespace; the auction throttle is a behaviour of a call that
 # succeeds. A schema that only annotated functions would drop most of the
 # contribution, so `kind` is first-class and `symbols` is optional.
+#
+# What does NOT belong here: what a permitted call COSTS. That lives in
+# research/costs.yaml, which has the same shape and its own generated views.
+# The line is whether anything refuses. A restriction is policy - identical on
+# every machine, true until Blizzard changes it. A cost is a measurement on one
+# machine on one build, and nothing in this repo re-measures it. A behaviour
+# that silently misleads is a restriction even when no call is refused, which
+# is why onupdate-elapsed-quantised is below and the microbenchmark figures
+# beside it are not.
 
 meta:
   measured_on: 2026-09-20
   client: "1.60.1"
   build: "69913"
   interface: 16001
-  measured_by: ForeverProbe
+  measured_by: "ForeverProbe (P); AmbianceCost (Q)"
   evidence_doc: research/findings.md
   # Scope vocabulary:
   #   always    - applies at all times, combat or not
@@ -408,7 +417,9 @@ entries:
       both C_CVar.SetCVar and the undocumented global SetCVar, identically, and
       read back exactly. A write is a cheap live post-process, not a device
       restart: a four-second sweep writing every frame from OnUpdate managed 442
-      writes over 443 frames at 111 fps, worst frame gap 31 ms. Brightness and
+      writes over 443 frames at 111 fps, worst frame gap 31 ms. That is a ceiling
+      rather than a cost; the per-call figures are in research/costs.yaml under
+      cvar-write. Brightness and
       Contrast are on a 0-100 scale (default 50), Gamma centres on 1.0. Measured
       in maximized windowed mode at 1920x1080, so this is not fullscreen-only.
       NOT measured in combat: SetCVar is not a protected function and none of
@@ -439,3 +450,49 @@ entries:
       returned 1902 commands; filtering it is how these names were found in the
       first place.
     evidence: [P.22]
+  # -- Reads that are true and still mislead --------------------------------
+  - id: cvar-enable-flag-pairing
+    label: "Paired CVars (use<Name>)"
+    kind: behaviour
+    symbols: [C_CVar.GetCVar, GetCVar]
+    verdict: caution
+    scope: always
+    summary: >
+      A CVar's VALUE does not tell you whether it is in effect. The enable flag
+      is a separate CVar.
+    detail: >
+      Measured with the client running uncapped at 273.7 fps: maxFPS read 120 and
+      targetFPS read 60, while useMaxFPS and useTargetFPS both read 0. A slider
+      CVar retains its last position whether or not the limit is applied, so an
+      addon reading maxFPS alone concludes the client is capped at 120 when it is
+      running at more than twice that - with no error, because nothing failed.
+      The same shape is recorded for HDRBrightness/useHDRBrightness and
+      HDRPeakBrightness/useHDRPeakBrightness in P.22. Two instances is a pattern
+      to check for, NOT a proven convention: no enumeration was done to establish
+      that every <Name> carries a use<Name>. Reads only - whether an addon can
+      WRITE useMaxFPS was not measured.
+    workaround: >
+      Before trusting a CVar's value, look for a paired use<Name> and read it with
+      GetCVarBool. ConsoleGetAllCommands() enumerates the real names, which is how
+      the graphics CVars in P.22 were found; do not assume a flag exists because a
+      neighbouring CVar has one.
+    evidence: [Q.1, P.22]
+
+  - id: onupdate-elapsed-quantised
+    label: "OnUpdate elapsed"
+    kind: behaviour
+    verdict: caution
+    scope: always
+    summary: >
+      The elapsed argument to an OnUpdate script is quantised to 1 ms.
+    detail: >
+      Across 15 phases covering 19,692 frames, every retained frame-gap statistic
+      is a whole number of milliseconds and every accumulated phase duration lands
+      on an exact multiple of 1 ms. Frame-rate-independent easing on elapsed is
+      unaffected - the quantisation is far below the time constants involved - but
+      an addon that profiles itself by accumulating elapsed produces noise for
+      anything costing under about a millisecond, and the noise looks like data.
+    workaround: >
+      Use debugprofilestart/debugprofilestop, which are present and working on
+      this client and have microsecond resolution.
+    evidence: [Q.5]

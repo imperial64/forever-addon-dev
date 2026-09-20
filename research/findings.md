@@ -1,16 +1,18 @@
 # Findings — WoW Forever addon capabilities
 
 Last updated 2026-09-20. This is the evidence base behind the restriction data this plugin
-ships. §P is a probe run on the beta client, and outranks everything. §0 is a third-party
-capture of the same build, fetched and queried here, which outranks every press source
-below it. The numbered sections are press and developer statements, kept for context and
-ranked below both.
+ships. §P is a probe run on the beta client, and outranks everything. §Q is a second
+live-client measurement, by a different instrument and about cost rather than policy, and
+ranks with §P. §0 is a third-party capture of the same build, fetched and queried here,
+which outranks every press source below it. The numbered sections are press and developer
+statements, kept for context and ranked below all three.
 
 `research/restrictions.yaml` cites the sections below by number, so section IDs are stable:
 they are never renumbered, only added to.
 
-Confidence labels, strongest first: **[PROBE]** measured by ForeverProbe on a live
-client · **[MEASURED]** read off someone else's capture of the running client ·
+Confidence labels, strongest first: **[PROBE]** measured on a live client by an
+instrumented addon - ForeverProbe in §P, AmbianceCost in §Q; each section names its
+instrument · **[MEASURED]** read off someone else's capture of the running client ·
 **[PRIMARY]** fetched and read directly · **[REPORTED]** credible secondary source,
 fetched · **[UNVERIFIED]** surfaced in search, not independently confirmed ·
 **[EXCLUDED]** checked and found irrelevant or unreliable.
@@ -21,8 +23,9 @@ fetched · **[UNVERIFIED]** surfaced in search, not independently confirmed ·
 
 **[PROBE — ForeverProbe, beta build 1.60.1.69913, character in Elwynn Forest, out of
 combat]** This outranks everything below it, including §0: it is behaviour observed on a
-running client rather than someone else's capture or someone's reporting. Note the build:
-69913, one ahead of the capture §0 describes.
+running client rather than someone else's capture or someone's reporting. §Q is the one
+exception - a second instrument on the same client, ranking with this section rather than
+under it. Note the build: 69913, one ahead of the capture §0 describes.
 
 ### P.1 An addon may not register `COMBAT_LOG_EVENT_UNFILTERED` at all
 
@@ -1017,6 +1020,180 @@ result is §P.12.
 
 The probe no longer registers the combat log at load. The answer is in, and repeating it
 every login only trains the player to dismiss a dialog that is a result.
+
+---
+
+## Q. What calls cost, measured by a second instrument (2026-09-18)
+
+**[PROBE — AmbianceCost, beta build 1.60.1.69913, out of combat, five runs]** Also measured
+on a running client, so this ranks alongside §P rather than under it — but by a *different*
+addon, from a different repository, and that difference is worth stating rather than quietly
+folding into §P. §P asks what the client permits. §Q asks what calls cost, which is the
+other question that decides whether a design is possible.
+
+| | |
+|---|---|
+| Instrument | `AmbianceCost`, an addon in a separate repository, not in this one |
+| Capture | `research/captures/AmbianceCost_2026-09-18_215313_cost-bench.lua` |
+| Method | `debugprofilestart` / `debugprofilestop` around an adaptively sized loop; loop overhead measured separately and subtracted; each call benched on its own frame |
+| Replication | 5 runs, 21:34–21:53, across graphics presets and frame-rate caps |
+| Machine | RTX 5080, 1920x1080, D3D12, `gxMaximize=1` (maximized windowed); vsync on for runs 1–3, off for 4–5 |
+| Combat | out of combat in all five runs |
+
+Every figure below was re-derived from the checked-in capture rather than copied from the
+handover note. Where the two disagreed, what is written here is what the capture says, and
+the difference is stated in place.
+
+The machine-readable form of everything in this section is `research/costs.yaml`, which is
+a separate source from `research/restrictions.yaml` for the reason the next paragraph gives:
+nothing here is a refusal, and it ages differently.
+
+**`/fprobe` does not reproduce any of this, and `regenerate` will not re-measure it.** The
+capture is checked in so the numbers can be re-derived, but they are dated to build 69913 in
+a way §P's policy findings are not: a new build invalidates them silently and nothing in
+this repo will notice. Read them as an order of magnitude that held on one machine, not as a
+constant. A `/fprobe cost` subcommand would close that gap; it has not been written, and
+whether it is worth writing is a decision for this repo rather than an obligation from the
+handover.
+
+### Q.1 A frame-limit checkbox does not zero its CVar
+
+The slider value and the enable flag are **separate CVars**. Read at 21:53 with the client
+reporting 273.7 fps:
+
+| Slider CVar | Value | Enable flag | Value |
+|---|---|---|---|
+| `maxFPS` | 120 | `useMaxFPS` | 0 |
+| `targetFPS` | 60 | `useTargetFPS` | 0 |
+| `maxFPSBk` | 30 | `useMaxFPSBk` | 1 |
+
+`maxFPS` retains the last slider position whether or not the limit is applied. An addon
+reading `maxFPS` alone concludes the client is capped at 120 while it is in fact running
+uncapped at more than twice that — and gets no error, because from the client's point of
+view nothing went wrong. This is the §Q finding most likely to produce a confidently wrong
+answer rather than a visible failure.
+
+The same shape is already recorded in §P.22 for `HDRBrightness` / `useHDRBrightness` and
+`HDRPeakBrightness` / `useHDRPeakBrightness`. Two instances is a **pattern worth checking
+for, not a proven convention**: no enumeration of this client's CVars was done to establish
+that every `<Name>` carries a `use<Name>`. The safe reading is "a CVar's value may not be in
+effect — look for a paired flag before trusting it", not "`use<Name>` always exists".
+
+`useMaxFPSBk = 1` is unrelated to the other two and applies only when the window is
+unfocused. The graphics panel's slider minimum is 8 FPS, so unticking the box is the only
+way to express "no limit" — which is exactly why a stale value is left behind.
+
+**n = 1 for the pairing.** Only the last of the five runs captured the `use*` names; the
+first four recorded the slider values alone. The finding does not rest on replication: one
+run in which `maxFPS` reads 120 while the client reports 273.7 fps is enough to establish
+that `maxFPS` was not being applied.
+
+Not verified: whether **writing** `useMaxFPS` from an addon takes effect. Only reads were
+done. §P.22 establishes that `SetCVar` writes land on the brightness CVars; that does not
+carry over to these without a measurement.
+
+### Q.2 `C_Map.GetPlayerMapPosition` returns an object and allocates 1864 bytes per call
+
+Present and working. It returns a position **object exposing `GetXY()`** — not two numbers,
+and not a plain `{x, y}` table.
+
+| | |
+|---|---|
+| Cost | 4.38 – 5.71 µs per call (n=5) |
+| Cost including `GetXY()` unpacking | 4.91 – 7.91 µs per call (n=5) |
+| Allocation | **1864 bytes per call**, byte-identical in all five runs |
+
+The shape is not a divergence from Blizzard's documentation — the generated page types the
+return as `vector2 (Vector2DMixin)`. It is a divergence from the Classic habit of
+`local x, y = GetPlayerMapPosition(...)`, and that bare global is not on this client at all
+(§0.5), so Classic code fails at the call rather than at the unpack.
+
+1864 bytes is far above a bare table and is the dominant cost of reading player position on
+this client — roughly six times the cost of a `SetCVar` write in time, and the only figure
+here that constrains a design. Polling every frame costs about 218 KB/s of garbage at
+120 fps and about 500 KB/s at 274. At 10 Hz the same work is about 18 KB/s.
+
+So: **poll position on an accumulator, not per frame.** The allocation was measured with the
+collector stopped, which is what keeps a collection inside the measuring loop from reading
+as a negative delta and reporting "allocates nothing".
+
+Not verified: behaviour inside instances, where Retail returns nil. The instrument guarded
+for it and never exercised the guard.
+
+### Q.3 `C_Map.GetBestMapForUnit` is present and cheap
+
+0.610 – 0.636 µs per call (n=5), returning a numeric uiMapID, with no measurable allocation.
+Seven to nine times cheaper than the position read. It is still a map-tree lookup, so it
+belongs behind a zone-change event rather than in a per-frame path, but its cost is not what
+would make a position poller expensive — §Q.2 is.
+
+### Q.4 What a `SetCVar` write costs, extending §P.22
+
+§P.22 records that 442 writes over four seconds produced no frame-gap spike. That is a
+ceiling, not a cost. The per-call figures, both through `C_CVar.SetCVar` on `Brightness`:
+
+| Write | Cost |
+|---|---|
+| **changed** value | 0.786 – 0.823 µs (n=5) |
+| **unchanged** value | 0.304 – 0.316 µs (n=5) |
+
+A changed value costs about 2.6x a no-op write, so the client is doing real work on change —
+and that work is still sub-microsecond. One changed write per frame is about 0.02% of a
+frame at 274 fps. The "cheap live post-process" conclusion in §P.22 holds and now has a
+number under it.
+
+### Q.5 `OnUpdate` elapsed is quantised to 1 ms
+
+The `elapsed` argument this client passes to an `OnUpdate` script has **1 ms resolution**.
+
+What the capture actually holds is worth stating, because it is not the raw per-frame
+values: 15 phases (three per run, five runs) covering **19,692 frames**, of which only the
+p50, p99 and max gap per phase were retained. All 45 of those order statistics are whole
+numbers of milliseconds. The stronger evidence is the other column — each phase's elapsed
+time, accumulated from `elapsed` over roughly 1,200 frames, lands on an exact multiple of
+1 ms in every one of the 15 phases (10.000, 10.001, 10.002, 10.004, 10.005, 10.006, 10.012,
+10.019 s). A sum of 1,200 fractional values does not land on an exact millisecond by
+accident.
+
+Two consequences:
+
+- **Frame-rate-independent easing on `elapsed` still works.** The quantisation is far below
+  the time constants involved.
+- **`elapsed` cannot measure anything costing less than ~1 ms.** An addon profiling itself
+  this way produces noise, not measurements. `debugprofilestop` is the instrument with the
+  resolution, and it is available — §Q.6.
+
+The handover note described this as "~7000 frame samples". The capture holds 19,692 frames
+across 15 phases, and the per-frame values themselves were not retained; the claim is
+unchanged, the sample description is corrected.
+
+### Q.6 The profiling and GC primitives work on this client
+
+Confirmed exercised, which is what made everything above measurable:
+
+- `debugprofilestart()` / `debugprofilestop()` — microsecond resolution
+- `collectgarbage("count")`, `("stop")`, `("restart")`, `("collect")`
+
+All of these are documented by Blizzard and already carry generated pages, so their
+*presence* is not the finding. The finding is that they behave on this client, which is a
+weaker claim than presence but the one an author actually needs — §P.22 has already shown
+that a documented retail name can be absent from this build. `collectgarbage("stop")` in
+particular is load-bearing for any allocation measurement, per §Q.2.
+
+### Q.7 Not recorded: the frame-gap phase data
+
+The capture's `phases` table is checked in with the rest of the file and is **not evidence**.
+Nothing in this repo cites it, and it should not be quoted. Two defects, both in the
+instrument rather than the client:
+
+- Phases run once each, in a fixed order, so drift across the roughly 30-second run loads
+  entirely onto the later ones. The phase that polls far less often for the same number of
+  writes reports the worse frame rate, which cannot be a cost. That ordering is drift.
+- The first frames of a phase are not discarded, so the do-nothing control carries the
+  largest frame gap in every run and flatters every phase measured after it.
+
+The one claim those phases support: **no phase in any run produced a frame gap a player
+would feel.** Everything quantitative in §Q comes from the microbench instead.
 
 ---
 

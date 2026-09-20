@@ -7,7 +7,9 @@ description: >
   are written but never read back - each with the measurement that established it on a
   live client. Use when asked whether something is blocked, forbidden, secret, throttled,
   protected or permitted; why a call returned nil, an empty result or a secret value; why
-  an addon threw "cannot be accessed when secret"; or for the full restriction list. For
+  an addon threw "cannot be accessed when secret"; why a read succeeded and still gave the
+  wrong answer, such as a CVar whose value is not the one in effect; or for the full
+  restriction list. For
   a function's signature use the api skill; for how to structure an addon use the build skill.
 ---
 
@@ -54,7 +56,9 @@ whether it is currently restricted, instead of inferring it from a masked value.
 | `C_ChatInfo.SendAddonMessage`, `C_ChatInfo.SendAddonMessageLogged` | **CAUTION** | always | AreOutgoingAddonChatMessagesRestricted() returns true, in and out of combat. |
 | `C_AssistedCombat.IsAvailable`, `C_AssistedCombat.GetRotationSpells` | **PERMITTED** | always | C_AssistedCombat exists but reports itself unavailable. |
 | `COMBAT_LOG_EVENT`, `COMBAT_LOG_EVENT_UNFILTERED` | **FORBIDDEN** | always | Addons may not register for the combat log, in either form. |
+| Paired CVars (use<Name>) | **CAUTION** | always | A CVar's VALUE does not tell you whether it is in effect. The enable flag is a separate CVar. |
 | Brightness, Contrast, Gamma | **PERMITTED** | always | Display brightness and contrast ARE addon-writable, live, at frame rate. |
+| OnUpdate elapsed | **CAUTION** | always | The elapsed argument to an OnUpdate script is quantised to 1 ms. |
 | UnitHealthMax / UnitPowerMax on units other than the player | **SECRET** | always | Another unit's max health and max power are secret at ALL times; the player's own are never secret. |
 | `ReloadUI` | **FORBIDDEN** | always | An addon cannot reload the UI. A human must type /reload. |
 | `C_AuctionHouse.ReplicateItems` | **FAILS SILENTLY** | always | A throttled full scan returns an EMPTY MARKET, not an error. |
