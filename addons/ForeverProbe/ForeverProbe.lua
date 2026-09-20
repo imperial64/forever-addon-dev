@@ -24,8 +24,11 @@
 --   /fprobe events    which events an addon may subscribe to at all
 --   /fprobe blocked   captured BLOCKED/FORBIDDEN actions
 --   /fprobe external  inbound ExternalData.lua and outbound SavedVariables flush
+--   /fprobe sv        SavedVariables load order, binding idiom, and which WTF path
+--   /fprobe port      interface derivation, client identity, region and realm
+--   /fprobe secrets   masked vs secret vs half-secret, per unit read
 --   /fprobe video     brightness/contrast CVars - may an addon write them at all
---   /fprobe docs      Blizzard's own API documentation (dump, version)
+--   /fprobe docs      Blizzard's own API documentation (dump, version, secrets)
 --
 -- Results persist to WTF/Account/<ACCT>/SavedVariables/ForeverProbe.lua on
 -- /reload or logout.
@@ -37,6 +40,17 @@
 
 local ADDON, ns = ...
 
+-- `X = X or {}` at file scope, deliberately left alone. On retail this idiom is
+-- a bug - saved variables are restored AFTER the addon's files execute, so the
+-- client swaps the global out from under this `local db` and every write below
+-- lands in an orphan. One port diary reports Forever restores BEFORE executing
+-- addon Lua, which would make it safe; nobody has measured which.
+--
+-- Changing it now would break the continuity of every capture in
+-- research/captures/, so SavedVars.lua measures the order instead, against
+-- three other globals bound three other ways. `/fprobe sv` reports it. If the
+-- order turns out to be retail's, THIS is the line that was wrong all along,
+-- and it says so.
 ForeverProbeDB = ForeverProbeDB or {}
 local db = ForeverProbeDB
 
@@ -1431,6 +1445,7 @@ local function runActionTests()
         return "NO API"
     end)
     readTest("targetHealth", function()
+        -- lint-allow: secret-read - reading a secret and recording that it IS secret
         return UnitExists and UnitExists("target") and UnitHealth("target") or "NO TARGET"
     end)
     readTest("targetCasting", function()
@@ -1841,6 +1856,13 @@ local function projectField(f)
         Default = scalar(f.Default),
         Mixin = scalar(f.Mixin),
         StrideIndex = scalar(f.StrideIndex),
+        -- Another developer reports that 4,025 documented entries on this build
+        -- carry a Secret field, which would mean the restriction list is
+        -- GENERABLE from the client's own documentation rather than discoverable
+        -- only one black-box probe at a time. Capturing it costs a field.
+        -- `/fprobe docs secrets` confirms the key is really spelled this way
+        -- rather than assuming it - see the note there.
+        Secret = scalar(f.Secret),
         Documentation = nil, -- deliberate, see header
     }
 end
@@ -1862,6 +1884,7 @@ local function projectFunction(f)
         Name = scalar(f.Name),
         Type = scalar(f.Type),
         HasRestrictions = scalar(f.HasRestrictions),
+        Secret = scalar(f.Secret),      -- see projectField
         Arguments = projectList(f.Arguments, projectField),
         Returns = projectList(f.Returns, projectField),
         -- Blizzard's own rendering, kept as the cross-check described above.
@@ -2381,6 +2404,463 @@ local function videoRamp(nameArg)
     end
 end
 
+-- Is the restriction list generable from the documentation? --------------------
+--
+-- Another developer reports 4,025 documented entries on this build carrying
+-- Secret fields. If that reproduces, the restriction data stops being something
+-- discovered one black-box probe at a time and becomes a BUILD ARTEFACT the
+-- generator can emit - which is a different maintenance story for
+-- research/restrictions.yaml entirely.
+--
+-- The key name is DISCOVERED, not assumed. Guessing `Secret` and counting zero
+-- would read as "the report is wrong" when it actually means "it is spelled
+-- something else" - the same mistake that assuming the retail CVar names would
+-- have caused in §P.22. So every key on every documented entry is scanned for
+-- the substring, and the tally is by the key name actually found.
+local function docsSecretCount()
+    if not APIDocumentation then
+        local ok = pcall(APIDocumentation_LoadUI)
+        if not ok or not APIDocumentation then
+            out("|cffff4444documentation not loaded|r - run /fprobe docs first")
+            return
+        end
+    end
+    local systems = APIDocumentation.systems
+    if type(systems) ~= "table" then
+        out("|cffff4444no .systems array|r")
+        return
+    end
+
+    local byKey, byKind, entries, carrying = {}, {}, 0, 0
+    local function examine(kind, entry)
+        if type(entry) ~= "table" then return end
+        entries = entries + 1
+        local hit = false
+        local ok = pcall(function()
+            for key, value in pairs(entry) do
+                if type(key) == "string" and key:lower():find("secret") then
+                    local tally = byKey[key] or { present = 0, truthy = 0 }
+                    tally.present = tally.present + 1
+                    if value and value ~= 0 then tally.truthy = tally.truthy + 1 end
+                    byKey[key] = tally
+                    hit = true
+                end
+            end
+        end)
+        if ok and hit then
+            carrying = carrying + 1
+            byKind[kind] = (byKind[kind] or 0) + 1
+        end
+    end
+
+    for i = 1, #systems do
+        local sys = systems[i]
+        if type(sys) == "table" then
+            examine("System", sys)
+            for _, fn in ipairs(sys.Functions or {}) do
+                examine("Function", fn)
+                for _, f in ipairs(fn.Arguments or {}) do examine("Argument", f) end
+                for _, f in ipairs(fn.Returns or {}) do examine("Return", f) end
+            end
+            for _, ev in ipairs(sys.Events or {}) do
+                examine("Event", ev)
+                for _, f in ipairs(ev.Payload or {}) do examine("Payload", f) end
+            end
+            for _, tb in ipairs(sys.Tables or {}) do
+                examine("Table", tb)
+                for _, f in ipairs(tb.Fields or {}) do examine("Field", f) end
+            end
+        end
+    end
+
+    out("|cff44ddffDOCUMENTED SECRET SURFACE|r")
+    out(("  %d documented entries walked, |cff44ff44%d carry a Secret-shaped key|r")
+        :format(entries, carrying))
+    if carrying == 0 then
+        out("  |cffffaa00no key on any entry contains 'secret'|r - either this build does not mark")
+        out("  them in the documentation, or the report counted something else. Either way the")
+        out("  restriction list cannot be generated from here, and stays hand-measured.")
+    end
+    local keys = {}
+    for key in pairs(byKey) do keys[#keys + 1] = key end
+    table.sort(keys)
+    for _, key in ipairs(keys) do
+        out(("    key %-24s on %d entries, truthy on %d")
+            :format(key, byKey[key].present, byKey[key].truthy))
+    end
+    local kinds = {}
+    for kind in pairs(byKind) do kinds[#kinds + 1] = kind end
+    table.sort(kinds)
+    for _, kind in ipairs(kinds) do
+        out(("    %-10s %d"):format(kind, byKind[kind]))
+    end
+    out("  the reported figure to reproduce is 4,025 (findings 13).")
+
+    db.docsSecrets = { entries = entries, carrying = carrying, byKey = byKey, byKind = byKind }
+end
+
+-- SavedVariables: which explanation is right ----------------------------------
+--
+-- Reports what SavedVars.lua collected. See that file's header for the design;
+-- the short version is that three published explanations for the SavedVariables
+-- failure disagree, two of them would make it the ADDON's bug rather than the
+-- client's, and telling them apart needs the load order plus the table
+-- addresses, which nobody has published.
+local function printSavedVars()
+    local sv = ns.savedVars
+    if type(sv) ~= "table" or type(sv.phases) ~= "table" or #sv.phases == 0 then
+        out("|cffff4444SavedVars.lua did not run|r - it is missing from the .toc, or its main")
+        out("  chunk aborted. Either way this measurement is not available.")
+        return
+    end
+
+    out("|cff44ddffSAVEDVARIABLES|r  load order, binding idiom, and which WTF path is read")
+    out(("  token written this session: %s"):format(plain(sv.tokenWrittenThisSession)))
+
+    -- The verdict first, because it is the reason the command exists.
+    if sv.order == "unknown" then
+        out("  |cffffaa00load order: undetermined|r - nothing was restored at any phase, so there")
+        out("  was no restored table to observe being swapped. That is itself the answer to")
+        out("  'does the client read them back': no.")
+    else
+        out(("  |cff44ff44load order: %s|r"):format(sv.order))
+    end
+    if sv.note then out("  " .. plain(sv.note)) end
+
+    -- Per global: did anything survive from a previous session, and under which
+    -- binding idiom? This is the table that answers the addon-side theory.
+    out("  |cff44ddffper global|r (a session counter above 1 means something was restored)")
+    local last = sv.phases[#sv.phases]
+    for _, info in ipairs(last.globals or {}) do
+        local state
+        if info.type ~= "table" then
+            state = "|cffff4444" .. plain(info.type) .. "|r"
+        elseif info.restoredToken then
+            -- The only positive proof: a token this session did not write.
+            -- NOT the session counter - that read 3 after one session in the
+            -- 2026-09-20 capture, because stamp() ran once per phase.
+            state = ("|cff44ff44RESTORED|r last session's token %s, %s prior session(s)")
+                :format(plain(info.restoredToken), plain(info.restoredSession or "?"))
+        elseif info.path then
+            -- Only the externally seeded global carries a path, and its arrival
+            -- is the whole point of scripts/seed-savedvars.ps1.
+            state = ("|cff44ff44SEEDED FILE READ|r from the %s path"):format(plain(info.path))
+        else
+            state = ("fresh, %s key(s)"):format(plain(info.keys))
+        end
+        out(("    %-20s %-38s %s"):format(plain(info.name), plain(info.idiom), state))
+    end
+
+    -- The address trace. A table that keeps its address across every phase was
+    -- never replaced; one that changes address was.
+    out("  |cff44ddffaddress by phase|r (a change means the global was swapped, not mutated)")
+    for _, phase in ipairs(sv.phases) do
+        local parts = {}
+        for _, info in ipairs(phase.globals or {}) do
+            parts[#parts + 1] = ("%s=%s"):format(
+                info.name:gsub("^ForeverProbe", ""), plain(info.addr or info.type))
+        end
+        out(("    %-28s %s"):format(phase.phase, table.concat(parts, " ")))
+    end
+
+    local seeded = nil
+    for _, info in ipairs(last.globals or {}) do
+        if info.name == "ForeverProbeSeed" then seeded = info end
+    end
+    if not seeded or seeded.type ~= "table" then
+        out("  |cffffaa00no seeded file arrived|r - either the client reads none of the candidate")
+        out("  paths, or none was seeded. Run scripts/seed-savedvars.ps1, restart the client,")
+        out("  and run this again: it writes a differently tokenised file into all four")
+        out("  candidate WTF paths at once, so whichever arrives names the path that works.")
+    end
+
+    db.savedVars = sv
+end
+
+-- Porting checks ---------------------------------------------------------------
+--
+-- Five specific client differences other porters hit and wrote up, plus the two
+-- identity questions their reports raise. None of them has been measured here,
+-- which is exactly why they are one command: each is a one-line call, and until
+-- they are run they stay in research/watch-findings.md rather than in the
+-- restriction data.
+--
+-- The claims under test, with their sources in research/findings.md §9-§11:
+--   GetCurrentRegionName() returns an empty string rather than a region
+--   GetNamePlateForUnit() RAISES on target-of-target instead of returning nil
+--   the realm name is not a stable identity on this client
+--   interface 16001 is %d%02d%02d of the version triple, not an arbitrary number
+--   there is no WOW_PROJECT_* constant for Forever, so it cannot be detected that way
+local NAMEPLATE_UNITS = { "target", "targettarget", "focus", "mouseover", "nameplate1" }
+local IDENTITY_CALLS = {
+    "GetRealmName", "GetNormalizedRealmName", "GetRealmID", "GetCurrentRegion",
+    "GetCurrentRegionName", "GetCVar", "UnitFullName", "UnitName", "UnitGUID",
+}
+-- Called with no arguments unless named here. Anything not on this list is
+-- reported as present-but-not-called rather than invoked blind.
+local IDENTITY_ARGS = { UnitFullName = "player", UnitName = "player", UnitGUID = "player" }
+
+local function probePort()
+    db.port = db.port or {}
+    local port = db.port
+
+    -- 1. Is 16001 derived, or arbitrary? --------------------------------------
+    out("|cff44ddffINTERFACE VERSION|r")
+    local version, build, buildDate, toc = GetBuildInfo()
+    local major, minor, patch = tostring(version):match("^(%d+)%.(%d+)%.?(%d*)$")
+    local derived = major and tonumber(("%d%02d%02d"):format(
+        tonumber(major), tonumber(minor), tonumber(patch) or 0))
+    port.version, port.build, port.buildDate, port.interface = plain(version), plain(build),
+        plain(buildDate), plain(toc)
+    port.interfaceDerived = derived
+    out(("  GetBuildInfo(): version %s  build %s  interface %s")
+        :format(plain(version), plain(build), plain(toc)))
+    if derived then
+        local agrees = (derived == tonumber(toc))
+        port.interfaceFormulaHolds = agrees
+        out(("  %%d%%02d%%02d of %s = %d -> %s")
+            :format(plain(version), derived,
+                agrees and "|cff44ff44matches the client's own interface number|r"
+                        or "|cffff4444DISAGREES with the client|r"))
+    else
+        out("  |cffffaa00version string did not parse as a triple|r - formula not checked")
+    end
+    -- The gotcha that needs no measurement, restated where a porter will see it.
+    out("  |cffffaa00note|r 16001 is numerically BELOW every live product (retail is 120100+),")
+    out("  so any .toc updater that compares interface numbers ordinally skips Forever silently.")
+
+    -- 2. Can Forever be detected from Lua at all? ------------------------------
+    out("|cff44ddffCLIENT IDENTITY|r  is there a WOW_PROJECT_* constant for Forever?")
+    local projects = {}
+    for key, value in pairs(_G) do
+        if type(key) == "string" and key:find("^WOW_PROJECT") then
+            projects[#projects + 1] = { key = key, value = plain(value) }
+        end
+    end
+    table.sort(projects, function(a, b) return a.key < b.key end)
+    port.projectConstants = projects
+    local id = rawget(_G, "WOW_PROJECT_ID")
+    for _, p in ipairs(projects) do
+        local mark = (p.key ~= "WOW_PROJECT_ID" and tostring(p.value) == tostring(plain(id)))
+            and "  <- WOW_PROJECT_ID reports this" or ""
+        out(("    %-32s %s%s"):format(p.key, p.value, mark))
+    end
+    out(("  %d WOW_PROJECT_* constant(s). If none of them names Forever, WOW_PROJECT_ID")
+        :format(#projects))
+    out("  cannot distinguish this client from retail - Blizzard's own modules gate on the")
+    out("  .toc directive `## AllowLoadGameType: standard, camelot` instead.")
+
+    -- Anything else in the global table that might name the game type. Scanned
+    -- rather than guessed, the same way the video CVars were found: assuming the
+    -- retail name is how you get an addon that silently does nothing.
+    local typeish = {}
+    for key, value in pairs(_G) do
+        if type(key) == "string"
+           and (key:find("GameType") or key:find("GameRule") or key:lower():find("camelot")) then
+            typeish[#typeish + 1] = ("%s (%s)"):format(key, type(value))
+        end
+    end
+    table.sort(typeish)
+    port.gameTypeSymbols = typeish
+    if #typeish > 0 then
+        out("  game-type shaped symbols: " .. table.concat(typeish, ", "))
+    else
+        out("  no GameType/GameRule symbol in _G at all")
+    end
+
+    -- 3. Region and realm identity --------------------------------------------
+    out("|cff44ddffREGION AND REALM|r  reported unstable as an identity key on this client")
+    port.identity = {}
+    for _, name in ipairs(IDENTITY_CALLS) do
+        local fn = lookup(name)
+        if type(fn) ~= "function" then
+            out(("  %-24s |cffff4444absent|r"):format(name))
+            port.identity[name] = "absent"
+        elseif name == "GetCVar" then
+            -- Not called blind: only the realm-ish ones, and only to see whether
+            -- the client keeps an identity there that Lua does not expose.
+            local ok, v = pcall(fn, "realmList")
+            port.identity["GetCVar(realmList)"] = ok and plain(v) or ("ERR: " .. plain(v))
+            out(("  %-24s %s"):format("GetCVar(realmList)", plain(port.identity["GetCVar(realmList)"])))
+        else
+            local ok, a, b = pcall(fn, IDENTITY_ARGS[name])
+            if not ok then
+                port.identity[name] = "RAISED: " .. plain(a)
+                out(("  %-24s |cffff4444raised|r %s"):format(name, plain(a)))
+            else
+                local shown = plain(a) .. (b ~= nil and (" / " .. plain(b)) or "")
+                -- An empty string is the reported failure mode and reads as a
+                -- blank line otherwise, so label it rather than printing nothing.
+                if a == "" then shown = "|cffffaa00\"\" (empty string)|r" end
+                -- BOTH returns. The 2026-09-20 capture stored only the first,
+                -- which threw away UnitFullName's realm - the half that would
+                -- have settled whether the realm name is a stable identity, and
+                -- the reason P.24 item 5 is still open. UnitName("player") came
+                -- back "Abla Imperial" with a space against a WTF folder of
+                -- Abla-Imperial, so the second return is exactly what is wanted.
+                port.identity[name] = plain(a) .. (b ~= nil and (" / " .. plain(b)) or "")
+                port.realmIdentity = port.realmIdentity or {}
+                port.realmIdentity[name] = { first = plain(a), second = plain(b) }
+                out(("  %-24s %s"):format(name, shown))
+            end
+        end
+    end
+
+    -- 4. GetNamePlateForUnit on tokens that have no nameplate -------------------
+    out("|cff44ddffNAMEPLATES|r  reported to RAISE on target-of-target rather than return nil")
+    port.nameplates = {}
+    local getPlate = lookup("C_NamePlate.GetNamePlateForUnit")
+    if type(getPlate) ~= "function" then
+        out("  |cffff4444C_NamePlate.GetNamePlateForUnit absent|r")
+    else
+        for _, unit in ipairs(NAMEPLATE_UNITS) do
+            local ok, frame = pcall(getPlate, unit)
+            local verdict
+            if not ok then
+                verdict = "|cffff4444RAISED|r " .. plain(frame)
+                port.nameplates[unit] = "RAISED: " .. plain(frame)
+            elseif frame == nil then
+                verdict = "nil (the retail answer)"
+                port.nameplates[unit] = "nil"
+            else
+                verdict = "|cff44ff44frame|r " .. plain(frame)
+                port.nameplates[unit] = "frame"
+            end
+            out(("  %-16s %s"):format(unit, verdict))
+        end
+        out("  |cffffaa00only meaningful with a target|r - run it again with a mob targeted, and")
+        out("  again with that mob's own target alive, or the tokens are all empty anyway.")
+    end
+end
+
+-- Secret values: masked, or typed-but-untouchable? ------------------------------
+--
+-- §P.3 measured UnitPower as secret out of combat while auras and cooldowns were
+-- not. One secondary report claims instead that unit HEALTH is secret always,
+-- and - the part worth testing - that the value "is typed as a number" but
+-- cannot be compared or used in arithmetic. Those are different restrictions
+-- with different consequences for an addon, and the existing read tests cannot
+-- tell them apart, because they only record what came back.
+--
+-- Four distinguishable outcomes, and this is the command that separates them:
+--
+--   masked      a real number, but not the true one (nil, 0, a rounded value)
+--   secret      issecretvalue() is true; arithmetic and comparison both throw
+--   half-secret issecretvalue() is true, but arithmetic works and only some
+--               operations throw - which is what the report actually describes
+--   plain       a genuine value, no restriction at all
+--
+-- Everything here goes through pcall individually, because a secret throws at
+-- the point of USE and each use has to be its own test.
+local SECRET_UNITS = { "player", "target", "focus", "pet" }
+local SECRET_READS = {
+    "UnitHealth", "UnitHealthMax", "UnitPower", "UnitPowerMax",
+    "UnitLevel", "UnitName", "UnitGUID", "UnitClass",
+}
+
+-- issecretvalue() itself can throw, and a pcall that fails hands back an error
+-- STRING, which is truthy - reading that as "yes, secret" would invent a
+-- restriction. Only an ok call with a true result counts.
+local function isSecret(value)
+    if not issecretvalue then return false end
+    local ok, verdict = pcall(issecretvalue, value)
+    return (ok and verdict == true) or false
+end
+
+local function classifySecret(value)
+    local result = {}
+    local okType, valueType = pcall(type, value)
+    result.type = okType and valueType or "?"
+    result.isSecret = isSecret(value)
+
+    -- Each operation separately. The report's claim is precisely that some of
+    -- these pass and others throw, so collapsing them would erase the finding.
+    --
+    -- Three outcomes, not two, and the first version of this collapsed two of
+    -- them: `numeric and pcall(...) or nil` turns a pcall that returned FALSE -
+    -- the operation threw, which is the whole finding - into nil, the same value
+    -- used for "not applicable to this type". In the 2026-09-20 capture a secret
+    -- number whose comparison threw is indistinguishable from a string that was
+    -- never tested. Strings are recorded as n/a because `"Thrall" > 0` throws on
+    -- the types, not on a restriction.
+    local function attempt(applicable, fn)
+        if not applicable then return "n/a" end
+        return pcall(fn) and "ok" or "threw"
+    end
+    local numeric = (result.type == "number") or result.isSecret
+    result.compare = attempt(numeric, function() return value > 0 end)
+    result.arith = attempt(numeric, function() return value + 1 end)
+    result.equal = attempt(true, function() return value == value end)
+    -- Raw concatenation, deliberately: `"" .. tostring(value)` is what this
+    -- tested first, which is the P.2 trap rather than concat, and it succeeds on
+    -- a secret every time. The operation an addon writes by accident is this one.
+    result.concat = attempt(true, function() return "" .. value end)
+
+    local okStr, str = pcall(tostring, value)
+    result.tostring = okStr
+    -- §P.2: tostring() of a secret returns a secret STRING. Checking the result
+    -- is the only way to see that, and it is the trap that took the probe down.
+    result.tostringSecret = okStr and isSecret(str) or false
+    return result
+end
+
+local function probeSecrets()
+    db.secretModes = db.secretModes or {}
+    local inCombat = (InCombatLockdown and InCombatLockdown()) and true or false
+    local bucket = inCombat and "inCombat" or "outOfCombat"
+    db.secretModes[bucket] = {}
+
+    out(("|cff44ddffSECRET VALUE MODES|r  %s")
+        :format(inCombat and "|cffff4444in combat|r" or "out of combat"))
+    out("  legend: S=issecretvalue  >=comparison  +=arithmetic  ==equality  c=concat")
+    out("  a dot is 'that operation threw', a dash 'not applicable to this type'.")
+    out("  'plain' means unrestricted HERE; it does not prove the number is the true one.")
+
+    for _, unit in ipairs(SECRET_UNITS) do
+        local okExists, exists = pcall(UnitExists, unit)
+        if not (okExists and exists) then
+            out(("  %-8s |cff888888no such unit|r"):format(unit))
+        else
+            for _, name in ipairs(SECRET_READS) do
+                local fn = lookup(name)
+                if type(fn) == "function" then
+                    local ok, value = pcall(fn, unit)
+                    local row
+                    if not ok then
+                        row = "|cffff4444call raised|r " .. plain(value)
+                    else
+                        local c = classifySecret(value)
+                        local verdict
+                        if c.isSecret and c.arith == "threw" and c.compare == "threw" then
+                            verdict = "|cffff4444secret|r"
+                        elseif c.isSecret then
+                            verdict = "|cffff8800half-secret|r"   -- the claim under test
+                        elseif value == nil then
+                            verdict = "|cffffaa00nil|r"
+                        else
+                            verdict = "|cff44ff44plain|r"
+                        end
+                        -- "." is threw, "-" is not applicable to this type. They
+                        -- mean opposite things and used to print the same.
+                        local function flag(state, glyph)
+                            if state == "n/a" then return "-" end
+                            return state == "ok" and glyph or "."
+                        end
+                        row = ("%-12s %s%s%s%s%s %-7s value=%s"):format(
+                            verdict,
+                            c.isSecret and "S" or ".", flag(c.compare, ">"),
+                            flag(c.arith, "+"), flag(c.equal, "="), flag(c.concat, "c"),
+                            c.type, plain(value))
+                        db.secretModes[bucket][unit .. "." .. name] = c
+                    end
+                    out(("  %-8s %-16s %s"):format(unit, name, row))
+                end
+            end
+        end
+    end
+    out("  run this again in combat - the delta is the finding, not either half alone.")
+end
+
 -- Driver ----------------------------------------------------------------------
 SLASH_FPROBE1 = "/fprobe"
 SlashCmdList.FPROBE = function(arg)
@@ -2389,8 +2869,12 @@ SlashCmdList.FPROBE = function(arg)
     if cmd == "report" then return printReport() end
     if cmd == "blocked" then return printBlocked() end
     if cmd == "events" then return probeEvents() end
+    if cmd == "sv" then return printSavedVars() end
+    if cmd == "port" then return probePort() end
+    if cmd == "secrets" then return probeSecrets() end
     if cmd == "docs" then
         if sub == "version" then return docsVersionCheck(true) end
+        if sub == "secrets" then return docsSecretCount() end
         if sub == "dump" then
             -- The two range numbers come off the raw argument, because the
             -- three-token parse above only reaches as far as `extra`.
@@ -2443,7 +2927,10 @@ SlashCmdList.FPROBE = function(arg)
         out("  |cffffffff/fprobe events|r        which events an addon may subscribe to")
         out("  |cffffffff/fprobe blocked|r       captured BLOCKED/FORBIDDEN actions")
         out("  |cffffffff/fprobe external|r      inbound ExternalData.lua, outbound flush")
-        out("  |cffffffff/fprobe docs|r          Blizzard's API documentation (dump, version)")
+        out("  |cffffffff/fprobe sv|r            SavedVariables: load order, idiom, which path")
+        out("  |cffffffff/fprobe port|r          interface number, client identity, region, realm")
+        out("  |cffffffff/fprobe secrets|r       masked vs secret vs half-secret, per unit read")
+        out("  |cffffffff/fprobe docs|r          Blizzard's API documentation (dump, version, secrets)")
         return
     end
 
