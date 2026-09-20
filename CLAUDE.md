@@ -100,12 +100,24 @@ Worth doing next, in the repo rather than in game:
    capture a single `Secret` field; widen to every key matching the pattern and the
    machine-readable half of `restrictions.yaml` becomes generable.
 
-§Q is the one section no instrument in this repo can refresh. It is cost data measured by an
-addon in another repository, and `/fprobe` reproduces none of it, so a new build invalidates
-those numbers silently. The capture is checked in; a `/fprobe cost` subcommand would close
-the gap and has not been written. Two §Q items are also unverified reads: whether an addon
-can *write* `useMaxFPS` (Q.1 measured reads only), and what
-`C_Map.GetPlayerMapPosition` does inside an instance (Q.2).
+§Q is the one section no instrument in this repo can refresh. It is data measured by addons
+in another repository, and `/fprobe` reproduces none of it, so a new build invalidates those
+numbers silently. The captures are checked in; a `/fprobe cost` subcommand would close the
+gap and has not been written. Three §Q items are unverified reads: whether an addon can
+*write* `useMaxFPS` (Q.1 measured reads only), what `C_Map.GetPlayerMapPosition` does inside
+an instance (Q.2), and `UnitPosition`'s return order — the client's documentation says X
+first, retail folklore says Y first, and Q.8 measured only its allocation.
+
+**Merged 2026-09-20: a second handoff from `dynamic-ambiance-forever`.** Nine items; see the
+summary in that repo's `handoff/forever-addon-dev-2026-09-20.md` for what was offered. The
+one that moved the record is **§P.29 — `SetCVar` on the display CVars is permitted in
+combat**, measured in both states one pull apart, which closes the caveat §P.22 stated and
+lets `graphics-cvars-writable` drop its freeze-on-`PLAYER_REGEN_DISABLED` workaround. §P.29
+is the only §P finding not produced by `/fprobe`, and it says so in place. The rest landed in
+§Q (allocation cost of a CVar write, `UnitPosition`, indoor behaviour, `IsIndoors` vs
+`GetSubZoneText`, Lua 5.1 vs LuaJIT) and in the guides. One offered lead — a possible frame
+rate cost to per-frame writes — was **not** recorded as a finding; §Q.7 states why and
+forbids citing it.
 
 ## Working rules
 
@@ -179,7 +191,9 @@ Probe usage in-game:
   names, whether `GetCVarInfo` reports them locked, secure or read-only, whether a write
   survives a readback, and which display mode the measurement was taken in. Enumerates the
   real names out of `ConsoleGetAllCommands` rather than trusting the retail ones. Every
-  value it touches is restored. Run it again in combat for the other half
+  value it touches is restored. The in-combat half is answered — §P.29, by a third-party
+  instrument — but `/fprobe` has still never been run mid-fight here, and doing so would be
+  an independent check on a result this repo currently takes from outside
 - `/fprobe video ramp [cvar]` — sweep one of them down and back over four seconds. This is
   the measurement that decides whether a smooth ease is possible: it writes every frame
   from `OnUpdate` and reports the frame gaps, so a device restart per write shows up as a

@@ -18,6 +18,18 @@ Probe output lands here via scripts/collect-savedvars.ps1. Timestamped so runs c
   the phases run once in a fixed order with no warm-up discard, so drift lands on the later
   ones. Section Q.7 records why.
 
+- `DynamicAmbiance_2026-09-20_120259_selftest.lua` and
+  `DynamicAmbiance_2026-09-20_120605_selftest-combat.lua` - **not ForeverProbe output.** A
+  pair of self-test captures from `DynamicAmbiance`, a different addon in the same separate
+  repository, handed over on 2026-09-20. Same client, build 1.60.1.69913. They are the
+  evidence behind findings section P.29: the first was taken out of combat, the second
+  mid-fight one pull apart, and the only material difference between them is
+  `env.combat`. What makes them evidence rather than a report is the `blocked` table in
+  each - the instrument registers `ADDON_ACTION_BLOCKED` and `ADDON_ACTION_FORBIDDEN` at
+  load and clears the list per run, so an empty table is a captured absence of refusals
+  rather than a `pcall` that returned true. `/fprobe video` in combat still has not been
+  run and would be an independent check on the same question.
+
 That any capture exists at all is itself a finding: the client writes SavedVariables even
 though it never reads them back, so the outbound direction works while the round trip inside
 the client does not. See findings section P.9.

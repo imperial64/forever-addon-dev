@@ -57,6 +57,29 @@ arrived. Per-character differs only across a `/reload`; see above.
 **What still works:** everything outbound. If your goal is getting data *out* of the
 client for something else to read, SavedVariables is fine and needs no workaround.
 
+### The flush is destructive: collect, then reload — never reload first
+
+This is the operational consequence of "never read back", and it is sharper than that
+phrasing sounds. Three facts that compose badly:
+
+1. Your saved table starts **`nil`** every session, because nothing is read back.
+2. A `/reload` or logout writes **whatever the current session built**.
+3. That write **replaces** the file. It does not merge into it.
+
+So the reload that saves your data and the reload that destroys it are the same command in a
+different order. Reload *before* running anything and you have just written an empty table
+over the previous session's results.
+
+The client keeps a `.bak` beside the file, and that is the only recovery. It holds one
+generation: a second flush overwrites it too, so a session where you reload twice while
+working out what went wrong is a session where the backup is gone as well.
+
+On 2026-09-18 this destroyed five completed measurement runs in a sister repository,
+recovered from `.bak` only because it had not yet been overwritten a second time.
+
+If your addon collects anything you would mind losing, the order is: run it, confirm it
+reported what you expected, *then* `/reload`. `research/findings.md` §P.21.
+
 ### It is a tracked bug, and it is not your addon's fault
 
 **It is filed, not intended.** `forever-bugs#34` is open against this build with no

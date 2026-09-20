@@ -528,6 +528,24 @@ The delta above was reconstructed across captures by hand instead —
 gates in it (`UnitSpellCast`, `UnitThreatState`, `UnitThreatValues`) have no out-of-combat
 counterpart recorded because the in-game print truncated that line.
 
+**The destructive half of the same constraint, reported 2026-09-20 and worth stating
+separately.** The consequence of "written but never read back" (§P.9, §P.23) is sharper than
+that phrasing conveys, and it has now cost a dataset in another repository:
+
+- The addon's saved table starts **nil** every session, because nothing is read back.
+- A reload or logout writes **whatever the current session built**, and **replaces** the
+  file rather than merging into it.
+- So a `/reload` *before* running anything writes an empty table over the previous session's
+  results and destroys them. Only a `/reload` *after* running saves anything.
+- The client's own `.bak` beside the file is the only recovery, and it survives exactly one
+  further flush.
+
+On 2026-09-18 this silently destroyed five completed measurement runs in the
+`dynamic-ambiance-forever` repository; they were recovered from `.bak` only because it had
+not yet been overwritten a second time. Observed directly, with file sizes and timestamps.
+The rule is **collect, then reload — never reload first**, and it applies to `/fprobe`
+exactly as it applies to any other instrument on this client.
+
 ### P.22 Display brightness and contrast are addon-writable, live, at frame rate
 
 Measured 2026-09-18 with `/fprobe video` and `/fprobe video ramp`, capture
@@ -581,13 +599,16 @@ fullscreen. The old "gamma is fullscreen-only" limitation does not apply to `Bri
 and `Contrast` here. Exclusive fullscreen is untested, but the restrictive case is the one
 that was in doubt and it passed.
 
-**Not yet measured: combat.** `/fprobe video` in combat is a single command and has not
-been run. Given `SetCVar` is not a protected function and none of these carry lock flags,
-a block is unlikely, but P.20 has already shown this client's action gating does not always
-match retail. Until it is run, an addon should freeze on `PLAYER_REGEN_DISABLED` rather
-than assume.
+**Combat: measured 2026-09-20, and it is permitted — see §P.29.** This paragraph previously
+read "not yet measured" and advised freezing on `PLAYER_REGEN_DISABLED` out of caution. That
+caveat is withdrawn. `/fprobe video` in combat still has not been run; the measurement came
+from a different instrument, which §P.29 states in full. The reasoning that was offered here
+as a guess — `SetCVar` is not protected and these CVars carry no lock flags — turned out to
+be right, but it was an assertion until it was run, and §P.20 was the correct reason not to
+trust it.
 
-So an addon may drive display brightness and contrast smoothly, at frame rate, from Lua.
+So an addon may drive display brightness and contrast smoothly, at frame rate, from Lua, in
+combat as well as out of it.
 
 ---
 
@@ -1021,24 +1042,94 @@ result is §P.12.
 The probe no longer registers the combat log at load. The answer is in, and repeating it
 every login only trains the player to dismiss a dialog that is a result.
 
+### P.29 Writing the display CVars is permitted in combat
+
+**[PROBE — DynamicAmbiance, not ForeverProbe. Build 1.60.1.69913, 2026-09-20 12:02 and
+12:06. Captures `research/captures/DynamicAmbiance_2026-09-20_120259_selftest.lua` and
+`…_120605_selftest-combat.lua`.]** This closes the caveat §P.22 states explicitly, and it is
+the only §P finding in this document that `/fprobe` did not produce. The instrument is a
+third-party addon from the repository at `dynamic-ambiance-forever`, handed over on
+2026-09-20; the captures are checked in so the table below can be re-derived rather than
+taken on trust.
+
+The same instrument was run once out of combat and once mid-fight, one pull apart, in the
+same session on the same character:
+
+| | out of combat | in combat |
+|---|---|---|
+| `InCombatLockdown()` | nil | **true** |
+| `Brightness` write → readback | 57 → 57 | 57 → 57 |
+| `Contrast` write → readback | 57 → 57 | 57 → 57 |
+| Restored afterwards | 50 / 50 | 50 / 50 |
+| `isLockedFromUser` / `isSecure` / `isReadOnly` | false / false / false | false / false / false |
+| `ADDON_ACTION_BLOCKED` / `FORBIDDEN` captured | none | **none** |
+| Sweep frames in 3.00 s | 809 (270 fps) | 871 (290 fps) |
+| `C_CVar.SetCVar` calls during the sweep | 1618 | 1742 |
+| Frame gap min / p50 / p99 / max | 2 / 4 / 5 / 10 ms | 2 / 3 / 5 / 9 ms |
+
+Indistinguishable on every axis that was measured.
+
+**The refusal count is a captured event count, not a `pcall` result**, which is the
+distinction this repo's own rules turn on (§P.1, and the working rule that a refusal here is
+often an event rather than an error). The instrument registers `ADDON_ACTION_BLOCKED` and
+`ADDON_ACTION_FORBIDDEN` on a dedicated frame at load, clears the accumulated list at the
+start of each run, and writes whatever arrived into the capture. Both captures carry an
+empty `blocked` table. Verified by reading the instrument
+(`addons/DynamicAmbiance/SelfTest.lua` in that repository) rather than by trusting the
+handover's summary of it.
+
+One weakness in the instrument, stated because it bounds the claim rather than because it
+changes it: its registration helper `pcall`s `RegisterEvent` and warns to chat on failure,
+and `SelfTest.lua` discards that return value rather than recording it. So a registration
+that failed would print in chat and leave no trace in the capture — the same shape of
+silent failure §P.1 records for the combat log. Against that: both events are ordinary
+addon events this client is not known to refuse, the helper is the same one the addon uses
+for the events it demonstrably receives, and §P.12 found no collateral refusals in the
+neighbourhood. The empty `blocked` table is good evidence, not proof.
+
+**The frame-time half extends §P.22 rather than merely repeating it.** §P.22's ramp drove
+**one** CVar for four seconds at 111 writes/s. This drove **both** `Brightness` and
+`Contrast` from `OnUpdate`, every frame — 539 and 581 `SetCVar` calls per second, five times
+§P.22's write rate at more than twice its frame rate — and the worst single frame was 10 ms.
+Note that these gaps are read off `OnUpdate` `elapsed`, which §Q.5 measured as quantised to
+1 ms: they can show the absence of a hitch, not size one.
+
+Not verified:
+
+- Whether this extends to CVars other than `Brightness` and `Contrast`. Only those two were
+  written.
+- Whether it holds in **instanced** combat. Both runs were open-world, in Elwynn Forest.
+- Whether the screen actually changed during the in-combat sweep. No Lua read reports what
+  the monitor is doing; §P.22's out-of-combat equivalent was confirmed by eye and this one
+  was not stated either way.
+
+The consequence for the restriction list: `graphics-cvars-writable` can state combat rather
+than being silent on it, and the "freeze on `PLAYER_REGEN_DISABLED`" workaround it carried
+is withdrawn.
+
 ---
 
-## Q. What calls cost, measured by a second instrument (2026-09-18)
+## Q. What the client costs and how it behaves, measured by outside instruments (2026-09-18, extended 2026-09-20)
 
-**[PROBE — AmbianceCost, beta build 1.60.1.69913, out of combat, five runs]** Also measured
-on a running client, so this ranks alongside §P rather than under it — but by a *different*
-addon, from a different repository, and that difference is worth stating rather than quietly
-folding into §P. §P asks what the client permits. §Q asks what calls cost, which is the
-other question that decides whether a design is possible.
+**[PROBE — AmbianceCost and DynamicAmbiance, beta build 1.60.1.69913]** Also measured on a
+running client, so this ranks alongside §P rather than under it — but by *different* addons,
+from a different repository, and that difference is worth stating rather than quietly
+folding into §P. §P asks what the client permits. §Q asks what a permitted call costs and
+how it behaves, which is the other question that decides whether a design is possible.
+
+Most of this section is cost data. Some of it — §Q.1, §Q.5, §Q.6, §Q.9, §Q.10 — is not, and
+is here because it came from the same outside instruments and carries the same staleness
+rule, not because it is a price.
 
 | | |
 |---|---|
-| Instrument | `AmbianceCost`, an addon in a separate repository, not in this one |
-| Capture | `research/captures/AmbianceCost_2026-09-18_215313_cost-bench.lua` |
-| Method | `debugprofilestart` / `debugprofilestop` around an adaptively sized loop; loop overhead measured separately and subtracted; each call benched on its own frame |
-| Replication | 5 runs, 21:34–21:53, across graphics presets and frame-rate caps |
+| Instruments | `AmbianceCost` and `DynamicAmbiance`, addons in a separate repository, neither shipped here |
+| Captures | `research/captures/AmbianceCost_2026-09-18_215313_cost-bench.lua`; `DynamicAmbiance_2026-09-20_120259_selftest.lua` and `…_120605_selftest-combat.lua` |
+| Method, time | `debugprofilestart` / `debugprofilestop` around an adaptively sized loop; loop overhead measured separately and subtracted; each call benched on its own frame |
+| Method, allocation | `collectgarbage("stop")`, forced collect, `count` delta across 2000 calls, `restart` |
+| Replication | 5 runs, 2026-09-18 21:34–21:53, across graphics presets and frame-rate caps; 2 runs, 2026-09-20 12:02 and 12:06 |
 | Machine | RTX 5080, 1920x1080, D3D12, `gxMaximize=1` (maximized windowed); vsync on for runs 1–3, off for 4–5 |
-| Combat | out of combat in all five runs |
+| Combat | out of combat in all five 2026-09-18 runs; both states on 2026-09-20 (§P.29) |
 
 Every figure below was re-derived from the checked-in capture rather than copied from the
 handover note. Where the two disagreed, what is written here is what the capture says, and
@@ -1117,8 +1208,21 @@ So: **poll position on an accumulator, not per frame.** The allocation was measu
 collector stopped, which is what keeps a collection inside the measuring loop from reading
 as a negative delta and reporting "allocates nothing".
 
+**A building interior in the open world is not the instance case.** Called inside the
+Northshire chapel on 2026-09-20 it returned an ordinary point on the **parent** map —
+`0.4905, 0.4096` on uiMapID 1429 — with `C_Map.GetBestMapForUnit` still returning 1429. It
+did not go nil and the map did not change. Worth recording beside the retail caveat below,
+because the two are easily conflated: walking indoors does not break the position read.
+Reproduced across three captures.
+
+The object shape was independently re-observed by the second instrument across five runs on
+2026-09-20, recording `posShape = "object with GetXY (allocates)"` every time. That
+corroborates the 1864-byte finding rather than adding to it, and is noted only because an
+addon assuming two plain numbers gets `nil` for its `y` and no error.
+
 Not verified: behaviour inside instances, where Retail returns nil. The instrument guarded
-for it and never exercised the guard.
+for it and never exercised the guard. Also not verified: a building that is its own map
+rather than a parent-map interior — a capital-city inn, say.
 
 ### Q.3 `C_Map.GetBestMapForUnit` is present and cheap
 
@@ -1141,6 +1245,37 @@ A changed value costs about 2.6x a no-op write, so the client is doing real work
 and that work is still sub-microsecond. One changed write per frame is about 0.02% of a
 frame at 274 fps. The "cheap live post-process" conclusion in §P.22 holds and now has a
 number under it.
+
+**But the two costs point in opposite directions, and §P.22's framing only covers one of
+them.** A write is cheap in frame time and expensive in allocation:
+
+| Call | Bytes per call |
+|---|---|
+| `C_CVar.SetCVar(name, "50.00")` — preformatted string | **822** |
+| `C_CVar.SetCVar(name, 50.0)` — numeric | **827** |
+| `("%.2f"):format(v)` alone, varying `v` | 38 |
+
+Passing a number instead of a preformatted string does **not** avoid the allocation: 827
+against 822, which is the wrong direction and inside the noise either way. The conversion
+happens inside the call and allocates regardless. The Lua-side format string accounts for
+only 38 bytes of the total, so `SetCVar` itself is responsible for roughly 784.
+
+For an addon driving a CVar from `OnUpdate` at a realistic ~35 writes/s that is about
+28 KB/s, or ~99 MB/hour, **per CVar driven**. An author who reads §P.22's frame-time
+conclusion and stops there will conclude a CVar write is free. It is free in time and it is
+not free in garbage, and on this client garbage is the axis that constrains designs — the
+same conclusion §Q.2 reaches about the position read.
+
+That 38-byte figure for the format string is itself a corrected measurement: formatting the
+*same* value repeatedly measures nothing, because Lua interns the result and an allocating
+call reports zero. It had to be re-measured with a varying value. That is a Lua fact rather
+than a client fact, and it is recorded here only because it is the trap that hid this
+number the first time.
+
+Measured with the collector stopped, 2000 calls, on `Brightness`. Not verified: whether the
+figure differs per CVar, or for a CVar the client persists differently. Only `Brightness`
+was measured, and 822 bytes should be read as the order of magnitude for a CVar write on
+this client rather than as a constant.
 
 ### Q.5 `OnUpdate` elapsed is quantised to 1 ms
 
@@ -1180,6 +1315,12 @@ weaker claim than presence but the one an author actually needs — §P.22 has a
 that a documented retail name can be absent from this build. `collectgarbage("stop")` in
 particular is load-bearing for any allocation measurement, per §Q.2.
 
+Re-affirmed 2026-09-20 by the second instrument, which reported `("stop")` and `("restart")`
+behaving as Lua 5.1 documents. That is corroboration rather than a new measurement: it is
+implied by every allocation figure in this section being stable and repeatable, and the
+claim here is unchanged. The reason it is worth stating twice is §Q.10 — the guarantee only
+holds on a plain interpreter.
+
 ### Q.7 Not recorded: the frame-gap phase data
 
 The capture's `phases` table is checked in with the rest of the file and is **not evidence**.
@@ -1194,6 +1335,124 @@ instrument rather than the client:
 
 The one claim those phases support: **no phase in any run produced a frame gap a player
 would feel.** Everything quantitative in §Q comes from the microbench instead.
+
+**A second observation is excluded on the same grounds, 2026-09-20.** `GetFramerate` read
+362.5 fps immediately before the first §P.29 sweep, and that sweep averaged 270. The second
+run repeated the pattern but not the size — 321.7 before, 290 during: a 32 fps drop where
+the first was 92, for identical work. The offering repo raised it and argued against
+recording it, and that judgement is accepted here. It is one sample per state, one ordering,
+no warm-up discard and no control — the same defects listed above — and a fixed per-write
+cost cannot produce two different drops for the same work. The arithmetic is also against
+it: if the first gap were the workload it would be ~0.95 ms per frame for two writes, three
+orders of magnitude above the 0.786–0.823 µs §Q.4 measured.
+
+It is written down, here rather than as a finding, because the question behind it is real
+and cheap to settle: whether a per-frame CVar write has a frame-rate cost at high frame
+rates that the per-call time does not predict. That needs an A-B-A of idle / one CVar per
+frame / two CVars per frame, each with a warm-up discard. Until that exists, **nothing in
+this repository may cite the 92 fps drop**, and §P.29's frame-gap table is the claim that
+stands.
+
+### Q.8 `UnitPosition` is present and allocates nothing
+
+`UnitPosition("player")` exists on this client and returns plain numbers rather than an
+object.
+
+| Call | Bytes per call |
+|---|---|
+| `C_Map.GetPlayerMapPosition` | 1864 |
+| `UnitPosition` | **0.0** |
+
+On the allocation axis — the axis that actually constrains a poller on this client, per
+§Q.2 — it is strictly better, and it removes the whole garbage problem §Q.2 describes rather
+than reducing it. The tradeoff is not cost but coordinate space: `UnitPosition` returns
+world coordinates, `C_Map.GetPlayerMapPosition` normalized 0–1 map coordinates. They answer
+different questions and an addon that wants a position on a map cannot simply substitute
+one for the other.
+
+Not verified, and the list is long enough that this entry should be read as "worth
+investigating" rather than "use this instead":
+
+- **Return-value order and units on this client**, and there is a live disagreement to
+  settle. The client's own documentation names the returns
+  `positionX, positionY, positionZ, mapID` — X first — and the generated page says so.
+  Community documentation for retail has long held that the first two values arrive **Y
+  then X** regardless of those names. Nothing here measured which is true on this client;
+  the allocation is all that was measured. An addon that gets this backwards produces a
+  position that is wrong in a way that looks plausible, so confirm it against a known
+  landmark before trusting it.
+- **Behaviour inside instances.**
+- **Whether it is restricted in combat.** Retail restricts `UnitPosition` for units other
+  than the player in some contexts; nothing here measured that, and §P.25 has already shown
+  this client gates unit reads on axes retail does not.
+- Its **time** cost. It was not separately benched.
+
+### Q.9 `IsIndoors()` and `IsOutdoors()` disagree with `GetSubZoneText()` at the door
+
+Both functions exist and return correct, complementary booleans. The finding is that they
+disagree with the subzone name across a **band**, not at a line.
+
+On the Northshire chapel stairway the client reported `IsIndoors() == true` while
+`GetSubZoneText()` still returned the *outdoor* subzone. Walking in and out, logged on
+change:
+
+```
+Northshire Valley                    outdoors
+Northshire Valley  [indoors]         on the steps - the disagreement
+Main Hall          [indoors]
+Hall of Arms       [indoors]
+Library Wing       [indoors]
+Main Hall          [indoors]
+Northshire Valley  [indoors]         on the way out, again
+Northshire Valley                    outdoors
+```
+
+An addon treating the subzone name as authoritative for indoor/outdoor state flips its
+behaviour part-way through a building, in both directions. Two related traps for the same
+class of addon:
+
+- **Subzone names are reported outdoors too**, so the presence of a name cannot mean
+  "inside".
+- **A building shares its x,y with the ground it stands on**, so a map coordinate cannot
+  express "indoors" either. `IsIndoors()` is the only signal that carries it.
+
+Nothing is refused here, so this is not a restriction — it is a correctness trap, and it is
+written up for an outside reader in `reference/guides/pitfalls.md`.
+
+Reproduced in both directions by walking it repeatedly. Not verified: whether the
+disagreement band exists at every building, or is specific to this stairway's geometry. One
+building was walked.
+
+### Q.10 The runtime is the plain Lua 5.1 interpreter, not LuaJIT
+
+Load-bearing rather than incidental: the allocation guard behind every byte figure in this
+section is only sound on a plain interpreter.
+
+| Signal | Value |
+|---|---|
+| `_VERSION` | `Lua 5.1` |
+| `jit` table | absent |
+| `ffi` | absent |
+| `table.new` | absent |
+| `string.buffer` | absent |
+| `bit` | present |
+
+Why it matters: on a JIT VM a non-escaping allocation can be optimised away entirely, and
+`collectgarbage("stop")` does not reliably hold the collector. Either would silently
+invalidate a memory measurement — an allocating call would report zero bytes and the
+measurement would look clean. Both behaviours were observed under LuaJIT 2.1 while the
+instrument's guard was being tested, which is why this was checked at all.
+
+Two notes for anyone re-running it:
+
+- **`_VERSION` alone does not answer the question.** LuaJIT also reports `Lua 5.1`. The test
+  has to be for the `jit` table or for LuaJIT-only globals.
+- **`bit` is not evidence either way.** LuaJIT ships a `bit` library and so does stock WoW,
+  so it discriminates nothing. Including it in a marker list produces a false positive — it
+  did exactly that in the instrument before the list was corrected.
+
+Five signals agreeing, read from the live client. Not verified: whether this holds across
+other builds of the same fork.
 
 ---
 
@@ -1773,12 +2032,18 @@ nothing here is mistaken for a complete account of the client.
   `ShouldUnitThreatStateBeSecret` and `ShouldUnitThreatValuesBeSecret`. The in-game chat
   line truncated before printing them. Their in-combat behaviour is measured (§P.18); their
   out-of-combat state is inferred from the reads, not read off the gate.
-- **`/fprobe video` in combat** has not been run, so whether `SetCVar` on the display CVars
-  survives combat is unknown (§P.22). `SetCVar` is not a protected function and none of
-  these CVars carry lock flags, so a block is unlikely — but §P.20 showed this client's
-  action gating does not always match retail.
+- **Whether the in-combat CVar result generalises.** §P.29 measured `Brightness` and
+  `Contrast` only, in open-world combat. Whether other CVars are equally unprotected in
+  combat, and whether instanced combat behaves the same, are both open. `/fprobe video` in
+  combat has still not been run — the measurement came from a different instrument.
 - **Exclusive fullscreen** is untested for §P.22; the measurement was taken in maximized
   windowed mode, which was the case in doubt and passed.
+- **Whether `SetCVar`'s ~822 bytes is constant across CVars** (§Q.4). Only `Brightness` was
+  measured, and a CVar the client persists differently might not cost the same.
+- **`UnitPosition`'s return order, units, instance behaviour and combat availability**
+  (§Q.8). Only its allocation was measured, which is not enough to recommend it.
+- **Whether a per-frame CVar write costs frame rate at high frame rates** — the observation
+  excluded in §Q.7. It needs an A-B-A with a warm-up discard, not another single sample.
 - **Beta-realm scale.** §P.15's auction timings come from a market of 14,389 auctions and
   680 item keys. A launch realm will be larger by an order of magnitude, and neither the
   500-result page size nor the three-second completion is guaranteed to hold. What
@@ -1813,5 +2078,10 @@ that did, and it both added an entry and corrected an existing one.
   `projectField`/`projectFunction` capture a single `Secret` field and should be widened to
   every key matching the pattern.
 - **`SecureActionButtonTemplate:SetAttribute` in combat**, the three `C_Secrets` gates with
-  no out-of-combat value, `/fprobe video` in combat, exclusive fullscreen, beta-realm
-  scale, and the `ReplicateItems` throttle bracket — all as listed above, unchanged.
+  no out-of-combat value, exclusive fullscreen, beta-realm scale, and the `ReplicateItems`
+  throttle bracket — all as listed above, unchanged. `/fprobe video` in combat is no longer
+  on this list as a question about the client: §P.29 answers it. It remains on it as a gap
+  in *this repo's instrument*, which still cannot reproduce the result.
+- **Whether `useMaxFPS` and friends are writable from an addon** (§Q.1). Only reads were
+  done. §P.22 and §P.29 establish that `SetCVar` writes land on the display CVars in both
+  combat states; that does not carry over to these without a measurement.
