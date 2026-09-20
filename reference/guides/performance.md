@@ -22,12 +22,21 @@ exact figure.
 |---|---|---|
 | `C_Map.GetPlayerMapPosition` | 4.4 – 5.7 µs | **1864 bytes** |
 | …including `GetXY()` to get two numbers | 4.9 – 7.9 µs | as above |
+| `UnitPosition` | not benched | **none** |
 | `C_Map.GetBestMapForUnit` | 0.61 – 0.64 µs | none measurable |
-| `C_CVar.SetCVar`, value changed | 0.79 – 0.82 µs | — |
-| `C_CVar.SetCVar`, value unchanged | 0.30 – 0.32 µs | — |
+| `C_CVar.SetCVar`, value changed | 0.79 – 0.82 µs | **~822 bytes** |
+| `C_CVar.SetCVar`, value unchanged | 0.30 – 0.32 µs | not separately measured |
 
 Time is not the interesting column. Everything here is sub-10 µs against a 3.6 ms frame at
-274 fps. **The allocation is the interesting column.**
+274 fps. **The allocation is the interesting column**, and it is the one that catches people
+out, because the two do not correlate: a CVar write is one of the cheapest calls here in
+time and one of the more expensive in garbage.
+
+One thing to know before you trust any of these: this client runs the **plain Lua 5.1
+interpreter, not LuaJIT**. That is what makes `collectgarbage("stop")` a valid guard, and
+it is why these byte figures mean anything. Measured — `_VERSION` is `Lua 5.1`, and `jit`,
+`ffi`, `table.new` and `string.buffer` are all absent. (`_VERSION` alone would not settle
+it: LuaJIT also reports `Lua 5.1`. Neither would `bit`, which both ship.)
 
 ## Reading player position is a garbage problem, not a time problem
 
@@ -59,16 +68,50 @@ end)
 `C_Map.GetBestMapForUnit` is cheap enough not to matter, but it is still a map-tree lookup:
 put it behind a zone-change event rather than inside the poll.
 
-## Writing CVars is affordable at frame rate
+Two things worth knowing about that call before you build on it:
+
+- **Walking indoors does not break it.** Inside a building in the open world it returns an
+  ordinary point on the parent map, with the uiMapID unchanged. The retail caveat about
+  instances is a different case and is still unmeasured here.
+- **`UnitPosition` allocates nothing**, so if what you actually want is *world* coordinates
+  rather than a normalized position on a map, the garbage problem above disappears. It is
+  not a drop-in substitute: different coordinate space, and its instance behaviour and
+  combat availability are unmeasured here. Its **return order is also unsettled** — the
+  client documents `positionX, positionY, positionZ, mapID`, while retail's community
+  documentation has long said the first two arrive *Y then X* regardless of those names.
+  Nothing here measured which holds. Check it against a known landmark before you trust it;
+  getting it backwards gives you a position that is wrong and still looks plausible.
+
+## Writing CVars is cheap in time and expensive in garbage
 
 §P.22 established that driving `Brightness` from `OnUpdate` for four seconds produced no
-frame-gap spike. The per-call figure says why: a write with a changed value is under a
-microsecond, and a write with the same value is a third of that. One changed write per
-frame is about 0.02% of a frame at 274 fps.
+frame-gap spike, and a later run drove **both** `Brightness` and `Contrast` every frame at
+290 fps — 581 writes a second — with a worst frame gap of 9 ms. The per-call figure says
+why: a write with a changed value is under a microsecond, and a write with the same value is
+a third of that. One changed write per frame is about 0.02% of a frame at 274 fps.
 
-A write is a live post-process, not a device restart, so a smooth ease is possible. See
-`restrictions/` for what is and is not writable, and note that CVar writes have **not** been
-measured in combat.
+A write is a live post-process, not a device restart, so a smooth ease is possible. **And
+CVar writes are permitted in combat** — measured in both states one pull apart, with no
+`ADDON_ACTION_BLOCKED` or `ADDON_ACTION_FORBIDDEN` captured in either. That was an open
+caveat in an earlier version of this page. Only `Brightness` and `Contrast` were tested, and
+only in open-world combat; see `restrictions/` for what is and is not writable.
+
+**The cost that does constrain you is allocation.** Every write allocates about 822 bytes:
+
+```
+C_CVar.SetCVar(name, "50.00")   -- 822 bytes
+C_CVar.SetCVar(name, 50.0)      -- 827 bytes  (a number does not help)
+("%.2f"):format(v)              --  38 bytes  (so the call itself is ~784)
+```
+
+Passing a number instead of a preformatted string does not avoid it — the conversion happens
+inside the call. At a realistic ~35 writes/s from `OnUpdate` that is roughly 28 KB/s, or
+~99 MB/hour, **per CVar you drive**. Driving two is twice that.
+
+So the lever is the write *rate*, not the write. An epsilon skip — don't write unless the
+value actually moved by something visible — or an accumulator costs you nothing in smoothness
+and takes the garbage with it. Measured on `Brightness` only; treat 822 as an order of
+magnitude for a CVar write rather than a constant.
 
 ## Do not profile with `OnUpdate` elapsed
 
@@ -87,9 +130,15 @@ debugprofilestart()
 local ms = debugprofilestop()   -- microsecond resolution
 ```
 
-`collectgarbage("count")`, `("stop")`, `("restart")` and `("collect")` all work too. If you
-are measuring allocation, **stop the collector first** — a collection inside your measuring
-loop reads as a negative delta and reports that the call allocates nothing.
+`collectgarbage("count")`, `("stop")`, `("restart")` and `("collect")` all work too, and
+behave as Lua 5.1 documents. If you are measuring allocation, **stop the collector first** —
+a collection inside your measuring loop reads as a negative delta and reports that the call
+allocates nothing.
+
+One more trap in the same place: **formatting the same value repeatedly measures nothing**,
+because Lua interns the result and the second call onwards allocates zero. Vary the input,
+or you will conclude that string formatting is free. That hid the 38-byte figure above the
+first time it was measured.
 
 ## Two habits this suggests
 

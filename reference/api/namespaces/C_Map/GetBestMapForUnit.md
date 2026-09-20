@@ -3,7 +3,7 @@
 # C_Map.GetBestMapForUnit
 
 > **COST — measured, not a restriction.** 0.610 - 0.636 µs, no measurable allocation. Cheap - seven to nine times cheaper than the position read.
-> Measured 2026-09-18 on build 69913, n=5, on one machine, and NOT re-measured by `regenerate`. Evidence: §Q.3 in [findings](../../../../research/findings.md).
+> Measured 2026-09-20 on build 69913, n=5, on one machine, and NOT re-measured by `regenerate`. Evidence: §Q.3 in [findings](../../../../research/findings.md).
 > 
 > _Guidance:_ Resolve it on a zone-change event and hold the id, rather than re-asking inside the poll.
 

@@ -1,9 +1,10 @@
-# Eight things that will bite you
+# Ten things that will bite you
 
-Each of the first six cost real debugging time against a live client. The last two cost
+Each of the first six cost real debugging time against a live client. Items 7 and 8 cost
 another developer their addon's saved data and a wrong code path respectively, and are
-credited in `research/findings.md` §10 and §11. They are in the order you are likely to
-hit them.
+credited in `research/findings.md` §10 and §11. Items 9 and 10 come from a second addon
+measured on the same client and are credited in §Q.9 and §P.22. They are in the order you
+are likely to hit them.
 
 ## 1. An unknown event aborts the whole file
 
@@ -63,6 +64,13 @@ On this build the client writes `## SavedVariables` to disk on logout or `/reloa
 a settings story either. Measured side by side in one addon with identical binding code.
 Nothing about your binding idiom matters here; two published "fixes" claimed otherwise and
 both were tested and refuted. See `guides/savedvariables.md`.
+
+**The flush is destructive, so collect first and reload second.** Your table starts `nil`
+every session, and a reload writes whatever the *current* session built, replacing the file
+rather than merging into it. A `/reload` before you have run anything therefore writes an
+empty table over yesterday's data and destroys it. The client's `.bak` is the only recovery
+and it survives exactly one further flush. This is not hypothetical: it destroyed five
+completed measurement runs in a sister repository.
 
 ## 4. `ReloadUI()` is protected
 
@@ -127,6 +135,59 @@ client or the other.
 Bracket the interface version instead — `>= 16000 and < 20000` — or, better, test for the
 capability you actually need rather than for the client. The linter flags
 `WOW_PROJECT_ID` comparisons as `project-id-detection`. See `guides/packaging.md`.
+
+## 9. `GetSubZoneText()` is not an indoor/outdoor test
+
+`IsIndoors()` and `IsOutdoors()` are present and return correct, complementary booleans. The
+subzone name does not track them, and the two disagree across a **band** rather than at a
+line.
+
+Walking into the Northshire chapel, logged on change:
+
+```
+Northshire Valley                    outdoors
+Northshire Valley  [indoors]         on the steps - the disagreement
+Main Hall          [indoors]
+Hall of Arms       [indoors]
+Library Wing       [indoors]
+Main Hall          [indoors]
+Northshire Valley  [indoors]         on the way out, again
+Northshire Valley                    outdoors
+```
+
+Anything using the subzone name as its indoor/outdoor signal flips part-way through a
+building, in both directions. Two more traps in the same corner:
+
+- **Subzone names are reported outdoors too.** The presence of a name cannot mean "inside".
+- **A building shares its x,y with the ground under it.** A map coordinate cannot express
+  "indoors" either.
+
+`IsIndoors()` is the only signal that carries it. Use it, and treat the subzone name as what
+it is — a label for display. Nothing here is refused; this is a correctness trap, and it
+cost a real addon a bug. `research/findings.md` §Q.9.
+
+Related, and worth knowing before you reach for a position read: walking indoors does **not**
+break `C_Map.GetPlayerMapPosition`. Inside the chapel it returns an ordinary point on the
+parent map with the uiMapID unchanged. The retail caveat about instances is a different case
+— see `guides/performance.md`.
+
+## 10. There is no global `GetCVarInfo`
+
+It is `C_CVar.GetCVarInfo`, with the documented seven-value shape. The bare global does not
+exist on this build.
+
+This is worth its own line because of *how* it fails. A retail-shaped addon reaches for the
+global, gets `nil`, and — if it guarded the call — silently skips its lock-flag check rather
+than erroring. You get an addon that believes it verified a CVar was writable and in fact
+verified nothing.
+
+```lua
+local info = C_CVar.GetCVarInfo(name)   -- not GetCVarInfo(name)
+```
+
+The generated reference is already correct about this: `reference/api/` has a page for
+`C_CVar.GetCVarInfo` and none for a global of that name. If a symbol you expect has no page,
+that absence is itself the answer.
 
 ## Three shapes of failure
 
