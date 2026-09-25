@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_Commentator.GetCamera
 
@@ -21,6 +21,14 @@ _None._
 | 5 | `pitch` | `number` | no |  |
 | 6 | `roll` | `number` | no |  |
 | 7 | `fov` | `number` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `RequiresActiveCommentator` | `true` |
 
 Blizzard's own rendering: `C_Commentator.GetCamera()`
 

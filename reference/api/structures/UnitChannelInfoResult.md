@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # UnitChannelInfoResult
 
@@ -19,5 +19,16 @@ _Structure_
 | 9 | `isEmpowered` | `bool` | no |  |
 | 10 | `numEmpowerStages` | `number` | no |  |
 | 11 | `castBarID` | `UnitCastBarID` | yes |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| field `isTradeskill` | `NeverSecret` | `true` |
+| field `isEmpowered` | `NeverSecret` | `true` |
+| field `numEmpowerStages` | `NeverSecret` | `true` |
+| field `castBarID` | `NeverSecret` | `true` |
 
 System: `Unit`

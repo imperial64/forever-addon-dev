@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_Spell.GetVisibilityInfo
 
@@ -20,6 +20,14 @@ hasCustom, alwaysShowMine, showForMySpec = C_Spell.GetVisibilityInfo(spellID, vi
 | 1 | `hasCustom` | `bool` | no |  |
 | 2 | `alwaysShowMine` | `bool` | no |  |
 | 3 | `showForMySpec` | `bool` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
 
 Blizzard's own rendering: `C_Spell.GetVisibilityInfo(spellID, visibilityType)`
 

@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # RafRecruitActivityState
 
@@ -6,10 +6,10 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Incomplete` | `RafRecruitActivityState` | no |  |
-| 2 | `Complete` | `RafRecruitActivityState` | no |  |
-| 3 | `RewardClaimed` | `RafRecruitActivityState` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Incomplete` | 0 | `RafRecruitActivityState` | no |  |
+| 2 | `Complete` | 1 | `RafRecruitActivityState` | no |  |
+| 3 | `RewardClaimed` | 2 | `RafRecruitActivityState` | no |  |
 
 System: `RecruitAFriend`

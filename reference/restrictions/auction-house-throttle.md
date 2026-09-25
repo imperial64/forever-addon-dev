@@ -47,9 +47,9 @@ local function mayScan()
 end
 ```
 
-Note that this build never reads SavedVariables back, so your last-scan time does not
-survive a `/reload`. Either keep the whole scan session in one sitting, or treat the first
-scan after a reload as unknown-risk.
+Keep `lastScan` in SavedVariables, bound on `ADDON_LOADED`. On build 70009 it survives a
+`/reload` and a relaunch (`research/findings.md` §P.30). On 69913 and earlier nothing was
+read back, so there the first scan after a reload has to be treated as unknown-risk.
 
 ## Prefer browse
 

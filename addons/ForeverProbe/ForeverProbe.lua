@@ -29,6 +29,9 @@
 --   /fprobe secrets   masked vs secret vs half-secret, per unit read
 --   /fprobe video     brightness/contrast CVars - may an addon write them at all
 --   /fprobe docs      Blizzard's own API documentation (dump, version, secrets)
+--   /fprobe cold      SavedVariables cold-start test with the ForeverProbeSV_* companions
+--   /fprobe snippet   does a secure snippet run, out of combat and in combat
+--   /fprobe copy      everything the probe printed this session, in a copyable box
 --
 -- Results persist to WTF/Account/<ACCT>/SavedVariables/ForeverProbe.lua on
 -- /reload or logout.
@@ -43,16 +46,22 @@ local ADDON, ns = ...
 -- `X = X or {}` at file scope, deliberately left alone. On retail this idiom is
 -- a bug - saved variables are restored AFTER the addon's files execute, so the
 -- client swaps the global out from under this `local db` and every write below
--- lands in an orphan. One port diary reports Forever restores BEFORE executing
--- addon Lua, which would make it safe; nobody has measured which.
+-- lands in an orphan. Measured on build 70009 (research/findings.md P.31): the
+-- order IS retail's unless the .toc sets `## LoadSavedVariablesFirst: 1`, so
+-- this line is wrong as written.
 --
--- Changing it now would break the continuity of every capture in
--- research/captures/, so SavedVars.lua measures the order instead, against
--- three other globals bound three other ways. `/fprobe sv` reports it. If the
--- order turns out to be retail's, THIS is the line that was wrong all along,
--- and it says so.
+-- It stays, because changing it would break the continuity of every capture in
+-- research/captures/. The rebind guard below re-points `db` at the restored
+-- table on ADDON_LOADED and records the swap, which is what keeps this line's
+-- writes from landing in the orphan.
 ForeverProbeDB = ForeverProbeDB or {}
 local db = ForeverProbeDB
+-- Hand SavedVars.lua the post-initialiser address. Its own file-scope snapshot
+-- runs before the line above, so on a build that restores after file scope it
+-- only ever saw nil here and could not see the swap. See savedVarsObserve.
+if ns and type(ns.savedVarsObserve) == "function" then
+    ns.savedVarsObserve("file-scope-after-init")
+end
 
 -- Inbound external data channel -----------------------------------------------
 -- The only way an addon gets data from outside the client: a process outside the
@@ -102,7 +111,22 @@ local function plain(v)
     return cut
 end
 
-local function out(msg) DEFAULT_CHAT_FRAME:AddMessage("|cff44ddffFProbe|r " .. plain(msg)) end
+-- Everything printed is also kept, uncoloured, in a transcript: WoW's chat frame
+-- cannot be copied from, and "paste back what it said" is how a result gets from
+-- the client into this repo. `/fprobe copy` shows it in a selectable box, and
+-- it rides along in the DB so the capture carries the chat output too. Capped,
+-- because plain /fprobe alone prints a few hundred lines.
+local TRANSCRIPT_CAP = 800
+local transcript = {}
+db.transcript = transcript
+
+local function out(msg)
+    local text = plain(msg)
+    DEFAULT_CHAT_FRAME:AddMessage("|cff44ddffFProbe|r " .. text)
+    local bare = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    transcript[#transcript + 1] = bare
+    if #transcript > TRANSCRIPT_CAP then table.remove(transcript, 1) end
+end
 
 -- Block capture ---------------------------------------------------------------
 -- Declared up here rather than next to the watcher frame because safeRegister
@@ -156,7 +180,57 @@ local watcher = CreateFrame("Frame")
 safeRegister(watcher, "ADDON_ACTION_BLOCKED")
 safeRegister(watcher, "ADDON_ACTION_FORBIDDEN")
 safeRegister(watcher, "PLAYER_LOGIN")
+safeRegister(watcher, "ADDON_LOADED")
+
+-- Rebind guard, added for build 70009 -----------------------------------------
+-- The `local db` above was taken at file scope. §P.23 measured that nothing was
+-- restored on 69913, so the global was never swapped and the local was always
+-- the table the client serialised. Build 70009 is reported to restore saved
+-- variables again, and if it does so retail's way - AFTER this file runs - the
+-- client replaces the global under this local, every write this session lands
+-- in an orphan, and the capture comes back without the run in it.
+--
+-- So on ADDON_LOADED, if the global is no longer the table `db` points at, the
+-- restored table wins: this session's load-time writes are carried over into it
+-- and `db` is re-pointed. `db` is one upvalue shared by every function in this
+-- file, so re-pointing it here re-points all of them. The swap is recorded
+-- rather than hidden, because whether it happened is a load-order measurement
+-- in its own right. The file-scope idiom itself is left alone for capture
+-- continuity, as the comment on it explains.
+local function tableAddress(t)
+    local ok, s = pcall(tostring, t)
+    if not ok or type(s) ~= "string" then return "?" end
+    return s:match("0x%x+") or s
+end
+
+local function rebindDB()
+    local restored = rawget(_G, "ForeverProbeDB")
+    local rebind = { fileScopeAddr = tableAddress(db) }
+    if type(restored) == "table" and restored ~= db then
+        for key, value in pairs(db) do restored[key] = value end
+        rebind.swapped = true
+        rebind.restoredAddr = tableAddress(restored)
+        db = restored
+    elseif restored == nil then
+        -- Not expected on any build measured so far. Put the table back rather
+        -- than serialise nothing.
+        ForeverProbeDB = db
+        rebind.swapped = false
+        rebind.globalWasNil = true
+    else
+        rebind.swapped = false
+    end
+    db.rebind = rebind
+end
+
 watcher:SetScript("OnEvent", function(_, event, addon, func)
+    -- First, and for every addon: ADDON_LOADED carries an addon NAME in the slot
+    -- the block events use for the offender, and letting it fall through would
+    -- log this addon's own load as a forbidden action.
+    if event == "ADDON_LOADED" then
+        if addon == ADDON then pcall(rebindDB) end
+        return
+    end
     if event == "PLAYER_LOGIN" then
         -- Outbound half of the channel. db is whatever was restored from disk, so
         -- a token written during the LAST session is sitting right here if the
@@ -1152,11 +1226,28 @@ local function printExternal()
     -- (b) is a reported beta bug on this build, so the in-game verdict is only
     -- half the answer; collect-savedvars.ps1 looking at the file on disk is the
     -- other half, and it is the one that settles it.
+    --
+    -- The token is only written HERE, so "no token came back" means nothing on
+    -- a load whose predecessor never ran this. Measured 2026-09-25 on 70009:
+    -- the counter read 4 - so the DB itself was restored three times over - and
+    -- this printed "read-back failed" only because no earlier load of that
+    -- chain had run /fprobe. tokenWrittenOnLoad (the load number a token was
+    -- written on, kept in the same table) separates "never written" from
+    -- "written and lost"; only the second is a failure.
+    local loads = tonumber(db.external.loads) or 0
+    local writtenOn = tonumber(db.external.tokenWrittenOnLoad)
     if db.external.tokenFromPreviousSession then
         out("  |cff44ff44confirmed|r - last session's token survived: " .. tostring(db.external.tokenFromPreviousSession))
-    elseif (db.external.loads or 0) > 1 then
-        out("  |cffff4444read-back failed|r - this DB has seen " .. tostring(db.external.loads) ..
-            " loads but no token survived")
+    elseif loads > 1 and writtenOn and writtenOn == loads - 1 then
+        out("  |cffff4444read-back failed|r - a token was written on load " .. tostring(writtenOn) ..
+            " and did not come back, although the load counter did")
+    elseif loads > 1 then
+        out("  |cff44ff44DB read back|r - the load counter survived " .. tostring(loads - 1) ..
+            " reload(s)/relog(s), so the table itself is restored")
+        out("  no token to check: the previous load never ran /fprobe" ..
+            (writtenOn and (" (the last token was written on load " .. tostring(writtenOn) .. ")") or
+             " (no token has ever been written into this DB)"))
+        out("  /reload, then /fprobe external, to check the token round trip itself.")
     else
         out("  |cffffaa00first load of this DB|r - /reload, then /fprobe external again.")
         out("  If the load counter is STILL 1 afterwards, the client is not reading SavedVariables")
@@ -1166,6 +1257,7 @@ local function printExternal()
     out("  loads recorded by this DB: " .. tostring(db.external.loads or 0))
     db.external.tokenWrittenThisSession = ("%s-%d"):format(
         date and date("%H%M%S") or tostring(time()), math.random(1000, 9999))
+    db.external.tokenWrittenOnLoad = loads
     out("  wrote token " .. db.external.tokenWrittenThisSession .. " - it should reappear after /reload")
 end
 
@@ -1845,10 +1937,69 @@ local function callString(obj, method)
     return ok and scalar(s) or nil
 end
 
--- Arguments, returns and event payload fields all share this shape.
+-- Which documentation keys are carried verbatim: every key containing
+-- "secret" (the §P.26 taxonomy, matched the way docsSecretCount matches it),
+-- every Requires* key, and three gating flags. Mirrors restriction_key in
+-- tools/build_reference.py, which tools/docs_from_source.py also uses; keep
+-- the three in step, or the two roads to a capture stop being equivalent.
+local function isRestrictionKey(k)
+    if type(k) ~= "string" then return false end
+    if issecretvalue and issecretvalue(k) then return false end
+    return k:lower():find("secret", 1, true) ~= nil
+        or k:sub(1, 8) == "Requires"
+        or k == "ChecksForbiddenAspects"
+        or k == "IsProtectedFunction"
+        or k == "HasRestrictions"
+end
+
+-- A scalar, or a small table of them (ChecksForbiddenAspects is a list of
+-- { Argument = "self", Aspect = <number> }). Nothing callable, at most four
+-- levels, matching Projector.plain in the adapter: a list is compacted, and a
+-- table that comes out empty is nil. A table holding a function is a live doc
+-- object (a mixin, reached through a back-reference), not data, and is dropped
+-- whole rather than walked.
+local function plainValue(v, depth)
+    if type(v) ~= "table" then return scalar(v) end
+    depth = depth or 0
+    if depth >= 4 then return nil end
+    for _, item in pairs(v) do
+        if type(item) == "function" then return nil end
+    end
+    local out, any = {}, false
+    local n = #v
+    local m = 0
+    for i = 1, n do
+        local p = plainValue(v[i], depth + 1)
+        if p ~= nil then m = m + 1; out[m] = p; any = true end
+    end
+    for k, item in pairs(v) do
+        local inArray = type(k) == "number" and k >= 1 and k <= n and k % 1 == 0
+        if not inArray and (type(k) == "string" or type(k) == "number") then
+            local p = plainValue(item, depth + 1)
+            if p ~= nil then out[k] = p; any = true end
+        end
+    end
+    return any and out or nil
+end
+
+-- Copy every restriction key of a doc entry onto its projection. The named
+-- fields are set first and win, as they do in the adapter. pairs() also walks
+-- the mixin methods and the System/Function/Table back-references; methods
+-- fail scalar() and the back-reference names do not match, so neither is
+-- copied.
+local function copyRestrictionKeys(src, dst)
+    for k, v in pairs(src) do
+        if dst[k] == nil and isRestrictionKey(k) then dst[k] = plainValue(v) end
+    end
+    return dst
+end
+
+-- Arguments, returns, event payload fields and enum members all share this
+-- shape. Enum members are Fields entries carrying EnumValue, which is what
+-- gives an enum page its Value column.
 local function projectField(f)
     if type(f) ~= "table" then return nil end
-    return {
+    return copyRestrictionKeys(f, {
         Name = scalar(f.Name),
         Type = scalar(f.Type),
         InnerType = scalar(f.InnerType),
@@ -1856,15 +2007,12 @@ local function projectField(f)
         Default = scalar(f.Default),
         Mixin = scalar(f.Mixin),
         StrideIndex = scalar(f.StrideIndex),
-        -- Another developer reports that 4,025 documented entries on this build
-        -- carry a Secret field, which would mean the restriction list is
-        -- GENERABLE from the client's own documentation rather than discoverable
-        -- only one black-box probe at a time. Capturing it costs a field.
-        -- `/fprobe docs secrets` confirms the key is really spelled this way
-        -- rather than assuming it - see the note there.
-        Secret = scalar(f.Secret),
+        EnumValue = scalar(f.EnumValue),
+        -- Secret and every other key of the §P.26 taxonomy arrive through
+        -- copyRestrictionKeys; `/fprobe docs secrets` is what established
+        -- how the keys are really spelled, rather than assuming it.
         Documentation = nil, -- deliberate, see header
-    }
+    })
 end
 
 local function projectList(list, fn)
@@ -1880,29 +2028,37 @@ end
 
 local function projectFunction(f)
     if type(f) ~= "table" then return nil end
-    return {
+    return copyRestrictionKeys(f, {
         Name = scalar(f.Name),
         Type = scalar(f.Type),
+        -- A function's own Namespace overrides its system's, and "" means a
+        -- plain global (InCombatLockdown). scalar("") is "", and it is kept:
+        -- the empty string IS the signal, so it must not be cleaned to nil.
+        Namespace = scalar(f.Namespace),
         HasRestrictions = scalar(f.HasRestrictions),
-        Secret = scalar(f.Secret),      -- see projectField
+        Secret = scalar(f.Secret),
         Arguments = projectList(f.Arguments, projectField),
         Returns = projectList(f.Returns, projectField),
         -- Blizzard's own rendering, kept as the cross-check described above.
+        -- GetFullName uses the SYSTEM's namespace even where the function has
+        -- its own; the adapter reproduces that as written.
         FullName = callString(f, "GetFullName"),
         ArgumentString = callString(f, "GetArgumentString"),
         ReturnString = callString(f, "GetReturnString"),
-    }
+    })
 end
 
 local function projectEvent(e)
     if type(e) ~= "table" then return nil end
-    return {
+    -- HasRestrictions (seven events) and the Secret* event keys
+    -- (SecretPayloads, SecretInChatMessagingLockdown, ...) come through the copy.
+    return copyRestrictionKeys(e, {
         Name = scalar(e.Name),
         LiteralName = scalar(e.LiteralName),
         Type = scalar(e.Type),
         Payload = projectList(e.Payload, projectField),
         FullName = callString(e, "GetFullName"),
-    }
+    })
 end
 
 local function projectTable(t)
@@ -1914,9 +2070,12 @@ local function projectTable(t)
         MinValue = scalar(t.MinValue),
         MaxValue = scalar(t.MaxValue),
         Fields = projectList(t.Fields, projectField),
+        -- Constants tables carry { Name, Type, Value }, not EnumValue; keeping
+        -- only Name and EnumValue is why every constant used to print None.
         Values = projectList(t.Values, function(v)
             if type(v) ~= "table" then return nil end
-            return { Name = scalar(v.Name), EnumValue = scalar(v.EnumValue) }
+            return { Name = scalar(v.Name), Type = scalar(v.Type),
+                     Value = scalar(v.Value), EnumValue = scalar(v.EnumValue) }
         end),
     }
 end
@@ -2007,6 +2166,39 @@ local function dumpApiDocs(startAt, count)
         end
     end
 
+    -- Shared tables: AddDocumentationTable files a nameless documentation
+    -- table's Tables under APIDocumentation.tables WITHOUT setting .System,
+    -- while AddSystem files every system table there too, with .System set. So
+    -- the shared ones are exactly the entries whose System is nil, and the walk
+    -- over .systems never sees them (Enum.ForbiddenAspect is one). Rebuilt
+    -- whole on every pass: about 950 small tables, idempotent, and independent
+    -- of the [start] [count] range, which is over systems. Keyed by Name like
+    -- systems are; a repeat is suffixed and recorded. tools/docs_from_source.py
+    -- builds the same table from the source, in load order.
+    store.tables = {}
+    local nShared, tableCollisions = 0, {}
+    local okShared, shared = pcall(function() return APIDocumentation.tables end)
+    if okShared and type(shared) == "table" then
+        for i = 1, #shared do
+            local t = shared[i]
+            local okSys, sys = pcall(function() return type(t) == "table" and t.System end)
+            if type(t) == "table" and okSys and sys == nil then
+                local ok, projected = pcall(projectTable, t)
+                if ok and projected and projected.Name then
+                    local key = projected.Name
+                    if store.tables[key] then
+                        tableCollisions[#tableCollisions + 1] = key
+                        local n = 2
+                        while store.tables[key .. "~" .. n] do n = n + 1 end
+                        key = key .. "~" .. n
+                    end
+                    store.tables[key] = projected
+                    nShared = nShared + 1
+                end
+            end
+        end
+    end
+
     -- Count what is actually in the store, not just what was walked. The two
     -- disagreeing is exactly the bug above, and it should be loud.
     local stored = 0
@@ -2014,14 +2206,19 @@ local function dumpApiDocs(startAt, count)
     store.counts = {
         systems = nSys, stored = stored, functions = nFn, events = nEv,
         tables = nTb, failed = failed, collisions = collisions,
+        sharedTables = nShared, tableCollisions = tableCollisions,
     }
-    out(("|cff44ff44dumped|r systems %d..%d -> %d systems, %d functions, %d events, %d tables%s")
-        :format(startAt, last, nSys, nFn, nEv, nTb,
+    out(("|cff44ff44dumped|r systems %d..%d -> %d systems, %d functions, %d events, %d tables, %d shared tables%s")
+        :format(startAt, last, nSys, nFn, nEv, nTb, nShared,
                 failed > 0 and (" |cffffaa00(" .. failed .. " failed)|r") or ""))
     out(("  %d systems in the store"):format(stored))
     if #collisions > 0 then
         out(("  |cffffaa00%d name collisions, suffixed:|r %s")
             :format(#collisions, table.concat(collisions, ", "):sub(1, 200)))
+    end
+    if #tableCollisions > 0 then
+        out(("  |cffffaa00%d shared-table name collisions, suffixed:|r %s")
+            :format(#tableCollisions, table.concat(tableCollisions, ", "):sub(1, 200)))
     end
     out("  |cffffffff/reload|r to flush, then collect-savedvars.ps1")
     out("  If the file is truncated or the flush hangs, take it in passes:")
@@ -2518,21 +2715,51 @@ local function printSavedVars()
     out(("  token written this session: %s"):format(plain(sv.tokenWrittenThisSession)))
 
     -- The verdict first, because it is the reason the command exists.
-    if sv.order == "unknown" then
-        out("  |cffffaa00load order: undetermined|r - nothing was restored at any phase, so there")
-        out("  was no restored table to observe being swapped. That is itself the answer to")
-        out("  'does the client read them back': no.")
+    --
+    -- "No" is only ever said when NO global shows any sign of a read-back.
+    -- Measured 2026-09-25 on 70009: this used to print "no" on a load where
+    -- Bind, Clobber and Char all reported RESTORED two lines further down,
+    -- because the order test looked only at ForeverProbeDB and only at an
+    -- address taken before its initialiser had run.
+    local last = sv.phases[#sv.phases]
+    local evidence = type(sv.evidence) == "table" and sv.evidence or {}
+    local readBack = sv.readBack == true
+    for _, info in ipairs(last.globals or {}) do
+        if info.restoredToken or info.path then readBack = true end
+    end
+    if sv.order == "unknown" or sv.order == nil then
+        if readBack then
+            out("  |cffffaa00load order: undetermined|r - but saved variables WERE read back (see")
+            out("  RESTORED below); no phase caught the restored table arriving.")
+        else
+            out("  |cffffaa00load order: undetermined|r - nothing was restored at any phase, so there")
+            out("  was no restored table to observe being swapped. That is itself the answer to")
+            out("  'does the client read them back': no.")
+        end
     else
-        out(("  |cff44ff44load order: %s|r"):format(sv.order))
+        out(("  |cff44ff44load order: %s|r"):format(plain(sv.order)))
     end
     if sv.note then out("  " .. plain(sv.note)) end
 
     -- Per global: did anything survive from a previous session, and under which
     -- binding idiom? This is the table that answers the addon-side theory.
     out("  |cff44ddffper global|r (a session counter above 1 means something was restored)")
-    local last = sv.phases[#sv.phases]
     for _, info in ipairs(last.globals or {}) do
         local state
+        local ev = evidence[info.name] or {}
+        -- How it arrived goes on a line of its own: with two 16-digit addresses
+        -- in it, the per-global line would pass plain()'s 200-character cut.
+        local how
+        if ev.swapped then
+            how = ("swapped in after file scope: %s -> %s")
+                :format(plain(ev.swapped.from), plain(ev.swapped.to))
+        elseif ev.appeared then
+            how = "nil at file scope, restored by ADDON_LOADED"
+        elseif ev.atFileScope and ev.replacedAtFileScope then
+            how = "present at file scope, then replaced there (the restored table was discarded)"
+        elseif ev.atFileScope then
+            how = "already present at file scope"
+        end
         if info.type ~= "table" then
             state = "|cffff4444" .. plain(info.type) .. "|r"
         elseif info.restoredToken then
@@ -2541,6 +2768,13 @@ local function printSavedVars()
             -- 2026-09-20 capture, because stamp() ran once per phase.
             state = ("|cff44ff44RESTORED|r last session's token %s, %s prior session(s)")
                 :format(plain(info.restoredToken), plain(info.restoredSession or "?"))
+        elseif ev.restored and (ev.swapped or ev.appeared) then
+            -- ForeverProbeDB carries no stamp() token: it is not this file's to
+            -- write. Its evidence is the table itself arriving with content in it.
+            state = ("|cff44ff44RESTORED|r %s key(s) at ADDON_LOADED")
+                :format(plain(ev.keysAtLoad or info.keys))
+        elseif ev.restored and ev.atFileScope then
+            state = ("|cff44ff44RESTORED|r %s key(s) at file scope"):format(plain(ev.fileScopeKeys))
         elseif info.path then
             -- Only the externally seeded global carries a path, and its arrival
             -- is the whole point of scripts/seed-savedvars.ps1.
@@ -2549,6 +2783,7 @@ local function printSavedVars()
             state = ("fresh, %s key(s)"):format(plain(info.keys))
         end
         out(("    %-20s %-38s %s"):format(plain(info.name), plain(info.idiom), state))
+        if how then out("      " .. how) end
     end
 
     -- The address trace. A table that keeps its address across every phase was
@@ -2613,8 +2848,8 @@ local function probePort()
     port.version, port.build, port.buildDate, port.interface = plain(version), plain(build),
         plain(buildDate), plain(toc)
     port.interfaceDerived = derived
-    out(("  GetBuildInfo(): version %s  build %s  interface %s")
-        :format(plain(version), plain(build), plain(toc)))
+    out(("  GetBuildInfo(): version %s  build %s  date %s  interface %s")
+        :format(plain(version), plain(build), plain(buildDate), plain(toc)))
     if derived then
         local agrees = (derived == tonumber(toc))
         port.interfaceFormulaHolds = agrees
@@ -2861,6 +3096,405 @@ local function probeSecrets()
     out("  run this again in combat - the delta is the finding, not either half alone.")
 end
 
+-- SavedVariables cold start, build 70009 ----------------------------------------
+--
+-- research/watch-findings.md W.32 reports the read-back bug fixed in 70009, and
+-- W.30 that `## LoadSavedVariablesFirst: 1` moves the restore ahead of addon Lua.
+-- The directive is per addon, so both variants are two small companion addons,
+-- addons/ForeverProbeSV_First (with it) and addons/ForeverProbeSV_Late (without).
+-- Each registers itself in the ForeverProbeSVTest table and records its own six
+-- saved globals at every load phase; this command seeds a marker into all of
+-- them and reads the phases back. The companions do the observing at load, so
+-- the report is the same whether or not /fprobe is run early.
+--
+-- Two legs, kept apart by the marker's field name:
+--   /fprobe cold seed reload   -> reloadToken, then /reload, then /fprobe cold
+--   /fprobe cold seed          -> coldToken, then a full exit and relaunch
+-- The cold seed must be the LAST thing before exit. A /reload after it would test
+-- the reload path a second time and could drop the token before the exit flush.
+
+local COLD_KEYS = { "DB", "Char", "Clobber", "OrInit", "CharClobber", "CharOrInit" }
+local COLD_LABEL = { DB = "DB", Char = "Char", Clobber = "Clob", OrInit = "OrIn",
+                     CharClobber = "cClob", CharOrInit = "cOrIn" }
+local coldSeedCount = 0
+
+local function coldCompanions()
+    local registry = rawget(_G, "ForeverProbeSVTest")
+    local names = {}
+    if type(registry) == "table" then
+        for name in pairs(registry) do names[#names + 1] = name end
+    end
+    table.sort(names)
+    return registry, names
+end
+
+-- One cell per global per phase. Letters, not words, so a whole variant fits in
+-- a few chat lines that can be pasted back.
+local function coldCell(info, prevAddr, expect)
+    if type(info) ~= "table" or info.type == nil or info.type == "nil" then return "-" end
+    if info.type ~= "table" then return "?" .. plain(info.type) end
+    local s = ""
+    if info.cold then s = s .. ((expect and info.cold ~= expect) and "x" or "C") end
+    if info.reload then s = s .. "R" end
+    if s == "" then s = info.fresh and "f" or "e" end
+    if prevAddr and info.addr and prevAddr ~= info.addr then s = s .. "*" end
+    return s
+end
+
+local function coldSeed(kind)
+    kind = (kind == "reload") and "reload" or "cold"
+    coldSeedCount = coldSeedCount + 1
+    local token = ("%d-%d"):format(time and time() or 0, coldSeedCount)
+    local field = kind .. "Token"
+    local at = date and date("%Y-%m-%d %H:%M:%S") or tostring(time and time() or 0)
+
+    out(("COLD-START SEED  leg=%s  token=%s  at %s"):format(kind, token, at))
+    local registry, names = coldCompanions()
+    local wrote = {}
+    for _, name in ipairs(names) do
+        local api = registry[name]
+        local ok, res = pcall(api.seed, kind, token, at)
+        local short = name:gsub("^ForeverProbeSV_", "")
+        wrote[#wrote + 1] = short .. " " .. (ok and plain(res) or ("ERR " .. plain(res)))
+    end
+    if #names == 0 then
+        out("  no companion addon loaded - enable ForeverProbeSV_First and ForeverProbeSV_Late")
+        out("  on the character screen's AddOns list, then log in again.")
+    else
+        out("  companions: " .. table.concat(wrote, ", "))
+    end
+
+    -- The probe's own two files, in a subtable so SavedVars.lua's token fields
+    -- are left exactly as that instrument wrote them.
+    local own = {}
+    for _, global in ipairs({ "ForeverProbeDB", "ForeverProbeChar" }) do
+        local t = rawget(_G, global)
+        if type(t) == "table" then
+            if type(t.coldTest) ~= "table" then t.coldTest = {} end
+            t.coldTest[field] = token
+            t.coldTest[kind .. "SeededAt"] = at
+            own[#own + 1] = global:gsub("^ForeverProbe", "Probe") .. " ok"
+        else
+            own[#own + 1] = global:gsub("^ForeverProbe", "Probe") .. " " .. plain(type(t))
+        end
+    end
+    out("  probe: " .. table.concat(own, ", "))
+
+    db.coldTest = type(db.coldTest) == "table" and db.coldTest or {}
+    db.coldTest.seeds = db.coldTest.seeds or {}
+    table.insert(db.coldTest.seeds, { kind = kind, token = token, at = at })
+
+    if kind == "reload" then
+        out("  next: /reload, then |cffffffff/fprobe cold " .. token .. "|r")
+    else
+        out("  WRITE THE TOKEN DOWN. Next: no /reload - /quit, relaunch through Battle.net,")
+        out("  same character, then |cffffffff/fprobe cold " .. token .. "|r")
+    end
+end
+
+local function coldReport(expect)
+    if expect == "" then expect = nil end
+    local _, build = GetBuildInfo()
+    local at = date and date("%Y-%m-%d %H:%M:%S") or tostring(time and time() or 0)
+    local report = { at = at, build = plain(build), expect = expect, variants = {} }
+
+    out(("COLD-START REPORT  build %s  at %s  expecting %s"):format(plain(build), at, plain(expect or "any")))
+    out("  C=cold token R=reload token x=other cold token f=fresh file-scope table")
+    out("  e=empty table -=nil *=a different table than the phase before")
+
+    local registry, names = coldCompanions()
+    if #names == 0 then
+        out("  no companion loaded - ForeverProbeSV_First / _Late are not enabled or failed to load")
+    end
+    for _, name in ipairs(names) do
+        local api = registry[name]
+        local r = type(api) == "table" and api.record or nil
+        if type(r) ~= "table" or type(r.phases) ~= "table" then
+            out(("  [%s] no record - its main chunk failed"):format(name))
+        else
+            local load = r.load or {}
+            out(("  [%s] directive=%s  initialLogin=%s reloadingUi=%s")
+                :format(plain(r.variant), plain(r.directive), plain(load.initialLogin), plain(load.reloadingUi)))
+            local header = { "    phase           " }
+            for _, key in ipairs(COLD_KEYS) do header[#header + 1] = ("%-6s"):format(COLD_LABEL[key]) end
+            out(table.concat(header))
+            local prev, firstSeen, lastPhase = {}, {}, nil
+            for _, phase in ipairs(r.phases) do
+                local row = { ("    %-16s"):format(plain(phase.phase)) }
+                for _, key in ipairs(COLD_KEYS) do
+                    local info = phase.globals and phase.globals[key]
+                    row[#row + 1] = ("%-6s"):format(coldCell(info, prev[key], expect))
+                    if type(info) == "table" then
+                        prev[key] = info.addr
+                        if info.cold and (not expect or info.cold == expect) and not firstSeen[key] then
+                            firstSeen[key] = phase.phase
+                        end
+                    end
+                end
+                out(table.concat(row))
+                lastPhase = phase
+            end
+            -- The verdict per global: the earliest phase the cold token was
+            -- visible, and whether it was still there at the last phase.
+            local verdict = {}
+            for _, key in ipairs(COLD_KEYS) do
+                local info = lastPhase and lastPhase.globals and lastPhase.globals[key]
+                local stillThere = type(info) == "table" and info.cold
+                    and (not expect or info.cold == expect)
+                local v
+                if not firstSeen[key] then v = "none"
+                elseif stillThere then v = firstSeen[key]
+                else v = firstSeen[key] .. "->lost" end
+                verdict[#verdict + 1] = COLD_LABEL[key] .. "@" .. v
+            end
+            out("    cold token first seen: " .. table.concat(verdict, " "))
+            report.variants[name] = r
+        end
+    end
+
+    -- The probe itself: no directive, ForeverProbeDB bound at file scope with
+    -- `X = X or {}`, ForeverProbeChar bound on ADDON_LOADED. Observed by
+    -- SavedVars.lua, which loads first.
+    local sv = ns.savedVars
+    if type(sv) == "table" and type(sv.phases) == "table" then
+        out("  [Probe] no directive  DB=file-scope `X = X or {}`  Char=on ADDON_LOADED")
+        local prevDB, prevChar
+        for _, phase in ipairs(sv.phases) do
+            local dbInfo, charInfo
+            for _, info in ipairs(phase.globals or {}) do
+                if info.name == "ForeverProbeDB" then dbInfo = info end
+                if info.name == "ForeverProbeChar" then charInfo = info end
+            end
+            out(("    %-26s DB %-6s Char %-6s"):format(plain(phase.phase),
+                coldCell(dbInfo, prevDB, expect), coldCell(charInfo, prevChar, expect)))
+            prevDB = dbInfo and dbInfo.addr
+            prevChar = charInfo and charInfo.addr
+        end
+        local last = sv.phases[#sv.phases]
+        for _, info in ipairs(last.globals or {}) do
+            if info.name == "ForeverProbeBind" or info.name == "ForeverProbeChar" then
+                out(("    %s restoredToken=%s (SavedVars.lua's own marker)")
+                    :format(info.name, plain(info.restoredToken or "none")))
+            end
+        end
+        report.probePhases = sv.phases
+    end
+    local rebind = db.rebind or {}
+    out(("    ForeverProbeDB replaced after file scope: %s  (%s -> %s)")
+        :format(plain(rebind.swapped), plain(rebind.fileScopeAddr), plain(rebind.restoredAddr or "same")))
+    local restoredKeys = 0
+    for _ in pairs(db) do restoredKeys = restoredKeys + 1 end
+    out(("    ForeverProbeDB now holds %d top-level keys; surface dump from before present: %s")
+        :format(restoredKeys, plain(type(db.globalFunctions) == "table")))
+    report.rebind = rebind
+    report.surfacePresent = type(db.globalFunctions) == "table"
+
+    db.coldTest = type(db.coldTest) == "table" and db.coldTest or {}
+    db.coldTest.reports = db.coldTest.reports or {}
+    table.insert(db.coldTest.reports, report)
+    out("  |cffffffff/fprobe copy|r to copy this block")
+end
+
+-- Secure snippets, build 70009 --------------------------------------------------
+--
+-- W.33: the Blizzard_EnvironmentCleanup .toc fix shipped in 70009, and a
+-- reporter saw `snippet 42` out of combat. W.12: the SecureHandlers API
+-- "raises outright" in combat. Neither is measured here yet.
+--
+-- The test is EllesmereUI's: build a secure handler frame, Execute a one-line
+-- body that sets an attribute on the frame itself, and read it back. It touches
+-- nothing but a hidden frame this addon made, so there is no action here that
+-- matters to the game and nothing that speaks in the world.
+--
+-- In combat there are two separate questions, each in its own pcall:
+--   reused  the frame made out of combat, Executed again with a new value (43).
+--           Frames do not survive a relog, so run /fprobe snippet out of combat
+--           first in the same session.
+--   fresh   a new secure handler frame created in combat, then Executed (44).
+-- A stale 42 on the reused frame means Execute returned without running.
+local SNIPPET_TEMPLATES = {
+    { key = "Base", template = "SecureHandlerBaseTemplate" },
+    { key = "Attr", template = "SecureHandlerAttributeTemplate" },
+}
+local snippetFrames = {}
+
+local function snippetRun(tag, frame, value)
+    local r = { value = value }
+    local body = ("self:SetAttribute('fbok', %d)"):format(value)
+    activeTest = tag
+    local okIdx, method = pcall(function() return frame.Execute end)
+    if okIdx and type(method) == "function" then
+        r.via = "frame:Execute"
+        local ok, err = pcall(method, frame, body)
+        r.exec = ok and "ok" or "RAISED"
+        if not ok then r.err = plain(err) end
+    elseif type(rawget(_G, "SecureHandlerExecute")) == "function" then
+        r.via = "SecureHandlerExecute"
+        local ok, err = pcall(SecureHandlerExecute, frame, body)
+        r.exec = ok and "ok" or "RAISED"
+        if not ok then r.err = plain(err) end
+    else
+        r.via = "none"
+        r.exec = "no Execute method and no SecureHandlerExecute"
+    end
+    local okGet, got = pcall(frame.GetAttribute, frame, "fbok")
+    activeTest = nil
+    r.fbok = okGet and plain(got) or ("GetAttribute raised: " .. plain(got))
+    r.blocks = blocksFor(tag)
+    return r
+end
+
+local function snippetCreate(tag, template)
+    activeTest = tag
+    local ok, frame = pcall(CreateFrame, "Frame", nil, UIParent, template)
+    activeTest = nil
+    if not ok then return nil, "RAISED " .. plain(frame), blocksFor(tag) end
+    if not frame then return nil, "returned nil", blocksFor(tag) end
+    pcall(frame.Hide, frame)
+    return frame, "ok", blocksFor(tag)
+end
+
+local function snippetLine(label, create, r)
+    local blocks = r and r.blocks or {}
+    local parts = { ("  %-12s create=%s"):format(label, plain(create or "reused")) }
+    if r then
+        parts[#parts + 1] = (" exec=%s via %s fbok=%s (want %s)")
+            :format(plain(r.exec), plain(r.via), plain(r.fbok), plain(r.value))
+        parts[#parts + 1] = (" blocks=%d"):format(#blocks)
+    end
+    out(table.concat(parts))
+    if r and r.err then out("    error: " .. plain(r.err)) end
+    for _, b in ipairs(blocks) do out("    " .. plain(b)) end
+end
+
+local function probeSnippet()
+    local inCombat = (InCombatLockdown and InCombatLockdown()) and true or false
+    local bucket = inCombat and "inCombat" or "outOfCombat"
+    local _, build = GetBuildInfo()
+    local rec = {
+        at = date and date("%Y-%m-%d %H:%M:%S") or time(),
+        build = plain(build),
+        typeLoadstringUntainted = type(rawget(_G, "loadstring_untainted")),
+        typeLoadstring = type(rawget(_G, "loadstring")),
+        typeSecureHandlerExecute = type(rawget(_G, "SecureHandlerExecute")),
+        results = {},
+    }
+    out(("SECURE SNIPPET  %s  build %s"):format(inCombat and "IN COMBAT" or "out of combat", plain(build)))
+    out(("  type(loadstring_untainted)=%s  type(loadstring)=%s  type(SecureHandlerExecute)=%s")
+        :format(rec.typeLoadstringUntainted, rec.typeLoadstring, rec.typeSecureHandlerExecute))
+
+    for _, spec in ipairs(SNIPPET_TEMPLATES) do
+        if not inCombat then
+            local frame, create, createBlocks = snippetFrames[spec.key], "reused", {}
+            if not frame then
+                frame, create, createBlocks = snippetCreate("snippet:create:" .. spec.key, spec.template)
+                snippetFrames[spec.key] = frame
+            end
+            local r
+            if frame then
+                -- Clear first so a 42 left from an earlier run cannot pass for
+                -- this one. Legal here: out of combat, on our own frame.
+                pcall(frame.SetAttribute, frame, "fbok", nil)
+                r = snippetRun("snippet:ooc:" .. spec.key, frame, 42)
+            end
+            if r then for _, b in ipairs(createBlocks) do table.insert(r.blocks, 1, b) end end
+            rec.results[spec.key] = { create = create, createBlocks = createBlocks, run = r }
+            snippetLine(spec.key, create, r)
+            if not r then for _, b in ipairs(createBlocks or {}) do out("    " .. plain(b)) end end
+        else
+            local frame = snippetFrames[spec.key]
+            if frame then
+                local r = snippetRun("snippet:combat:reuse:" .. spec.key, frame, 43)
+                rec.results[spec.key .. ".reused"] = { create = "reused", run = r }
+                snippetLine(spec.key .. " reused", "reused", r)
+            else
+                rec.results[spec.key .. ".reused"] = { create = "no frame from out of combat this session" }
+                out(("  %-12s no frame from out of combat this session - run /fprobe snippet")
+                    :format(spec.key .. " reused"))
+                out("    out of combat first, then pull again")
+            end
+            local fresh, create, createBlocks = snippetCreate("snippet:combat:create:" .. spec.key, spec.template)
+            local r
+            if fresh then r = snippetRun("snippet:combat:fresh:" .. spec.key, fresh, 44) end
+            if r then for _, b in ipairs(createBlocks) do table.insert(r.blocks, 1, b) end end
+            rec.results[spec.key .. ".fresh"] = { create = create, createBlocks = createBlocks, run = r }
+            snippetLine(spec.key .. " fresh", create, r)
+            if not r then for _, b in ipairs(createBlocks) do out("    " .. plain(b)) end end
+        end
+    end
+    if inCombat and not (InCombatLockdown and InCombatLockdown()) then
+        out("  |cffffaa00combat ended during the run|r - pull again and repeat")
+    end
+    db.snippet = type(db.snippet) == "table" and db.snippet or {}
+    db.snippet[bucket] = rec
+    out("  then |cffffffff/fprobe blocked|r, and |cffffffff/fprobe copy|r to copy")
+end
+
+-- The copy box ------------------------------------------------------------------
+-- Chat cannot be selected in WoW. This puts the transcript in an EditBox with
+-- the text highlighted, so Ctrl+C takes all of it. Built lazily, every step in a
+-- pcall: templates are the likeliest thing to differ on this client, and a
+-- failure here must not take anything else with it.
+local copyFrame, copyEdit
+
+local function buildCopyBox()
+    local ok, frame = pcall(CreateFrame, "Frame", "ForeverProbeCopyFrame", UIParent, "BackdropTemplate")
+    if not ok or not frame then
+        ok, frame = pcall(CreateFrame, "Frame", "ForeverProbeCopyFrame", UIParent)
+    end
+    if not ok or not frame then return false end
+    frame:SetSize(700, 460)
+    frame:SetPoint("CENTER")
+    frame:SetFrameStrata("DIALOG")
+    frame:EnableMouse(true)
+    if frame.SetBackdrop then
+        pcall(frame.SetBackdrop, frame, {
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            edgeSize = 14, insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        pcall(frame.SetBackdropColor, frame, 0, 0, 0, 0.92)
+    end
+    local okScroll, scroll = pcall(CreateFrame, "ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    if not okScroll or not scroll then
+        okScroll, scroll = pcall(CreateFrame, "ScrollFrame", nil, frame)
+    end
+    if not okScroll or not scroll then return false end
+    scroll:SetPoint("TOPLEFT", 12, -12)
+    scroll:SetPoint("BOTTOMRIGHT", -32, 12)
+    local edit = CreateFrame("EditBox", nil, scroll)
+    edit:SetMultiLine(true)
+    edit:SetAutoFocus(false)
+    edit:SetFontObject(ChatFontNormal)
+    edit:SetWidth(640)
+    edit:SetScript("OnEscapePressed", function() frame:Hide() end)
+    scroll:SetScrollChild(edit)
+    pcall(function() tinsert(UISpecialFrames, "ForeverProbeCopyFrame") end)
+    copyFrame, copyEdit = frame, edit
+    return true
+end
+
+local function showCopy(sub)
+    if sub == "clear" then
+        for i = #transcript, 1, -1 do transcript[i] = nil end
+        out("transcript cleared")
+        return
+    end
+    if not copyFrame then
+        local ok, built = pcall(buildCopyBox)
+        if not ok or not built then
+            out("|cffff4444copy box could not be built|r - the same text is in the capture, under transcript")
+            return
+        end
+    end
+    copyEdit:SetText(table.concat(transcript, "\n"))
+    copyFrame:Show()
+    copyEdit:SetFocus()
+    copyEdit:HighlightText()
+    DEFAULT_CHAT_FRAME:AddMessage("|cff44ddffFProbe|r copy box open: Ctrl+C, then Escape. "
+        .. "/fprobe copy clear empties it.")
+end
+
 -- Driver ----------------------------------------------------------------------
 SLASH_FPROBE1 = "/fprobe"
 SlashCmdList.FPROBE = function(arg)
@@ -2872,6 +3506,12 @@ SlashCmdList.FPROBE = function(arg)
     if cmd == "sv" then return printSavedVars() end
     if cmd == "port" then return probePort() end
     if cmd == "secrets" then return probeSecrets() end
+    if cmd == "snippet" then return probeSnippet() end
+    if cmd == "copy" then return showCopy(sub) end
+    if cmd == "cold" then
+        if sub == "seed" then return coldSeed(extra) end
+        return coldReport(sub)
+    end
     if cmd == "docs" then
         if sub == "version" then return docsVersionCheck(true) end
         if sub == "secrets" then return docsSecretCount() end
@@ -2931,13 +3571,21 @@ SlashCmdList.FPROBE = function(arg)
         out("  |cffffffff/fprobe port|r          interface number, client identity, region, realm")
         out("  |cffffffff/fprobe secrets|r       masked vs secret vs half-secret, per unit read")
         out("  |cffffffff/fprobe docs|r          Blizzard's API documentation (dump, version, secrets)")
+        out("  |cffffffff/fprobe cold|r          SavedVariables cold start: cold seed [reload], cold [token]")
+        out("  |cffffffff/fprobe snippet|r       secure snippet test, out of combat then in combat")
+        out("  |cffffffff/fprobe copy|r          everything printed this session, in a copyable box")
         return
     end
 
     db.timestamp = date and date("%Y-%m-%d %H:%M:%S") or time()
-    local version, build, _, toc = GetBuildInfo()
-    db.build = { version = version, build = build, tocversion = toc }
-    out(("build %s (%s) toc %s"):format(tostring(version), tostring(build), tostring(toc)))
+    local version, build, buildDate, toc = GetBuildInfo()
+    -- version/build/tocversion keep their old shapes: every capture since
+    -- 2026-09-18 has them and the generator reads the surface out of this run.
+    -- buildDate and surfaceAt are additive, so a surface dump says which client
+    -- produced it without leaning on the file name.
+    db.build = { version = version, build = build, tocversion = toc,
+                 buildDate = plain(buildDate), surfaceAt = db.timestamp }
+    out(("build %s (%s) %s toc %s"):format(plain(version), plain(build), plain(buildDate), plain(toc)))
     probeSurfaces()
     probeGlobals()
     printExternal()

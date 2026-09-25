@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # HousingCleanupModeTargetType
 
@@ -6,10 +6,10 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `None` | `HousingCleanupModeTargetType` | no |  |
-| 2 | `Decor` | `HousingCleanupModeTargetType` | no |  |
-| 3 | `HouseExterior` | `HousingCleanupModeTargetType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `None` | 0 | `HousingCleanupModeTargetType` | no |  |
+| 2 | `Decor` | 1 | `HousingCleanupModeTargetType` | no |  |
+| 3 | `HouseExterior` | 2 | `HousingCleanupModeTargetType` | no |  |
 
 System: `HousingCleanupModeUI`

@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # SimpleAnimGroupAPI:HookScript
 
@@ -19,6 +19,16 @@ success = SimpleAnimGroupAPI:HookScript(scriptTypeName, script, bindingType)
 | # | Name | Type | Nilable | Default |
 |---|---|---|---|---|
 | 1 | `success` | `bool` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `ChecksForbiddenAspects` | `{ { Argument = "self", Aspect = 2 } }` |
+| this function | `RequiresAssignableScript` | `true` |
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
 
 Blizzard's own rendering: `HookScript(scriptTypeName, script, optional bindingType)`
 

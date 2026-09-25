@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # UIWidgetMotionType
 
@@ -6,9 +6,9 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Instant` | `UIWidgetMotionType` | no |  |
-| 2 | `Smooth` | `UIWidgetMotionType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Instant` | 0 | `UIWidgetMotionType` | no |  |
+| 2 | `Smooth` | 1 | `UIWidgetMotionType` | no |  |
 
 System: `UIWidgetManager`

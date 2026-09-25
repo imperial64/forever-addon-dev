@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # UNIT_SPELLCAST_SENT
 
@@ -10,5 +10,14 @@
 | 2 | `target` | `cstring` | no |  |
 | 3 | `castGUID` | `WOWGUID` | no |  |
 | 4 | `spellID` | `number` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this event | `SecretWhenUnitSpellCastRestricted` | `true` |
+| payload `target` | `ConditionalSecret` | `true` |
 
 System: `Unit`

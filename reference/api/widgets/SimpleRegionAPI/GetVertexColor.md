@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # SimpleRegionAPI:GetVertexColor
 
@@ -18,6 +18,14 @@ _None._
 | 2 | `colorG` | `number` | no |  |
 | 3 | `colorB` | `number` | no |  |
 | 4 | `colorA` | `number` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretReturnsForAspect` | `{ 2048, 128 }` |
 
 Blizzard's own rendering: `GetVertexColor()`
 

@@ -17,8 +17,8 @@ The plugin answers three questions:
 | Question | Where the answer comes from |
 |---|---|
 | How do I build a Forever addon? | The gotchas that cost real debugging time, written as instruction |
-| What is the full API? | 6,577 functions with signatures, generated from the client's own documentation |
-| What am I not allowed to do? | 21 restrictions and measured behaviours, each established on a running client, with the evidence attached |
+| What is the full API? | 6,596 functions with signatures, generated from the client's own documentation |
+| What am I not allowed to do? | 24 restrictions and measured behaviours, each established on a running client, with the evidence attached |
 | What does a call cost? | Per-call time and allocation for the calls where it changes a design, measured on a live client |
 
 It is addon-agnostic. There is no opinion here about what you should build — the reference

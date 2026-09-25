@@ -25,6 +25,12 @@ their addon's saved data at login, with no error anywhere. The linter reports th
 
 Comments and file entries go *below* the header, not inside it.
 
+**`## LoadSavedVariablesFirst: 1` is a real directive on this client.** Measured on build
+70009, it moves the SavedVariables restore from `ADDON_LOADED` to before your files run.
+That changes which file-scope idiom destroys saved data. Leave it out unless you need saved
+values at file scope, and read `guides/savedvariables.md` before adding it
+(`research/findings.md` §P.31).
+
 ## One `.toc`, every flavour
 
 `## Interface` takes a comma-separated list, so one file covers Forever and both retail

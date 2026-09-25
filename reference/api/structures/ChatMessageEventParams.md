@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # ChatMessageEventParams
 
@@ -26,5 +26,24 @@ _Structure_
 | 16 | `hideSenderInLetterbox` | `bool` | no |  |
 | 17 | `suppressRaidIcons` | `bool` | no |  |
 | 18 | `discordInfo` | `DiscordChatInfo` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| field `languageName` | `NeverSecret` | `true` |
+| field `channelName` | `NeverSecret` | `true` |
+| field `specialFlags` | `NeverSecret` | `true` |
+| field `zoneChannelID` | `NeverSecret` | `true` |
+| field `channelIndex` | `NeverSecret` | `true` |
+| field `channelBaseName` | `NeverSecret` | `true` |
+| field `languageID` | `NeverSecret` | `true` |
+| field `lineID` | `NeverSecret` | `true` |
+| field `isMobile` | `NeverSecret` | `true` |
+| field `isSubtitle` | `NeverSecret` | `true` |
+| field `hideSenderInLetterbox` | `NeverSecret` | `true` |
+| field `suppressRaidIcons` | `NeverSecret` | `true` |
 
 System: `ChatInfo`

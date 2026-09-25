@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # ClubFinderPostingReportType
 
@@ -6,12 +6,12 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `PostersName` | `ClubFinderPostingReportType` | no |  |
-| 2 | `ClubName` | `ClubFinderPostingReportType` | no |  |
-| 3 | `PostingDescription` | `ClubFinderPostingReportType` | no |  |
-| 4 | `ApplicantsName` | `ClubFinderPostingReportType` | no |  |
-| 5 | `JoinNote` | `ClubFinderPostingReportType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `PostersName` | 0 | `ClubFinderPostingReportType` | no |  |
+| 2 | `ClubName` | 1 | `ClubFinderPostingReportType` | no |  |
+| 3 | `PostingDescription` | 2 | `ClubFinderPostingReportType` | no |  |
+| 4 | `ApplicantsName` | 3 | `ClubFinderPostingReportType` | no |  |
+| 5 | `JoinNote` | 4 | `ClubFinderPostingReportType` | no |  |
 
 System: `ClubFinderInfo`

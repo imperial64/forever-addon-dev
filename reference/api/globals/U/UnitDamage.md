@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # UnitDamage
 
@@ -23,6 +23,15 @@ minDamage, maxDamage, offhandMinDamage, offhandMaxDamage, posBuff, negBuff, perc
 | 5 | `posBuff` | `number` | no |  |
 | 6 | `negBuff` | `number` | no |  |
 | 7 | `percent` | `number` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
+| this function | `SecretWhenUnitStatsRestricted` | `true` |
 
 Blizzard's own rendering: `UnitDamage(unit)`
 

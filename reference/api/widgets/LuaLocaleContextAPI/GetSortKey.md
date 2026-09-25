@@ -1,0 +1,32 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
+
+# LuaLocaleContextAPI:GetSortKey
+
+```lua
+result = LuaLocaleContextAPI:GetSortKey(text, strength)
+```
+
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `text` | `cstring` | no |  |
+| 2 | `strength` | `CollationStrength` | no |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `result` | `string` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenTainted"` |
+
+Blizzard's own rendering: `GetSortKey(text, strength)`
+
+System: `LuaLocaleContextAPI` · Widget methods

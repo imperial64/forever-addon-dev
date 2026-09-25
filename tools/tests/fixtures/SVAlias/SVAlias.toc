@@ -1,0 +1,7 @@
+## Interface: 16001
+## Title: SV Alias
+## SavedVariables: SVAliasDB, SVAliasFixedDB
+
+# No `## LoadSavedVariablesFirst`, so the client restores at ADDON_LOADED and a
+# file-scope alias of a saved global is left holding the orphan.
+SVAlias.lua

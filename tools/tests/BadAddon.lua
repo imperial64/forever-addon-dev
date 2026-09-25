@@ -60,3 +60,17 @@ BadAddonCharDB = BadAddonCharDB or {}
 if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
     local retail = true
 end
+
+-- Blizzard_EnvironmentCleanup removes this global by design; secure snippets
+-- still run, so this test switches off a feature that works.
+if loadstring_untainted then
+    local snippets = true
+end
+
+-- QueryRotation on 70009, AddAnimations on 69913: the number is build-dependent.
+frame:AddForbiddenAspects(4096)
+
+-- The idiom above, done right at line 57, then aliased. BadAddon.toc does not
+-- set the directive to 1, so the client swaps in the restored table at
+-- ADDON_LOADED and this local keeps the orphan.
+local charDB = BadAddonCharDB

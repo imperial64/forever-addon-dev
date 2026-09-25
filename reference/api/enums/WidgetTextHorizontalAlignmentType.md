@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # WidgetTextHorizontalAlignmentType
 
@@ -6,10 +6,10 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Left` | `WidgetTextHorizontalAlignmentType` | no |  |
-| 2 | `Center` | `WidgetTextHorizontalAlignmentType` | no |  |
-| 3 | `Right` | `WidgetTextHorizontalAlignmentType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Left` | 0 | `WidgetTextHorizontalAlignmentType` | no |  |
+| 2 | `Center` | 1 | `WidgetTextHorizontalAlignmentType` | no |  |
+| 3 | `Right` | 2 | `WidgetTextHorizontalAlignmentType` | no |  |
 
 System: `UIWidgetManager`

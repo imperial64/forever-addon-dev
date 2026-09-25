@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # DamageMeterCombatSource
 
@@ -21,5 +21,19 @@ _Structure_
 | 11 | `classification` | `cstring` | no |  |
 | 12 | `sourceDisplayType` | `DamageMeterSourceDisplayType` | no |  |
 | 13 | `factionGroup` | `cstring` | yes |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| field `sourceGUID` | `ConditionalSecret` | `true` |
+| field `name` | `ConditionalSecret` | `true` |
+| field `classFilename` | `NeverSecret` | `true` |
+| field `specIconID` | `NeverSecret` | `true` |
+| field `isLocalPlayer` | `NeverSecret` | `true` |
+| field `deathRecapID` | `NeverSecret` | `true` |
+| field `classification` | `NeverSecret` | `true` |
 
 System: `DamageMeter`

@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # QuestFrequency
 
@@ -6,11 +6,11 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Default` | `QuestFrequency` | no |  |
-| 2 | `Daily` | `QuestFrequency` | no |  |
-| 3 | `Weekly` | `QuestFrequency` | no |  |
-| 4 | `ResetByScheduler` | `QuestFrequency` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Default` | 0 | `QuestFrequency` | no |  |
+| 2 | `Daily` | 1 | `QuestFrequency` | no |  |
+| 3 | `Weekly` | 2 | `QuestFrequency` | no |  |
+| 4 | `ResetByScheduler` | 3 | `QuestFrequency` | no |  |
 
 System: `QuestLog`

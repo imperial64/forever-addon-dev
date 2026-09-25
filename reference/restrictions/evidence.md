@@ -49,7 +49,8 @@ both live:
 
 - **`SecureActionButton:SetAttribute` in combat** is marked `caution`, not "permitted". It
   appeared to succeed, but "no error and no block event" is weaker evidence than the
-  attribute taking effect.
+  attribute taking effect. On 70009 the client was caught refusing a similar call by event
+  alone (`research/findings.md` §P.32), which makes the hedge more necessary, not less.
 - **Three `C_Secrets` gates have no out-of-combat measurement** — `UnitSpellCast`,
   `UnitThreatState`, `UnitThreatValues` — because the in-game output truncated. They are
   recorded as *not captured* rather than assumed from the gates beside them.
@@ -86,3 +87,14 @@ shipped reference, and `regenerate` rebuilds the API half from your own client.
 
 The restriction half does **not** regenerate — it is measured by hand, and a new build may
 invalidate it.
+
+That has already happened once. On build **70009** (2026-09-25), SavedVariables started
+being read back, and secure snippets were measured running out of combat and refused in it
+(`research/findings.md` §P.30 to §P.34). Those two entries were re-measured and carry
+their own build in `research/restrictions.yaml`, so their banners, their sections of
+`RESTRICTIONS.md` and their rows in the restrictions skill's table name 70009. Every other
+entry is still the 69913 measurement.
+
+The API reference itself was regenerated for **70009** from Blizzard's documentation
+source. That moves the symbol pages, not the measurements: every restriction and cost not
+named above is still the 69913 result.

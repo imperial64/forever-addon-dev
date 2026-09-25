@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # NavigationState
 
@@ -6,11 +6,11 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Invalid` | `NavigationState` | no |  |
-| 2 | `Occluded` | `NavigationState` | no |  |
-| 3 | `InRange` | `NavigationState` | no |  |
-| 4 | `Disabled` | `NavigationState` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Invalid` | 0 | `NavigationState` | no |  |
+| 2 | `Occluded` | 1 | `NavigationState` | no |  |
+| 3 | `InRange` | 2 | `NavigationState` | no |  |
+| 4 | `Disabled` | 3 | `NavigationState` | no |  |
 
 System: `InGameNavigation`

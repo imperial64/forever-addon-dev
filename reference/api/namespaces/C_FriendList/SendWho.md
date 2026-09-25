@@ -1,11 +1,11 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_FriendList.SendWho
 
 > **RESTRICTED — Blizzard flag.** This function carries `HasRestrictions` in the client's own documentation, meaning it is gated on a hardware event or refuses to run from a script.
 
 ```lua
-C_FriendList.SendWho(filter, origin)
+C_FriendList.SendWho(filter, origin, filters)
 ```
 
 **Arguments**
@@ -14,11 +14,21 @@ C_FriendList.SendWho(filter, origin)
 |---|---|---|---|---|
 | 1 | `filter` | `cstring` | no |  |
 | 2 | `origin` | `number` | yes |  |
+| 3 | `filters` | `SendWhoFilters` | yes |  |
 
 **Returns**
 
 _None._
 
-Blizzard's own rendering: `C_FriendList.SendWho(filter, optional origin)`
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `RequiresFriendList` | `true` |
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
+
+Blizzard's own rendering: `C_FriendList.SendWho(filter, optional origin, optional filters)`
 
 System: `FriendList` · Namespace: `C_FriendList`

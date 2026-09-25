@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # TugOfWarStyleValue
 
@@ -6,9 +6,9 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `DefaultYellow` | `TugOfWarStyleValue` | no |  |
-| 2 | `ArchaeologyBrown` | `TugOfWarStyleValue` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `DefaultYellow` | 0 | `TugOfWarStyleValue` | no |  |
+| 2 | `ArchaeologyBrown` | 1 | `TugOfWarStyleValue` | no |  |
 
 System: `UIWidgetManager`

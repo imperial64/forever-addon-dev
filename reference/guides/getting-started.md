@@ -35,8 +35,10 @@ listed at the bottom load in order, top to bottom.
 ```lua
 local ADDON, ns = ...
 
-MyAddonDB = MyAddonDB or {}
-local db = MyAddonDB
+-- Bound in ADDON_LOADED below, never at file scope: by default the client
+-- replaces the saved global at ADDON_LOADED, so a reference taken here would
+-- point at a table it throws away. See guides/savedvariables.md.
+local db
 
 -- Anything read out of the game goes through here before it is printed, compared
 -- or stored. See restrictions/secret-values.md for why.
@@ -60,9 +62,13 @@ local function safeRegister(frame, event)
 end
 
 local frame = CreateFrame("Frame")
+safeRegister(frame, "ADDON_LOADED")
 safeRegister(frame, "PLAYER_LOGIN")
-frame:SetScript("OnEvent", function(_, event, ...)
-    if event == "PLAYER_LOGIN" then
+frame:SetScript("OnEvent", function(_, event, arg1)
+    if event == "ADDON_LOADED" and arg1 == ADDON then
+        MyAddonDB = MyAddonDB or {}
+        db = MyAddonDB              -- mutate this table from here on; never reassign it
+    elseif event == "PLAYER_LOGIN" then
         out("loaded.")
     end
 end)
@@ -94,7 +100,8 @@ the version-check trap.
 ## What to read next
 
 - `guides/pitfalls.md` — the six things that will bite you, all measured
-- `guides/savedvariables.md` — persistence, and why it is broken on this build
+- `guides/savedvariables.md` — persistence: fixed on 70009, and the load-order trap that
+  remains
 - `guides/packaging.md` — the `.toc`, the interface number, and shipping it
 - `guides/performance.md` — what calls cost, and why position polling is a garbage
   problem rather than a time one

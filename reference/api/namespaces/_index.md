@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # Namespaces
 
@@ -13,7 +13,7 @@
 | [C_AddOnProfiler](C_AddOnProfiler/) | AddOnProfiler | 10 | 0 | 4 |
 | [C_AddOns](C_AddOns/) | AddOns | 29 | 3 | 2 |
 | [C_AdventureJournal](C_AdventureJournal/) | AdventureJournal | 0 | 14 | 0 |
-| [C_AdventureMap](C_AdventureMap/) | AdventureMap | 2 | 5 | 1 |
+| [C_AdventureMap](C_AdventureMap/) | AdventureMap | 5 | 5 | 1 |
 | [C_AlliedRaces](C_AlliedRaces/) | AlliedRaces | 2 | 2 | 2 |
 | [C_AnimaDiversion](C_AnimaDiversion/) | AnimaDiversionInfo | 7 | 3 | 4 |
 | [C_ArdenwealdGardening](C_ArdenwealdGardening/) | ArdenwealdGardening | 2 | 0 | 1 |
@@ -30,7 +30,7 @@
 | [C_Bank](C_Bank/) | Bank | 26 | 7 | 3 |
 | [C_BarberShopInternal](C_BarberShopInternal/) | BarberShop | 1 | 0 | 0 |
 | [C_BarberShop](C_BarberShop/) | BarberShop | 29 | 7 | 0 |
-| [C_BattleNet](C_BattleNet/) | BattleNet | 32 | 0 | 4 |
+| [C_BattleNet](C_BattleNet/) | BattleNet | 33 | 0 | 4 |
 | [C_BattlePet](C_BattlePet/) | BattlePet | 0 | 26 | 0 |
 | [C_BehavioralMessaging](C_BehavioralMessaging/) | BehavioralMessaging | 1 | 1 | 0 |
 | [C_BlackMarketInfo](C_BlackMarketInfo/) | BlackMarketInfo | 0 | 7 | 0 |
@@ -99,11 +99,12 @@
 | [C_EventUtils](C_EventUtils/) | EventUtils | 2 | 0 | 0 |
 | [C_ExpansionTrial](C_ExpansionTrial/) | ExpansionTrial | 2 | 0 | 0 |
 | [C_ExternalEventURL](C_ExternalEventURL/) | ExternalEventURL | 3 | 1 | 0 |
+| [C_Flyout](C_Flyout/) | Flyout | 6 | 0 | 2 |
 | [C_FogOfWar](C_FogOfWar/) | FogOfWar | 2 | 1 | 1 |
-| [C_FriendList](C_FriendList/) | FriendList | 31 | 27 | 2 |
+| [C_FriendList](C_FriendList/) | FriendList | 32 | 27 | 4 |
 | [C_GMTicketInfo](C_GMTicketInfo/) | GMTicketInfo | 0 | 8 | 0 |
 | [C_GamePad](C_GamePad/) | GamePad | 25 | 6 | 9 |
-| [C_GameRules](C_GameRules/) | GameRules | 29 | 6 | 1 |
+| [C_GameRules](C_GameRules/) | GameRules | 29 | 6 | 2 |
 | [C_GamepadTargeting](C_GamepadTargeting/) | GamepadTargetingManager | 4 | 0 | 1 |
 | [C_GamepadUI](C_GamepadUI/) | GamepadUI | 5 | 2 | 3 |
 | [C_Garrison](C_Garrison/) | GarrisonInfo | 40 | 65 | 20 |
@@ -176,6 +177,7 @@
 | [C_MythicPlus](C_MythicPlus/) | MythicPlusInfo | 21 | 2 | 6 |
 | [C_NamePlate](C_NamePlate/) | NamePlate | 4 | 0 | 0 |
 | [C_NamePlateManager](C_NamePlateManager/) | NamePlateManager | 4 | 7 | 0 |
+| [C_NameUtil](C_NameUtil/) | NameUtil | 1 | 0 | 0 |
 | [C_NeighborhoodInitiative](C_NeighborhoodInitiative/) | NeighborhoodInitiative | 20 | 6 | 7 |
 | [C_NewItems](C_NewItems/) | NewItems | 3 | 0 | 0 |
 | [C_PaperDollInfo](C_PaperDollInfo/) | PaperDollInfo | 21 | 23 | 4 |
@@ -198,7 +200,7 @@
 | [C_PlayerMentorship](C_PlayerMentorship/) | PlayerMentorship | 5 | 2 | 0 |
 | [C_Pony](C_Pony/) | Pony | 0 | 0 | 0 |
 | [C_ProfSpecs](C_ProfSpecs/) | ProfessionSpecUI | 27 | 2 | 0 |
-| [C_PvP](C_PvP/) | PvpInfo | 113 | 42 | 28 |
+| [C_PvP](C_PvP/) | PvpInfo | 114 | 42 | 28 |
 | [C_QuestHub](C_QuestHub/) | QuestHubUI | 2 | 0 | 0 |
 | [C_QuestInfoSystem](C_QuestInfoSystem/) | QuestInfoSystem | 9 | 0 | 0 |
 | [C_QuestItemUse](C_QuestItemUse/) | QuestItemUse | 1 | 0 | 0 |
@@ -228,7 +230,7 @@
 | [C_SkillInfo](C_SkillInfo/) | SkillInfo | 8 | 1 | 1 |
 | [C_SocialQueue](C_SocialQueue/) | SocialQueue | 8 | 2 | 4 |
 | [C_SocialQueue](C_SocialQueue/) | SocialQueueSystemStatus | 2 | 1 | 0 |
-| [C_SocialRestrictions](C_SocialRestrictions/) | SocialRestrictions | 9 | 3 | 0 |
+| [C_SocialRestrictions](C_SocialRestrictions/) | SocialRestrictions | 12 | 4 | 0 |
 | [C_SocialUI](C_SocialUI/) | SocialUI | 1 | 1 | 3 |
 | [C_Soulbinds](C_Soulbinds/) | Soulbinds | 39 | 13 | 6 |
 | [C_Sound](C_Sound/) | Sound | 6 | 2 | 2 |
@@ -244,7 +246,7 @@
 | [C_SummonInfo](C_SummonInfo/) | SummonInfo | 7 | 0 | 0 |
 | [C_SuperTrack](C_SuperTrack/) | SuperTrackManager | 20 | 2 | 0 |
 | [C_SwingTimer](C_SwingTimer/) | SwingTimer | 2 | 2 | 1 |
-| [C_System](C_System/) | SystemInfo | 1 | 28 | 0 |
+| [C_System](C_System/) | SystemInfo | 1 | 30 | 0 |
 | [C_TTSSettings](C_TTSSettings/) | TTSSettings | 19 | 0 | 0 |
 | [C_TalkingHead](C_TalkingHead/) | TalkingHead | 0 | 2 | 0 |
 | [C_TaxiMap](C_TaxiMap/) | TaxiMap | 3 | 3 | 4 |
@@ -255,7 +257,7 @@
 | [C_ToyBoxInfo](C_ToyBoxInfo/) | ToyBoxInfo | 6 | 2 | 0 |
 | [C_TradeInfo](C_TradeInfo/) | TradeInfo | 4 | 15 | 0 |
 | [C_TradeSkillUI](C_TradeSkillUI/) | TradeSkillUI | 89 | 20 | 0 |
-| [C_Trainer](C_Trainer/) | Trainer | 1 | 5 | 0 |
+| [C_Trainer](C_Trainer/) | Trainer | 3 | 5 | 0 |
 | [C_TraitConfig](C_TraitConfig/) | TraitConfig | 0 | 0 | 0 |
 | [C_TransmogOutfitInfo](C_TransmogOutfitInfo/) | TransmogOutfitInfo | 67 | 8 | 12 |
 | [C_Transmog](C_Transmog/) | Transmogrify | 7 | 15 | 5 |
@@ -273,7 +275,7 @@
 | [C_SystemVisibilityManager](C_SystemVisibilityManager/) | UISystemVisibilityManager | 1 | 1 | 1 |
 | [C_Timer](C_Timer/) | UITimer | 4 | 0 | 2 |
 | [C_UIWidgetManager](C_UIWidgetManager/) | UIWidgetManager | 42 | 2 | 91 |
-| [C_UnitAuras](C_UnitAuras/) | UnitAuras | 37 | 6 | 0 |
+| [C_UnitAuras](C_UnitAuras/) | UnitAuras | 38 | 6 | 0 |
 | [C_UserFeedback](C_UserFeedback/) | UserFeedback | 2 | 0 | 0 |
 | [C_Vehicle](C_Vehicle/) | Vehicle | 0 | 10 | 0 |
 | [C_VideoOptions](C_VideoOptions/) | Video | 11 | 9 | 2 |

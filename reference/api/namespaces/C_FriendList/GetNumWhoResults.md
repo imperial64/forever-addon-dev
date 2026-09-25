@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_FriendList.GetNumWhoResults
 
@@ -16,6 +16,14 @@ _None._
 |---|---|---|---|---|
 | 1 | `numWhos` | `number` | no |  |
 | 2 | `totalNumWhos` | `number` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `RequiresFriendList` | `true` |
 
 Blizzard's own rendering: `C_FriendList.GetNumWhoResults()`
 

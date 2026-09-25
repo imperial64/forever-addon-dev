@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # StatusBarValueTextType
 
@@ -6,14 +6,14 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Hidden` | `StatusBarValueTextType` | no |  |
-| 2 | `Percentage` | `StatusBarValueTextType` | no |  |
-| 3 | `Value` | `StatusBarValueTextType` | no |  |
-| 4 | `Time` | `StatusBarValueTextType` | no |  |
-| 5 | `TimeShowOneLevelOnly` | `StatusBarValueTextType` | no |  |
-| 6 | `ValueOverMax` | `StatusBarValueTextType` | no |  |
-| 7 | `ValueOverMaxNormalized` | `StatusBarValueTextType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Hidden` | 0 | `StatusBarValueTextType` | no |  |
+| 2 | `Percentage` | 1 | `StatusBarValueTextType` | no |  |
+| 3 | `Value` | 2 | `StatusBarValueTextType` | no |  |
+| 4 | `Time` | 3 | `StatusBarValueTextType` | no |  |
+| 5 | `TimeShowOneLevelOnly` | 4 | `StatusBarValueTextType` | no |  |
+| 6 | `ValueOverMax` | 5 | `StatusBarValueTextType` | no |  |
+| 7 | `ValueOverMaxNormalized` | 6 | `StatusBarValueTextType` | no |  |
 
 System: `UIWidgetManager`

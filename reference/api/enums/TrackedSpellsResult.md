@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # TrackedSpellsResult
 
@@ -6,11 +6,11 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Success` | `TrackedSpellsResult` | no |  |
-| 2 | `PlayerNotFound` | `TrackedSpellsResult` | no |  |
-| 3 | `NoCooldownInfo` | `TrackedSpellsResult` | no |  |
-| 4 | `MismatchedCooldownInfo` | `TrackedSpellsResult` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Success` | 0 | `TrackedSpellsResult` | no |  |
+| 2 | `PlayerNotFound` | 1 | `TrackedSpellsResult` | no |  |
+| 3 | `NoCooldownInfo` | 2 | `TrackedSpellsResult` | no |  |
+| 4 | `MismatchedCooldownInfo` | 3 | `TrackedSpellsResult` | no |  |
 
 System: `CommentatorFrame`

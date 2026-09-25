@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_PetJournal.GetPetLoadOutInfo
 
@@ -21,6 +21,14 @@ petID, ability1ID, ability2ID, ability3ID, locked = C_PetJournal.GetPetLoadOutIn
 | 3 | `ability2ID` | `number` | no |  |
 | 4 | `ability3ID` | `number` | no |  |
 | 5 | `locked` | `bool` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
 
 Blizzard's own rendering: `C_PetJournal.GetPetLoadOutInfo(slot)`
 

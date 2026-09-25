@@ -1,8 +1,8 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # Restrictions
 
-Measured on client 1.60.1 build 69913 (interface 16001) with ForeverProbe (P); AmbianceCost and DynamicAmbiance (Q, and P.29).
+Measured on client 1.60.1 build 69913 (interface 16001) with ForeverProbe (P); AmbianceCost and DynamicAmbiance (Q, and P.29), except where an entry names its own build.
 
 Everything here was measured against a running client. Blizzard's own documentation says what a function takes; this says whether the client will let an addon call it and whether the value can be read.
 
@@ -18,7 +18,7 @@ Everything here was measured against a running client. Blizzard's own documentat
 | `ReloadUI` | **FORBIDDEN** | always | An addon cannot reload the UI. A human must type /reload. |
 | `C_AuctionHouse.ReplicateItems` | **FAILS SILENTLY** | always | A throttled full scan returns an EMPTY MARKET, not an error. |
 | `retail-graphics-cvar-names-absent` | **CAUTION** | always | gxBrightness, gxContrast and gxGamma do NOT exist on this client. |
-| `savedvariables-not-read-back` | **BROKEN ON THIS BUILD** | always | The client writes ACCOUNT-WIDE SavedVariables and never reads them back. Per-character saved variables are read back normally. |
+| `savedvariables-load-order` | **CAUTION** | always | SavedVariables ARE read back, account-wide and per-character, across /reload and a full relaunch. The trap is timing: by default the client REPLACES each saved global at ADDON_LOADED, after the addon's file scope has run. _(measured 2026-09-25 on build 70009)_ |
 | `secret-value-contagion` | **CAUTION** | always | tostring() on a secret value returns a SECRET STRING. The taint survives conversion. |
 | `UnitHealth` | **SECRET** | always | Unit health is secret at ALL times, including out of combat. |
 | `UnitPower` | **SECRET** | always | Unit power is secret at ALL times, including out of combat. |
@@ -29,6 +29,7 @@ Everything here was measured against a running client. Blizzard's own documentat
 | `C_Spell.GetSpellCooldown`, `C_Spell.GetSpellCharges`, `GetActionCooldown` | **SECRET** | in-combat | Spell and action cooldowns become secret in combat. |
 | `readable-in-combat` | **PERMITTED** | in-combat | Unit identity, max health, spell casts and threat state stay readable in combat. |
 | `SecureActionButtonTemplate:SetAttribute` | **CAUTION** | in-combat | SetAttribute on a secure action button SUCCEEDED in combat. Re-test before relying on it. |
+| `secure-snippets-in-combat` | **BLOCKED IN COMBAT** | in-combat | Secure snippets RUN out of combat. In combat, Execute is refused: silently, with ADDON_ACTION_BLOCKED and no error, on a frame made before combat, and with a raise on a frame made during it. _(measured 2026-09-25 on build 70009)_ |
 | `C_Secrets.ShouldUnitThreatValuesBeSecret` | **SECRET** | in-combat | Threat VALUES are secret in combat, but threat STATE is not. |
 | `C_Secrets.ShouldUnitStatsBeSecret` | **SECRET** | in-combat | Unit stats become secret in combat. |
 
@@ -160,15 +161,17 @@ All three retail names report present=false. The client's own names are Brightne
 
 _Evidence: §P.22 in `research/findings.md`._
 
-## savedvariables-not-read-back
+## savedvariables-load-order
 
-The client writes ACCOUNT-WIDE SavedVariables and never reads them back. Per-character saved variables are read back normally.
+SavedVariables ARE read back, account-wide and per-character, across /reload and a full relaunch. The trap is timing: by default the client REPLACES each saved global at ADDON_LOADED, after the addon's file scope has run.
 
-An addon declaring ## SavedVariables starts from defaults on every launch. Measured: the load counter stays at 1 across sessions and no token survives a /reload, while the file itself lands on disk correctly. Outbound works; the in-client round trip does not. Reported as a beta bug rather than a policy decision. Partly scoped on 2026-09-20, and the scope depends on WHAT you reload. Across a /reload inside one client run, a per-character global came back carrying a token from an earlier session while an account-wide global bound by identical code in the same handler came back empty. Across a full client restart, neither came back. So the account-wide path is dead in both cases, and the per-character path works only within a client run. Also measured: the two exotic WTF paths other developers named - WTF\Account\SavedVariables\ and WTF\SavedVariables\ - are neither read nor written. Files seeded there before a cold start were still untouched afterwards. THE FLUSH IS DESTRUCTIVE, which is the operational half of "never read back" and is sharper than that phrasing suggests. The saved table starts nil every session; a reload or logout writes whatever the CURRENT session built and REPLACES the file rather than merging into it. So a /reload before running anything writes an empty table over the previous session's results and destroys them. The client's own .bak beside the file is the only recovery and it survives exactly one further flush. This destroyed five completed measurement runs in a sister repository on 2026-09-18.
+**Measured 2026-09-25 on build 70009**, not on the build named at the top of this page.
 
-**Workaround.** COLLECT, THEN RELOAD - never reload first. Because the flush replaces the file with the current session's table, the reload that saves your data and the reload that destroys it are the same command in a different order. None for persistence across sessions. ## SavedVariablesPerCharacter does NOT survive logging out either - measured on a cold start - so there is no way to keep user settings between play sessions on this build. It does survive a /reload, which the account-wide path does not. That is worth using for state an addon needs to carry across a reload inside one session, and it is what lifts the one-session constraint on the probe's own two-pass workflow (P.21). For data coming from outside the game, an external process writes Lua into the AddOns folder and the client executes it as addon code at load. That inbound channel works; it costs a manual /reload per refresh.
+A token seeded before a full exit and relaunch through Battle.net came back in every saved global of two test addons, account-wide and per-character alike. The same happened across /reload. The default order is retail's. Every saved global is nil while the addon's files run. At ADDON_LOADED the client swaps in the restored table, and whatever the file assigned is discarded. So `X = X or {}` followed by `local db = X` at file scope leaves db pointing at an orphan. Every write through it is lost, and nothing errors. On an addon's very first launch, with no file on disk yet, the client leaves the file-scope table alone. The orphan therefore only appears from the second launch on. `## LoadSavedVariablesFirst: 1` in the .toc moves the restore ahead of file scope. Then an unconditional file-scope `X = {...}` DISCARDS the restored data, and the fresh table is what gets written at exit. `X = X or {...}` keeps it. GetAddOnMetadata returns nil for the directive, so an addon cannot ask which order it is in. The two exotic WTF paths, WTF\Account\SavedVariables\ and WTF\SavedVariables\, are still neither read nor written on 70009 (P.33). History, build 69913 (P.23, P.27): account-wide was never read back. Per-character survived a /reload but not a restart. The flush was destructive, because a /reload before running anything wrote an empty table over the last session's data. None of that holds on 70009. Re-check it on every new build: the fix came unannounced and can leave the same way.
 
-_Evidence: §P.9, §P.21, §P.23, §P.27, §0.2 in `research/findings.md`._
+**Workaround.** Bind every saved global inside ADDON_LOADED and only mutate it. Never take a file-scope reference to one. That is safe under either order. Declare ## LoadSavedVariablesFirst: 1 only if you need saved values at file scope, and then never assign the global unconditionally. Remove any workaround installed for 69913: ForeverSVFix, WTFix, svshim, a SavedVariablesLink-style .toc line, or a symbolic link or junction under WTF or AddOns. The client now restores the file itself, so a second mechanism injecting the same global either repeats the restore or overwrites it with an older copy. That is reasoning from the measured order, not a measurement of those tools.
+
+_Evidence: §P.30, §P.31, §P.33, §P.23, §P.27, §P.21 in `research/findings.md`._
 
 ## secret-value-contagion
 
@@ -184,9 +187,21 @@ _Evidence: §P.2, §P.25, §P.28 in `research/findings.md`._
 
 SetAttribute on a secure action button SUCCEEDED in combat. Re-test before relying on it.
 
-Retail protects exactly this, and it is the mechanism every action-bar addon depends on. The measurement here is that the call raised no error and fired no block event - which is weaker evidence than the attribute actually taking effect, and this client has already shown that a refusal can be silent.
+Retail protects exactly this, and it is the mechanism every action-bar addon depends on. The measurement here is that the call raised no error and fired no block event - which is weaker evidence than the attribute actually taking effect, and this client has already shown that a refusal can be silent. Build 70009 sharpens the doubt. In P.32, an insecure SetAttribute on a protected frame in combat (SecureHandlersUpdateFrame:SetAttribute()) was refused with ADDON_ACTION_BLOCKED and no error. This client does refuse that shape of call, and it does so by event only. P.20 was measured on 69913, and nobody recorded whether that button was protected or whether its attribute took effect. Re-test with the block log open.
 
-_Evidence: §P.20 in `research/findings.md`._
+_Evidence: §P.20, §P.32 in `research/findings.md`._
+
+## secure-snippets-in-combat
+
+Secure snippets RUN out of combat. In combat, Execute is refused: silently, with ADDON_ACTION_BLOCKED and no error, on a frame made before combat, and with a raise on a frame made during it.
+
+**Measured 2026-09-25 on build 70009**, not on the build named at the top of this page.
+
+Out of combat, frames from SecureHandlerBaseTemplate and SecureHandlerAttributeTemplate ran frame:Execute("self:SetAttribute('fbok',42)") and read back 42, with no block event. In combat, Execute on those same pre-combat frames returned normally, so a pcall reports success. The attribute kept its old value, and two ADDON_ACTION_BLOCKED events named SecureHandlersUpdateFrame:SetAttribute(). On frames created in combat, Execute raised "SecureHandlers.lua:690: Header frame must be explicitly protected". loadstring_untainted is still absent on 70009: type() returns nil in both combat states, while snippets run. Its absence was reported as the cause of broken snippets on earlier builds (findings 0.2, 14), and that is out of date. The missing global is not a feature test. Only Execute was measured. WrapScript, SetFrameRef, state drivers, action-bar paging and click-casting were not run on 70009. This looks like retail's ordinary combat lockdown, but no retail client was measured.
+
+**Workaround.** Decide snippet support by running one out of combat and reading the result back, never by checking type(loadstring_untainted). Create and configure every secure header before combat. Check InCombatLockdown() before calling Execute, and treat a normal return in combat as a failure unless the attribute changed. Register ADDON_ACTION_BLOCKED to see the refusal.
+
+_Evidence: §P.32 in `research/findings.md`._
 
 ## threat-values-secrecy
 

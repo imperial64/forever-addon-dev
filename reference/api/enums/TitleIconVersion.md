@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # TitleIconVersion
 
@@ -6,10 +6,10 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Small` | `TitleIconVersion` | no |  |
-| 2 | `Medium` | `TitleIconVersion` | no |  |
-| 3 | `Large` | `TitleIconVersion` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Small` | 0 | `TitleIconVersion` | no |  |
+| 2 | `Medium` | 1 | `TitleIconVersion` | no |  |
+| 3 | `Large` | 2 | `TitleIconVersion` | no |  |
 
 System: `TextureUtils`

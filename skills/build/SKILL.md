@@ -58,14 +58,23 @@ end
 Route every value read out of the game through something like this before printing,
 comparing or storing it.
 
-### 3. SavedVariables are written but never read back
+### 3. SavedVariables arrive after your file scope and replace what you put there
 
-On this build the client writes your saved file on logout and **never loads it**. Your
-addon starts from defaults every launch. Outbound works fine — an external process can
-read the file — but the in-client round trip is broken.
+On build 70009, SavedVariables are read back, account-wide and per-character, across a
+`/reload` and a full relaunch (`research/findings.md` §P.30). The trap is timing. By
+default the client restores at `ADDON_LOADED`, after your files have run, and it
+**replaces** the global. So `MyAddonDB = MyAddonDB or {}` followed by
+`local db = MyAddonDB` at file scope leaves `db` pointing at a discarded table, and every
+write is silently lost from the second launch on.
 
-If you need settings to persist, the working pattern is an external process writing a
-`.lua` file into your addon folder that the client executes as addon code at load.
+With `## LoadSavedVariablesFirst: 1` in the `.toc`, the restore comes before file scope.
+Then an unconditional `MyAddonDB = { ... }` destroys the saved data instead (§P.31). Bind
+inside `ADDON_LOADED` and only mutate the table: that is safe under both orders.
+
+On 69913 and earlier, nothing was read back. If someone has a SavedVariables workaround
+installed from that time (ForeverSVFix, WTFix, svshim, a `.toc` link line, or a symbolic
+link into `WTF`), tell them to remove it on 70009. The details are in
+`reference/guides/savedvariables.md`.
 
 ### 4. `ReloadUI()` is protected
 
@@ -96,8 +105,10 @@ MyAddon.lua
 ```lua
 local ADDON, ns = ...
 
-MyAddonDB = MyAddonDB or {}
-local db = MyAddonDB
+-- Bound in ADDON_LOADED, never at file scope: the client replaces the saved
+-- global at ADDON_LOADED, so a file-scope reference would point at a table it
+-- throws away.
+local db
 
 local function plain(v)
     if issecretvalue and issecretvalue(v) then return "<SECRET>" end
@@ -119,9 +130,13 @@ local function safeRegister(frame, event)
 end
 
 local frame = CreateFrame("Frame")
+safeRegister(frame, "ADDON_LOADED")
 safeRegister(frame, "PLAYER_LOGIN")
-frame:SetScript("OnEvent", function(_, event, ...)
-    if event == "PLAYER_LOGIN" then
+frame:SetScript("OnEvent", function(_, event, arg1)
+    if event == "ADDON_LOADED" and arg1 == ADDON then
+        MyAddonDB = MyAddonDB or {}
+        db = MyAddonDB              -- mutate from here on; never reassign
+    elseif event == "PLAYER_LOGIN" then
         out("loaded.")
     end
 end)
@@ -179,13 +194,15 @@ Longer form, written for someone who has not read the research:
 - `reference/guides/getting-started.md` — first addon, .toc, installing, enabling
 - `reference/guides/pitfalls.md` — the five above in detail, plus two `.toc` traps, the
   CVar enable-flag trap and the three failure shapes
-- `reference/guides/savedvariables.md` — persistence, and moving data in and out
+- `reference/guides/savedvariables.md` — persistence (fixed on 70009), the
+  `LoadSavedVariablesFirst` load-order trap, retiring 69913 workarounds, and moving data in
+  and out
 - `reference/guides/packaging.md` — the `.toc` header, why the interface is 16001, and
   why `WOW_PROJECT_ID` cannot detect this client
 - `reference/guides/performance.md` — measured per-call costs, and the two traps in
   measuring them yourself
 
-## Two recipes worth knowing before you design
+## Recipes worth knowing before you design
 
 - **Auction House data: browse is the source, not `ReplicateItems`.** One
   `C_AuctionHouse.SendBrowseQuery` returns the complete item-key market in about three
@@ -205,6 +222,12 @@ Longer form, written for someone who has not read the research:
   the `.toc` lists and the client executes at load; the outbound channel is SavedVariables
   read from disk; the cost is a manual `/reload` per refresh, because `ReloadUI()` is
   protected. `reference/guides/savedvariables.md`, `research/findings.md` P.9.
+- **Secure snippets: decide support by running one.** On 70009 a `SecureHandlerBaseTemplate`
+  frame's `Execute` runs out of combat, while `loadstring_untainted` is still `nil`, so a
+  check on that global gets the wrong answer. In combat, `Execute` on a header made before
+  combat returns normally and does nothing, with only `ADDON_ACTION_BLOCKED` to show for it.
+  On a header made in combat it raises. Set secure headers up before combat.
+  `reference/restrictions/protected-actions.md`, `research/findings.md` P.32.
 
 ## When an addon "does nothing"
 

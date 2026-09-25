@@ -1,0 +1,19 @@
+## Interface: 16001
+## Title: Forever Probe SV (first)
+## Notes: SavedVariables cold-start companion to ForeverProbe, WITH LoadSavedVariablesFirst. Reported by /fprobe cold.
+## LoadSavedVariablesFirst: 1
+## X-SVVariant: First
+## SavedVariables: ForeverProbeSV_FirstDB, ForeverProbeSV_FirstClobber, ForeverProbeSV_FirstOrInit
+## SavedVariablesPerCharacter: ForeverProbeSV_FirstChar, ForeverProbeSV_FirstCharClobber, ForeverProbeSV_FirstCharOrInit
+
+# Directives must stay contiguous: a blank line between two ## lines ends the
+# header and the client ignores everything after it.
+#
+# The directive line above is the ONLY header difference from
+# ForeverProbeSV_Late, and it is copied from Blizzard's own Forever damage meter
+# (research/watch-findings.md W.30). No dependency on ForeverProbe, on purpose:
+# a dependency would change load order, which is the thing being measured.
+#
+# Core.lua is byte-identical in both variants; Init.lua differs only in names.
+Core.lua
+Init.lua

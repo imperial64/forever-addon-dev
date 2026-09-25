@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # HousingPrecisionSubmode
 
@@ -6,10 +6,10 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Translate` | `HousingPrecisionSubmode` | no |  |
-| 2 | `Rotate` | `HousingPrecisionSubmode` | no |  |
-| 3 | `Scale` | `HousingPrecisionSubmode` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Translate` | 0 | `HousingPrecisionSubmode` | no |  |
+| 2 | `Rotate` | 1 | `HousingPrecisionSubmode` | no |  |
+| 3 | `Scale` | 2 | `HousingPrecisionSubmode` | no |  |
 
 System: `HousingExpertModeUI`

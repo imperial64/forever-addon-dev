@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # VoiceChatChannel
 
@@ -19,5 +19,21 @@ _Structure_
 | 9 | `isTransmitting` | `bool` | no |  |
 | 10 | `isTranscribing` | `bool` | no |  |
 | 11 | `members` | `table&lt;VoiceChatMember&gt;` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| field `channelID` | `NeverSecret` | `true` |
+| field `channelType` | `NeverSecret` | `true` |
+| field `clubId` | `NeverSecret` | `true` |
+| field `streamId` | `NeverSecret` | `true` |
+| field `volume` | `NeverSecret` | `true` |
+| field `isActive` | `NeverSecret` | `true` |
+| field `isMuted` | `NeverSecret` | `true` |
+| field `isTransmitting` | `NeverSecret` | `true` |
+| field `isTranscribing` | `NeverSecret` | `true` |
 
 System: `VoiceChat`

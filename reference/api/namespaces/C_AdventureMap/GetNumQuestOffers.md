@@ -1,8 +1,21 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_AdventureMap.GetNumQuestOffers
 
-> **Present on this client, but not documented by Blizzard.** It exists in the client's global table and can be called; Blizzard's own API documentation carries no signature for it, so none is shown here rather than one being invented.
+```lua
+numQuestOffers = C_AdventureMap.GetNumQuestOffers()
+```
 
-Source: ForeverProbe global surface dump.
-Namespace: `C_AdventureMap`
+**Arguments**
+
+_None._
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `numQuestOffers` | `number` | no |  |
+
+Blizzard's own rendering: `C_AdventureMap.GetNumQuestOffers()`
+
+System: `AdventureMap` · Namespace: `C_AdventureMap`

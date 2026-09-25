@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # SimpleTextureBaseAPI:SetSpriteSheetCell
 
@@ -19,6 +19,20 @@ SimpleTextureBaseAPI:SetSpriteSheetCell(cell, numRows, numColumns, cellWidth, ce
 **Returns**
 
 _None._
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenTainted"` |
+| this function | `SecretArgumentsAddAspect` | `{ 8192 }` |
+| argument `cell` | `ConditionalSecret` | `true` |
+| argument `numRows` | `NeverSecret` | `true` |
+| argument `numColumns` | `NeverSecret` | `true` |
+| argument `cellWidth` | `NeverSecret` | `true` |
+| argument `cellHeight` | `NeverSecret` | `true` |
 
 Blizzard's own rendering: `SetSpriteSheetCell(cell, numRows, numColumns, optional cellWidth, optional cellHeight)`
 

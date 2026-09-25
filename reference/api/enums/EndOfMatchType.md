@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # EndOfMatchType
 
@@ -6,9 +6,9 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `None` | `EndOfMatchType` | no |  |
-| 2 | `Plunderstorm` | `EndOfMatchType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `None` | 0 | `EndOfMatchType` | no |  |
+| 2 | `Plunderstorm` | 1 | `EndOfMatchType` | no |  |
 
 System: `EndOfMatchUI`

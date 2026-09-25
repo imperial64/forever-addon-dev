@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # PlunderstormQueueState
 
@@ -6,11 +6,11 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `None` | `PlunderstormQueueState` | no |  |
-| 2 | `Queued` | `PlunderstormQueueState` | no |  |
-| 3 | `Proposed` | `PlunderstormQueueState` | no |  |
-| 4 | `Suspended` | `PlunderstormQueueState` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `None` | 0 | `PlunderstormQueueState` | no |  |
+| 2 | `Queued` | 1 | `PlunderstormQueueState` | no |  |
+| 3 | `Proposed` | 2 | `PlunderstormQueueState` | no |  |
+| 4 | `Suspended` | 3 | `PlunderstormQueueState` | no |  |
 
 System: `LobbyMatchmakerInfo`

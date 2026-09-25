@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # MatchDetailType
 
@@ -6,10 +6,10 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Placement` | `MatchDetailType` | no |  |
-| 2 | `Kills` | `MatchDetailType` | no |  |
-| 3 | `PlunderAcquired` | `MatchDetailType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Placement` | 0 | `MatchDetailType` | no |  |
+| 2 | `Kills` | 1 | `MatchDetailType` | no |  |
+| 3 | `PlunderAcquired` | 2 | `MatchDetailType` | no |  |
 
 System: `EndOfMatchUI`

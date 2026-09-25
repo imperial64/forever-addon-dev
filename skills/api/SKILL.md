@@ -4,7 +4,7 @@ description: >
   Look up exact World of Warcraft Forever client API signatures - arguments, types,
   nilable flags, return values, events, enums and structures - across all 408 systems,
   269 C_* namespaces, widget methods and every global, generated from the client's own
-  Blizzard_APIDocumentation on build 1.60.1.69913. Use when a specific function,
+  Blizzard_APIDocumentation on build 1.60.1.70009. Use when a specific function,
   namespace, event, enum or structure is named and the question is its signature, its
   parameters, its return values, or whether it exists on this build at all. For whether
   you are permitted to call it, or why it returned nil or a secret, use the restrictions
@@ -67,12 +67,12 @@ Grep: "itemKey" in reference/api/namespaces/
 
 **Exactly one thing: the symbol is not on this client.**
 
-That is an invariant worth trusting, and it cost 5,873 extra files to buy. Every symbol
+That is an invariant worth trusting, and it cost 5,891 extra files to buy. Every symbol
 present in the client's global table gets a page even when Blizzard documents nothing
 about it — those pages say so explicitly and carry no invented signature. So you never
 have to wonder whether a lookup failed or the function is absent.
 
-If a page is missing, say the symbol does not exist on build 1.60.1.69913, and check
+If a page is missing, say the symbol does not exist on build 1.60.1.70009, and check
 `reference/guides/aliases.md` for what replaced it.
 
 ## Reading a page

@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # BankLockedReason
 
@@ -6,11 +6,11 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `None` | `BankLockedReason` | no |  |
-| 2 | `NoAccountInventoryLock` | `BankLockedReason` | no |  |
-| 3 | `BankDisabled` | `BankLockedReason` | no |  |
-| 4 | `BankConversionFailed` | `BankLockedReason` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `None` | 0 | `BankLockedReason` | no |  |
+| 2 | `NoAccountInventoryLock` | 1 | `BankLockedReason` | no |  |
+| 3 | `BankDisabled` | 2 | `BankLockedReason` | no |  |
+| 4 | `BankConversionFailed` | 3 | `BankLockedReason` | no |  |
 
 System: `Bank`

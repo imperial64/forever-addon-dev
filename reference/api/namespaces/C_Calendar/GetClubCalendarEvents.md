@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_Calendar.GetClubCalendarEvents
 
@@ -19,6 +19,15 @@ events = C_Calendar.GetClubCalendarEvents(clubId, startTime, endTime)
 | # | Name | Type | Nilable | Default |
 |---|---|---|---|---|
 | 1 | `events` | `table&lt;CalendarDayEvent&gt;` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
+| this function | `SecretInChatMessagingLockdown` | `true` |
 
 Blizzard's own rendering: `C_Calendar.GetClubCalendarEvents(clubId, startTime, endTime)`
 

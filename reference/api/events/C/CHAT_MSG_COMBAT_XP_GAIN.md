@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # CHAT_MSG_COMBAT_XP_GAIN
 
@@ -24,5 +24,24 @@
 | 16 | `hideSenderInLetterbox` | `bool` | no |  |
 | 17 | `suppressRaidIcons` | `bool` | no |  |
 | 18 | `discordInfo` | `DiscordChatInfo` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| payload `languageName` | `NeverSecret` | `true` |
+| payload `channelName` | `NeverSecret` | `true` |
+| payload `specialFlags` | `NeverSecret` | `true` |
+| payload `zoneChannelID` | `NeverSecret` | `true` |
+| payload `channelIndex` | `NeverSecret` | `true` |
+| payload `channelBaseName` | `NeverSecret` | `true` |
+| payload `languageID` | `NeverSecret` | `true` |
+| payload `lineID` | `NeverSecret` | `true` |
+| payload `isMobile` | `NeverSecret` | `true` |
+| payload `isSubtitle` | `NeverSecret` | `true` |
+| payload `hideSenderInLetterbox` | `NeverSecret` | `true` |
+| payload `suppressRaidIcons` | `NeverSecret` | `true` |
 
 System: `ChatInfo`

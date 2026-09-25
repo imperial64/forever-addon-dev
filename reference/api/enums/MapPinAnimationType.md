@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # MapPinAnimationType
 
@@ -6,9 +6,9 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `None` | `MapPinAnimationType` | no |  |
-| 2 | `Pulse` | `MapPinAnimationType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `None` | 0 | `MapPinAnimationType` | no |  |
+| 2 | `Pulse` | 1 | `MapPinAnimationType` | no |  |
 
 System: `UIWidgetManager`

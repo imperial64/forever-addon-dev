@@ -79,8 +79,81 @@ _TOSTRING = re.compile(r"\btostring\s*\(\s*([A-Za-z_][\w.]*)\s*\(")
 # to be read back off the raw line. `=(?!=)` keeps `==` out.
 _FILE_SCOPE_ASSIGN = re.compile(r"^([A-Za-z_]\w*)\s*=(?!=)\s*")
 
+# A file-scope local taken from a global: `local db = X`, `local db = X or {}`,
+# `local cfg = X.field`, `local cfg = X[...]`. Matched on the blanked line, so
+# a trailing comment is already spaces. Column 0 stands in for file scope.
+_FILE_SCOPE_ALIAS = re.compile(
+    r"^local\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\b\s*(?=$|or\b|\.\s*[A-Za-z_]|\[)")
+
 # WOW_PROJECT_ID on either side of a comparison.
 _PROJECT_ID = re.compile(r"\bWOW_PROJECT_ID\b\s*[=~]=|[=~]=\s*\bWOW_PROJECT_ID\b")
+
+# Every spelling of "does loadstring_untainted exist". Matched against the RAW
+# line, because two of the spellings carry the name inside a string; a match
+# only counts when its first character survives blanking, which is what proves
+# `rawget` / `_G` / the bare name is code and not a mention in a comment.
+_LSU_REF = re.compile(
+    r"""
+      rawget \s*\( \s*_G\s*, \s*["']loadstring_untainted["'] \s*\)
+    | _G \s*\[ \s*["']loadstring_untainted["'] \s*\]
+    | (?<![\w.:"'])(?:_G\s*\.\s*)?loadstring_untainted\b
+    """,
+    re.X,
+)
+# What makes a reference a feature TEST rather than, say, a value being recorded
+# into a table: a branch, a boolean operator or a comparison on the same line.
+# Read off the blanked line, so `and` in a string or comment does not count.
+#
+# Limits: a test split across lines (`local has = loadstring_untainted` then
+# `if has then` further down) is missed, and so is anything reached through a
+# local alias. Recording `type(...)` into a table without testing it - which is
+# what the probe does - is silent on purpose.
+_FEATURE_TEST_CONTEXT = re.compile(
+    r"\b(?:if|elseif|while|until|not|and|or|assert)\b|[=~]="
+)
+
+# Enum.ForbiddenAspect, as far as a regex can see it. 1 (SetToDefaults) through
+# 1024 (ChangeParent) are the same on 69913 and 70009; everything above moved:
+#
+#                           69913    70009
+#   SetTexture                  -     2048
+#   QueryRotation               -     4096
+#   QueryAnimationProgress   2048     8192
+#   AddAnimations            4096    16384
+#
+# So a literal above 1024 means a different aspect depending on the build it was
+# written against. Heuristic, and deliberately narrow: a number from the table
+# fires only when the same (blanked) line names ForbiddenAspect - the enum or
+# any of the *ForbiddenAspects widget methods - or assigns it to one of the four
+# moved names, which is what a hand-rolled table keyed by aspect name looks
+# like. It misses a literal reached through a local, a constant defined on
+# another line, and bit.bor() arithmetic split across lines, and it cannot see
+# whether a number next to a ForbiddenAspect mention is really the aspect
+# argument. Anything else that happens to be 2048 or 4096 stays silent.
+_ASPECT_70009 = {2048: "SetTexture", 4096: "QueryRotation",
+                 8192: "QueryAnimationProgress", 16384: "AddAnimations"}
+_ASPECT_69913 = {2048: "QueryAnimationProgress", 4096: "AddAnimations"}
+_ASPECT_NUMBER = re.compile(
+    r"(?<![\w.])(2048|4096|8192|16384|0[xX]0*(?:800|1000|2000|4000))(?![\w.])")
+_ASPECT_CONTEXT = re.compile(r"ForbiddenAspect")
+_ASPECT_KEYED = re.compile(
+    r"\b(?:SetTexture|QueryRotation|QueryAnimationProgress|AddAnimations)\s*=\s*"
+    r"(?:2048|4096|8192|16384|0[xX]0*(?:800|1000|2000|4000))(?![\w.])")
+
+# `## LoadSavedVariablesFirst: 1` - a real directive on this client, used by
+# Blizzard's own Blizzard_DamageMeter.toc on the forever branch. With it the
+# saved globals exist before the addon's files run; without it they arrive at
+# ADDON_LOADED. Only these two values are known.
+_SV_FIRST_DIRECTIVE = "loadsavedvariablesfirst"
+_SV_FIRST_VALUES = ("0", "1")
+
+# A per-file load condition after a .toc file entry, as Blizzard's forever
+# branch writes them: `Camelot\Overrides.lua [AllowLoadGameType camelot]`. The
+# leading whitespace is what separates it from a `[TextLocale]`-style variable
+# inside the path itself. More than one group is tolerated.
+_TOC_FILE_CONDITIONS = re.compile(r"(?:\s+\[[^\]\n]*\])+\s*$")
+_TOC_FILE_CONDITION = re.compile(r"\[\s*([A-Za-z]\w*)?\s*([^\]]*)\]")
+_KNOWN_FILE_CONDITIONS = {"allowloadgametype"}
 
 # Strings and comments, blanked before matching so a mention is not a call.
 #
@@ -230,6 +303,39 @@ def _declared_sv_globals(directory: Path) -> set[str]:
     return names
 
 
+def _loads_sv_first(directory: Path) -> bool:
+    """Whether a sibling .toc sets `## LoadSavedVariablesFirst: 1`.
+
+    Unioned over every .toc the same way _declared_sv_globals is: if any flavour
+    restores before file scope, a file-scope assignment is destructive there.
+    """
+    for toc in sorted(directory.glob("*.toc")):
+        text = toc.read_text(encoding="utf-8", errors="replace")
+        for raw in text.split("\n"):
+            match = _TOC_DIRECTIVE.match(raw.strip())
+            if (match and match.group(1).lower() == _SV_FIRST_DIRECTIVE
+                    and match.group(2).strip() == "1"):
+                return True
+    return False
+
+
+def toc_file_entry(line: str) -> tuple[str, list[tuple[str, str]]]:
+    """Split a .toc file-list line into its path and its load conditions.
+
+    `Camelot\\Overrides.lua [AllowLoadGameType camelot]` gives
+    ("Camelot\\Overrides.lua", [("AllowLoadGameType", "camelot")]). Anything
+    that checks the path - existence, extension - must use the first half, or a
+    conditioned entry reads as a file whose name ends in `]`.
+    """
+    stripped = line.strip()
+    tail = _TOC_FILE_CONDITIONS.search(stripped)
+    if not tail:
+        return stripped, []
+    conditions = [((m.group(1) or ""), m.group(2).strip())
+                  for m in _TOC_FILE_CONDITION.finditer(tail.group(0))]
+    return stripped[:tail.start()].rstrip(), conditions
+
+
 def lint_file(path: Path, rules: Rules) -> list[Finding]:
     text = path.read_text(encoding="utf-8", errors="replace")
     lines = text.split("\n")
@@ -239,6 +345,17 @@ def lint_file(path: Path, rules: Rules) -> list[Finding]:
     findings: list[Finding] = []
     add = _adder(path, suppressed, findings)
     sv_globals = _declared_sv_globals(path.parent)
+    sv_first = _loads_sv_first(path.parent) if sv_globals else False
+    # For sv-file-scope-alias: every line that gives a saved global a new table
+    # (anything but `X = X or ...`), at any depth.
+    replaced: dict[str, list[int]] = {}
+    for index, source in enumerate(code_lines, start=1):
+        match = re.match(r"^\s*([A-Za-z_]\w*)\s*=(?!=)", source)
+        if match and match.group(1) in sv_globals:
+            name = match.group(1)
+            rhs = lines[index - 1][match.end():].strip() if index <= len(lines) else ""
+            if not re.match(rf"{re.escape(name)}\s+or\b", rhs):
+                replaced.setdefault(name, []).append(index)
 
     raw_lines = lines
     for number, source in enumerate(code_lines, start=1):
@@ -309,13 +426,106 @@ def lint_file(path: Path, rules: Rules) -> list[Finding]:
             # line - which is where the right-hand side has survived.
             rhs = raw[assignment.end():].strip()
             if not re.match(rf"{re.escape(name)}\s+or\b", rhs):
-                add(number, "sv-file-scope-init", "warning",
-                    f"`{name}` is declared in the .toc, and this client loads saved "
-                    "variables around addon file execution. An unconditional file-scope "
-                    "assignment replaces the restored table, and the client then "
-                    "serialises the empty one. Bind the global inside an ADDON_LOADED "
-                    "handler and only mutate it.",
-                    "findings 11, 12")
+                # Which way it goes wrong depends on when the client restores,
+                # and `## LoadSavedVariablesFirst` is what decides that.
+                if sv_first:
+                    message = (
+                        f"`{name}` is declared in the .toc and `## LoadSavedVariablesFirst: 1` "
+                        "restores it BEFORE this file runs, so this unconditional assignment "
+                        "discards the restored data and the client serialises the "
+                        f"replacement. Write `{name} = {name} or {{...}}`, or bind it in "
+                        "ADDON_LOADED and only mutate it.")
+                else:
+                    message = (
+                        f"`{name}` is declared in the .toc. Without `## LoadSavedVariablesFirst: "
+                        "1` the client restores it at ADDON_LOADED, replacing whatever file "
+                        f"scope put there - `{name} = {{...}}` and `{name} = {name} or {{...}}` "
+                        "alike - so read and bind it at or after ADDON_LOADED. The "
+                        "unconditional form also throws the data away the day the directive "
+                        "is added.")
+                add(number, "sv-file-scope-init", "warning", message, "findings P.31")
+
+        # -- a file-scope local aliasing a saved global --------------------
+        #
+        # The idiom that loses data by default. Without the directive the
+        # client REPLACES the global at ADDON_LOADED, so a local taken at file
+        # scope keeps nil or the file's own table - an orphan - and every write
+        # through it misses the table that is saved. With the directive the
+        # alias is the restored table and is fine, unless the global is given
+        # a new table after the alias was taken.
+        #
+        # Silent when the alias is re-pointed later in the file (`db = ...` on
+        # any line but its declaration): that is the author handling the swap,
+        # which is what the probe's rebind guard does. Blind to aliases taken
+        # in another file and to re-pointing done through a function.
+        alias = _FILE_SCOPE_ALIAS.match(source) if sv_globals else None
+        if alias and alias.group(2) in sv_globals:
+            alias_name, name = alias.group(1), alias.group(2)
+            later = [n for n in replaced.get(name, []) if n > number]
+            repointed = any(
+                re.match(rf"^\s*{re.escape(alias_name)}\s*=(?!=)", other)
+                for other in code_lines[number:])
+            if repointed:
+                pass
+            elif not sv_first:
+                add(number, "sv-file-scope-alias", "warning",
+                    f"`local {alias_name}` takes `{name}` at file scope. `{name}` is declared in "
+                    "the .toc, and without `## LoadSavedVariablesFirst: 1` the client "
+                    "REPLACES it with the restored table at ADDON_LOADED, after this file "
+                    f"has run. `{alias_name}` keeps what `{name}` held here - nil, or a table the "
+                    "client then discards - so every write through it is lost at logout, "
+                    "with no error. If this file gave it a table, the first launch hides "
+                    "the loss: with no saved file on disk yet, the client leaves that table "
+                    "in place, so it only fails from the second launch on. Bind "
+                    f"`{alias_name}` in ADDON_LOADED, or set the directive and keep "
+                    f"`{name} = {name} or {{...}}`.",
+                    "findings P.31")
+            elif later:
+                add(number, "sv-file-scope-alias", "warning",
+                    f"`local {alias_name}` takes `{name}` at file scope, and line {later[0]} gives "
+                    f"`{name}` a new table afterwards. The client saves whatever `{name}` "
+                    f"holds at logout, so from then on `{alias_name}` points at a table that is "
+                    f"not saved. Re-point `{alias_name}` wherever `{name}` is replaced, or bind it "
+                    "in ADDON_LOADED.",
+                    "findings P.31")
+
+        # -- loadstring_untainted as a snippet feature test --------------
+        #
+        # Blizzard_EnvironmentCleanup removes the global by design, so its
+        # absence says nothing about whether secure snippets run - they do, out
+        # of combat, on 70009. A test for it is a false negative that switches a
+        # working feature off, the same failure shape as project-id-detection,
+        # hence the same severity.
+        if _FEATURE_TEST_CONTEXT.search(source):
+            for ref in _LSU_REF.finditer(raw):
+                if ref.start() < len(source) and not source[ref.start()].isspace():
+                    add(number, "loadstring-untainted-test", "warning",
+                        "`loadstring_untainted` is removed by Blizzard_EnvironmentCleanup by "
+                        "design, so testing for it says snippets are unsupported where they "
+                        "run. Probe instead: out of combat, make a SecureHandlerBaseTemplate "
+                        "frame, `f:Execute(\"self:SetAttribute('ok', 42)\")` and read `ok` "
+                        "back; skip in combat, where Execute is refused (ADDON_ACTION_BLOCKED) "
+                        "or raises on a frame made in combat.",
+                        "findings P.32")
+                    break  # one per line
+
+        # -- hardcoded ForbiddenAspect numbers above 1024 ------------------
+        literal = None
+        if _ASPECT_CONTEXT.search(source):
+            found = _ASPECT_NUMBER.search(source)
+            literal = found.group(1) if found else None
+        if literal is None:
+            keyed = _ASPECT_KEYED.search(source)
+            literal = _ASPECT_NUMBER.search(keyed.group(0)).group(1) if keyed else None
+        if literal is not None:
+            value = int(literal, 0)
+            then = _ASPECT_69913.get(value, "unused")
+            add(number, "forbidden-aspect-literal", "warning",
+                f"`{literal}` as a ForbiddenAspect is build-dependent: every aspect above "
+                "ChangeParent (1024) was renumbered in 70009, where it is "
+                f"{_ASPECT_70009[value]} (on 69913: {then}). Use "
+                "`Enum.ForbiddenAspect.<Name>`.",
+                "reference/api/enums/ForbiddenAspect.md")
 
         # -- WOW_PROJECT_ID cannot see Forever ----------------------------
         if _PROJECT_ID.search(source):
@@ -387,11 +597,33 @@ def lint_toc(path: Path, rules: Rules) -> list[Finding]:
             seen_directive = True
             if name.lower() == "interface":
                 interfaces.append((number, value))
+            elif name.lower() == _SV_FIRST_DIRECTIVE and value not in _SV_FIRST_VALUES:
+                add(number, "toc-sv-first-value", "warning",
+                    f"`## {name}: {value}` - the only values this directive is known to take "
+                    "are 0 and 1. With 1 the saved globals exist before the addon's files "
+                    "run; otherwise they arrive at ADDON_LOADED.",
+                    "findings P.31")
             continue
         if stripped.startswith("#"):
             continue  # a plain comment does not end the header
         if seen_directive:
             header_ended = True  # blank line, or the file list has started
+        if not stripped:
+            continue
+
+        # A file entry. Its load conditions are stripped here and checked on
+        # their own; nothing downstream may treat the bracket as part of the
+        # path. The path is deliberately NOT checked for existence: this client
+        # silently ignores an entry naming a missing file, and some workarounds
+        # list one on purpose.
+        _, conditions = toc_file_entry(stripped)
+        for key, _value in conditions:
+            if key.lower() not in _KNOWN_FILE_CONDITIONS:
+                add(number, "toc-file-condition-unknown", "note",
+                    f"`[{key or '?'} ...]` is not a per-file load condition this linter "
+                    "knows. Blizzard's forever-branch .toc files use "
+                    "`[AllowLoadGameType standard, camelot]`; check the spelling.",
+                    "findings 10")
 
     if interfaces:
         versions = {part.strip()
@@ -470,9 +702,16 @@ def main() -> int:
               f"{warnings} warning(s), "
               f"{len(findings) - errors - warnings} note(s)")
         if not findings:
-            print("clean against build "
-                  + str((json.loads(args.restrictions.read_text(encoding='utf-8'))
-                         .get('meta') or {}).get('build', '?')))
+            # Two builds, because the two sources move separately: the API
+            # reference regenerates from each client's documentation, while
+            # the restrictions are measured by hand and lag behind it.
+            api_build = (json.loads(args.api.read_text(encoding="utf-8"))
+                         .get("build") or {}).get("build", "?")
+            measured = (json.loads(args.restrictions.read_text(encoding="utf-8"))
+                        .get("meta") or {}).get("build", "?")
+            print(f"clean against the API of build {api_build}, and restrictions measured "
+                  f"on build {measured} unless reference/api/RESTRICTIONS.md says otherwise"
+                  if str(api_build) != str(measured) else f"clean against build {api_build}")
         print("Regex-based: it cannot follow aliases, table lookups or dynamic calls, "
               "so a clean run is not a proof of correctness.")
 
