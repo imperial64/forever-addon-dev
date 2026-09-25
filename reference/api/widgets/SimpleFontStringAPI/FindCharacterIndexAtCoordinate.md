@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # SimpleFontStringAPI:FindCharacterIndexAtCoordinate
 
@@ -19,6 +19,17 @@ characterIndex, inside = SimpleFontStringAPI:FindCharacterIndexAtCoordinate(x, y
 |---|---|---|---|---|
 | 1 | `characterIndex` | `luaIndex` | no |  |
 | 2 | `inside` | `bool` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `RequiresFontStringTextAccess` | `true` |
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
+| this function | `SecretReturnsForAspect` | `{ 8 }` |
+| this function | `SecretWhenAnchoringSecret` | `true` |
 
 Blizzard's own rendering: `FindCharacterIndexAtCoordinate(x, y)`
 

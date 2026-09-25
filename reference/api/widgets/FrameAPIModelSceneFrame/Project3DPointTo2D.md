@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # FrameAPIModelSceneFrame:Project3DPointTo2D
 
@@ -21,6 +21,14 @@ point2DX, point2DY, depth = FrameAPIModelSceneFrame:Project3DPointTo2D(pointX, p
 | 1 | `point2DX` | `number` | no |  |
 | 2 | `point2DY` | `number` | no |  |
 | 3 | `depth` | `number` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
 
 Blizzard's own rendering: `Project3DPointTo2D(pointX, pointY, pointZ)`
 

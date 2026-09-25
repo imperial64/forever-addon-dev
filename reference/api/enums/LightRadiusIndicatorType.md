@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # LightRadiusIndicatorType
 
@@ -6,10 +6,10 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Always` | `LightRadiusIndicatorType` | no |  |
-| 2 | `Overlap` | `LightRadiusIndicatorType` | no |  |
-| 3 | `Never` | `LightRadiusIndicatorType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Always` | 0 | `LightRadiusIndicatorType` | no |  |
+| 2 | `Overlap` | 1 | `LightRadiusIndicatorType` | no |  |
+| 3 | `Never` | 2 | `LightRadiusIndicatorType` | no |  |
 
 System: `HousingDecorUI`

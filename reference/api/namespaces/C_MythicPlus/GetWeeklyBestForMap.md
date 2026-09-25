@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_MythicPlus.GetWeeklyBestForMap
 
@@ -22,6 +22,14 @@ durationSec, level, completionDate, affixIDs, members, dungeonScore = C_MythicPl
 | 4 | `affixIDs` | `table&lt;number&gt;` | no |  |
 | 5 | `members` | `table&lt;MythicPlusMember&gt;` | no |  |
 | 6 | `dungeonScore` | `number` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
 
 Blizzard's own rendering: `C_MythicPlus.GetWeeklyBestForMap(mapChallengeModeID)`
 

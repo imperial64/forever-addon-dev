@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_SpecializationInfo.GetSpecializationInfo
 
@@ -32,6 +32,14 @@ specId, name, description, icon, role, primaryStat, pointsSpent, background, pre
 | 8 | `background` | `string` | yes |  |
 | 9 | `previewPointsSpent` | `number` | no | `0` |
 | 10 | `isUnlocked` | `bool` | no | `True` |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
 
 Blizzard's own rendering: `C_SpecializationInfo.GetSpecializationInfo(specializationIndex, optional isInspect, optional isPet, optional inspectTarget, optional sex, optional groupIndex, optional classID)`
 

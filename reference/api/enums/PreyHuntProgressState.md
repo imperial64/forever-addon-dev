@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # PreyHuntProgressState
 
@@ -6,11 +6,11 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Cold` | `PreyHuntProgressState` | no |  |
-| 2 | `Warm` | `PreyHuntProgressState` | no |  |
-| 3 | `Hot` | `PreyHuntProgressState` | no |  |
-| 4 | `Final` | `PreyHuntProgressState` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Cold` | 0 | `PreyHuntProgressState` | no |  |
+| 2 | `Warm` | 1 | `PreyHuntProgressState` | no |  |
+| 3 | `Hot` | 2 | `PreyHuntProgressState` | no |  |
+| 4 | `Final` | 3 | `PreyHuntProgressState` | no |  |
 
 System: `UIWidgetManager`

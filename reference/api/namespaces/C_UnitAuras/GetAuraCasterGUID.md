@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_UnitAuras.GetAuraCasterGUID
 
@@ -23,6 +23,17 @@ casterGUID = C_UnitAuras.GetAuraCasterGUID(auraInstanceUnit, auraInstanceID)
 | # | Name | Type | Nilable | Default |
 |---|---|---|---|---|
 | 1 | `casterGUID` | `WOWGUID` | yes |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `RequiresUnitAuraAccess` | `true` |
+| this function | `RequiresValidUnitAuraInstance` | `true` |
+| this function | `SecretArguments` | `"AllowedWhenTainted"` |
+| this function | `SecretWhenUnitAuraRestricted` | `true` |
 
 Blizzard's own rendering: `C_UnitAuras.GetAuraCasterGUID(auraInstanceUnit, auraInstanceID)`
 

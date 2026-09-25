@@ -1,8 +1,31 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_StringUtil.GetDefaultAbbreviationBreakpoints
 
-> **Present on this client, but not documented by Blizzard.** It exists in the client's global table and can be called; Blizzard's own API documentation carries no signature for it, so none is shown here rather than one being invented.
+```lua
+breakpoints = C_StringUtil.GetDefaultAbbreviationBreakpoints(locale)
+```
 
-Source: ForeverProbe global surface dump.
-Namespace: `C_StringUtil`
+**Arguments**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `locale` | `WowLocale` | yes |  |
+
+**Returns**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `breakpoints` | `table&lt;NumberAbbreviationBreakpoint&gt;` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
+
+Blizzard's own rendering: `GetDefaultAbbreviationBreakpoints(optional locale)`
+
+System: `Localization` · Namespace: `C_StringUtil` (function-level `Namespace`; the system's is none)

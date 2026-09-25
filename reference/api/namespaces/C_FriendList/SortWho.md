@@ -1,9 +1,9 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_FriendList.SortWho
 
 ```lua
-C_FriendList.SortWho(sorting)
+C_FriendList.SortWho(sorting, ascending)
 ```
 
 **Arguments**
@@ -11,11 +11,21 @@ C_FriendList.SortWho(sorting)
 | # | Name | Type | Nilable | Default |
 |---|---|---|---|---|
 | 1 | `sorting` | `cstring` | no |  |
+| 2 | `ascending` | `bool` | yes |  |
 
 **Returns**
 
 _None._
 
-Blizzard's own rendering: `C_FriendList.SortWho(sorting)`
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `RequiresFriendList` | `true` |
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
+
+Blizzard's own rendering: `C_FriendList.SortWho(sorting, optional ascending)`
 
 System: `FriendList` · Namespace: `C_FriendList`

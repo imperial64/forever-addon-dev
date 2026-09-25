@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_QuestLog.GetNextWaypoint
 
@@ -19,6 +19,14 @@ mapID, x, y = C_QuestLog.GetNextWaypoint(questID)
 | 1 | `mapID` | `number` | no |  |
 | 2 | `x` | `number` | no |  |
 | 3 | `y` | `number` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
 
 Blizzard's own rendering: `C_QuestLog.GetNextWaypoint(questID)`
 

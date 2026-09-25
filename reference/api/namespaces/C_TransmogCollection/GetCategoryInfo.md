@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_TransmogCollection.GetCategoryInfo
 
@@ -22,6 +22,14 @@ name, isWeapon, canHaveIllusions, canMainHand, canOffHand, canRanged = C_Transmo
 | 4 | `canMainHand` | `bool` | no | `False` |
 | 5 | `canOffHand` | `bool` | no | `False` |
 | 6 | `canRanged` | `bool` | no | `False` |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
 
 Blizzard's own rendering: `C_TransmogCollection.GetCategoryInfo(category)`
 

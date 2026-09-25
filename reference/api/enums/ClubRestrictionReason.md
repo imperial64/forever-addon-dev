@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # ClubRestrictionReason
 
@@ -6,9 +6,9 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `None` | `ClubRestrictionReason` | no |  |
-| 2 | `Unavailable` | `ClubRestrictionReason` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `None` | 0 | `ClubRestrictionReason` | no |  |
+| 2 | `Unavailable` | 1 | `ClubRestrictionReason` | no |  |
 
 System: `Club`

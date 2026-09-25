@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # SummonStatus
 
@@ -6,11 +6,11 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `None` | `SummonStatus` | no |  |
-| 2 | `Pending` | `SummonStatus` | no |  |
-| 3 | `Accepted` | `SummonStatus` | no |  |
-| 4 | `Declined` | `SummonStatus` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `None` | 0 | `SummonStatus` | no |  |
+| 2 | `Pending` | 1 | `SummonStatus` | no |  |
+| 3 | `Accepted` | 2 | `SummonStatus` | no |  |
+| 4 | `Declined` | 3 | `SummonStatus` | no |  |
 
 System: `IncomingSummon`

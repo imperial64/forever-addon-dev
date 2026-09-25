@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # ConsoleCategory
 
@@ -6,18 +6,18 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Debug` | `ConsoleCategory` | no |  |
-| 2 | `Graphics` | `ConsoleCategory` | no |  |
-| 3 | `Console` | `ConsoleCategory` | no |  |
-| 4 | `Combat` | `ConsoleCategory` | no |  |
-| 5 | `Game` | `ConsoleCategory` | no |  |
-| 6 | `Default` | `ConsoleCategory` | no |  |
-| 7 | `Net` | `ConsoleCategory` | no |  |
-| 8 | `Sound` | `ConsoleCategory` | no |  |
-| 9 | `Gm` | `ConsoleCategory` | no |  |
-| 10 | `Reveal` | `ConsoleCategory` | no |  |
-| 11 | `None` | `ConsoleCategory` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Debug` | 0 | `ConsoleCategory` | no |  |
+| 2 | `Graphics` | 1 | `ConsoleCategory` | no |  |
+| 3 | `Console` | 2 | `ConsoleCategory` | no |  |
+| 4 | `Combat` | 3 | `ConsoleCategory` | no |  |
+| 5 | `Game` | 4 | `ConsoleCategory` | no |  |
+| 6 | `Default` | 5 | `ConsoleCategory` | no |  |
+| 7 | `Net` | 6 | `ConsoleCategory` | no |  |
+| 8 | `Sound` | 7 | `ConsoleCategory` | no |  |
+| 9 | `Gm` | 8 | `ConsoleCategory` | no |  |
+| 10 | `Reveal` | 9 | `ConsoleCategory` | no |  |
+| 11 | `None` | 10 | `ConsoleCategory` | no |  |
 
 System: `Console`

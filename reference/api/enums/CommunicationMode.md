@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # CommunicationMode
 
@@ -6,9 +6,9 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `PushToTalk` | `CommunicationMode` | no |  |
-| 2 | `OpenMic` | `CommunicationMode` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `PushToTalk` | 0 | `CommunicationMode` | no |  |
+| 2 | `OpenMic` | 1 | `CommunicationMode` | no |  |
 
 System: `VoiceChat`

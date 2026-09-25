@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # LossOfControlData
 
@@ -19,5 +19,14 @@ _Structure_
 | 9 | `priority` | `number` | no |  |
 | 10 | `displayType` | `number` | no |  |
 | 11 | `auraInstanceID` | `number` | yes |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| field `priority` | `NeverSecret` | `true` |
+| field `displayType` | `NeverSecret` | `true` |
 
 System: `LossOfControl`

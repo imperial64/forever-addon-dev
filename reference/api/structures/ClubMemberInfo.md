@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # ClubMemberInfo
 
@@ -40,5 +40,14 @@ _Structure_
 | 30 | `faction` | `PvPFaction` | yes |  |
 | 31 | `timerunningSeasonID` | `number` | yes |  |
 | 32 | `discordInfo` | `DiscordChatInfo` | yes |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| field `isSelf` | `NeverSecret` | `true` |
+| field `faction` | `NeverSecret` | `true` |
 
 System: `Club`

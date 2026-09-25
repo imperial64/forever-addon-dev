@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # ReputationSortType
 
@@ -6,10 +6,10 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `None` | `ReputationSortType` | no |  |
-| 2 | `Account` | `ReputationSortType` | no |  |
-| 3 | `Character` | `ReputationSortType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `None` | 0 | `ReputationSortType` | no |  |
+| 2 | `Account` | 1 | `ReputationSortType` | no |  |
+| 3 | `Character` | 2 | `ReputationSortType` | no |  |
 
 System: `ReputationInfo`

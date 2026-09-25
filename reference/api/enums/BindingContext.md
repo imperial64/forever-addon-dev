@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # BindingContext
 
@@ -6,17 +6,17 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `None` | `BindingContext` | no |  |
-| 2 | `HousingEditor` | `BindingContext` | no |  |
-| 3 | `HousingEditorBasicDecorMode` | `BindingContext` | no |  |
-| 4 | `HousingEditorExpertDecorMode` | `BindingContext` | no |  |
-| 5 | `HousingEditorCustomizeMode` | `BindingContext` | no |  |
-| 6 | `HousingEditorCleanupMode` | `BindingContext` | no |  |
-| 7 | `HousingEditorLayoutMode` | `BindingContext` | no |  |
-| 8 | `HousingEditorBasicAndExpertDecorMode` | `BindingContext` | no |  |
-| 9 | `HousingEditorExteriorCustomizationMode` | `BindingContext` | no |  |
-| 10 | `GamepadModeInGameCore` | `BindingContext` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `None` | 0 | `BindingContext` | no |  |
+| 2 | `HousingEditor` | 1 | `BindingContext` | no |  |
+| 3 | `HousingEditorBasicDecorMode` | 2 | `BindingContext` | no |  |
+| 4 | `HousingEditorExpertDecorMode` | 3 | `BindingContext` | no |  |
+| 5 | `HousingEditorCustomizeMode` | 4 | `BindingContext` | no |  |
+| 6 | `HousingEditorCleanupMode` | 5 | `BindingContext` | no |  |
+| 7 | `HousingEditorLayoutMode` | 6 | `BindingContext` | no |  |
+| 8 | `HousingEditorBasicAndExpertDecorMode` | 7 | `BindingContext` | no |  |
+| 9 | `HousingEditorExteriorCustomizationMode` | 8 | `BindingContext` | no |  |
+| 10 | `GamepadModeInGameCore` | 9 | `BindingContext` | no |  |
 
 System: `KeyBindings`

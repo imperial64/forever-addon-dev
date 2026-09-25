@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # EditModeLayoutInfo
 
@@ -10,6 +10,7 @@ _Structure_
 |---|---|---|---|---|
 | 1 | `layoutName` | `string` | no |  |
 | 2 | `layoutType` | `EditModeLayoutType` | no |  |
-| 3 | `systems` | `table&lt;EditModeSystemInfo&gt;` | no |  |
+| 3 | `interfaceStyle` | `InputDeviceInterfaceType` | yes |  |
+| 4 | `systems` | `table&lt;EditModeSystemInfo&gt;` | no |  |
 
 System: `EditModeManager`

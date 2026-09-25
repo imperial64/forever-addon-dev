@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # C_Spell.IsSpellInRange
 
@@ -18,6 +18,14 @@ inRange = C_Spell.IsSpellInRange(spellIdentifier, targetUnit)
 | # | Name | Type | Nilable | Default |
 |---|---|---|---|---|
 | 1 | `inRange` | `bool` | yes |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenTainted"` |
 
 Blizzard's own rendering: `C_Spell.IsSpellInRange(spellIdentifier, optional targetUnit)`
 

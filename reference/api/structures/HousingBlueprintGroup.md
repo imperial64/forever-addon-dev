@@ -1,0 +1,14 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
+
+# HousingBlueprintGroup
+
+_Structure_
+
+**Fields**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `name` | `cstring` | no |  |
+| 2 | `entries` | `table&lt;HousingBlueprintInfo&gt;` | no |  |
+
+System: none (a shared table, filed in `APIDocumentation.tables`)

@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # SimpleHTMLAPI:SetFont
 
@@ -18,6 +18,16 @@ SimpleHTMLAPI:SetFont(textType, fontFile, height, flags)
 **Returns**
 
 _None._
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `RequiresValidFontAsset` | `true` |
+| this function | `RequiresValidFontHeight` | `true` |
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
 
 Blizzard's own rendering: `SetFont(textType, fontFile, height, flags)`
 

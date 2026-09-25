@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # LfgEntryData
 
@@ -25,5 +25,13 @@ _Structure_
 | 15 | `generalPlaystyle` | `LFGEntryGeneralPlaystyle` | yes |  |
 | 16 | `isCrossFactionListing` | `bool` | no |  |
 | 17 | `newPlayerFriendly` | `bool` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| field `activityIDs` | `NeverSecret` | `true` |
 
 System: `LFGList`

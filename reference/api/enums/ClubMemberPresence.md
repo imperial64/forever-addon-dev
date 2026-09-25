@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # ClubMemberPresence
 
@@ -6,13 +6,13 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Unknown` | `ClubMemberPresence` | no |  |
-| 2 | `Online` | `ClubMemberPresence` | no |  |
-| 3 | `OnlineMobile` | `ClubMemberPresence` | no |  |
-| 4 | `Offline` | `ClubMemberPresence` | no |  |
-| 5 | `Away` | `ClubMemberPresence` | no |  |
-| 6 | `Busy` | `ClubMemberPresence` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Unknown` | 0 | `ClubMemberPresence` | no |  |
+| 2 | `Online` | 1 | `ClubMemberPresence` | no |  |
+| 3 | `OnlineMobile` | 2 | `ClubMemberPresence` | no |  |
+| 4 | `Offline` | 3 | `ClubMemberPresence` | no |  |
+| 5 | `Away` | 4 | `ClubMemberPresence` | no |  |
+| 6 | `Busy` | 5 | `ClubMemberPresence` | no |  |
 
 System: `Club`

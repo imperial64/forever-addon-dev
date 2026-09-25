@@ -1,0 +1,13 @@
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
+
+# HousingBlueprintCollection
+
+_Structure_
+
+**Fields**
+
+| # | Name | Type | Nilable | Default |
+|---|---|---|---|---|
+| 1 | `groups` | `table&lt;HousingBlueprintGroup&gt;` | no |  |
+
+System: none (a shared table, filed in `APIDocumentation.tables`)

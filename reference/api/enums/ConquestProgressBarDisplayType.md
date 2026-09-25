@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # ConquestProgressBarDisplayType
 
@@ -6,10 +6,10 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `FirstChest` | `ConquestProgressBarDisplayType` | no |  |
-| 2 | `AdditionalChest` | `ConquestProgressBarDisplayType` | no |  |
-| 3 | `Seasonal` | `ConquestProgressBarDisplayType` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `FirstChest` | 0 | `ConquestProgressBarDisplayType` | no |  |
+| 2 | `AdditionalChest` | 1 | `ConquestProgressBarDisplayType` | no |  |
+| 3 | `Seasonal` | 2 | `ConquestProgressBarDisplayType` | no |  |
 
 System: `WeeklyRewards`

@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # PVPScoreInfo
 
@@ -29,5 +29,17 @@ _Structure_
 | 19 | `honorLevel` | `number` | no |  |
 | 20 | `roleAssigned` | `number` | no |  |
 | 21 | `stats` | `table&lt;PVPStatInfo&gt;` | no |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| field `name` | `NeverSecret` | `true` |
+| field `faction` | `NeverSecret` | `true` |
+| field `raceName` | `NeverSecret` | `true` |
+| field `className` | `NeverSecret` | `true` |
+| field `classToken` | `NeverSecret` | `true` |
 
 System: `PvpInfo`

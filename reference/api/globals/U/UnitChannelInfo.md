@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # UnitChannelInfo
 
@@ -27,6 +27,19 @@ name, displayName, textureID, startTimeMs, endTimeMs, isTradeskill, notInterrupt
 | 9 | `isEmpowered` | `bool` | no |  |
 | 10 | `numEmpowerStages` | `number` | no |  |
 | 11 | `castBarID` | `UnitCastBarID` | yes |  |
+
+**Secrecy and restriction keys**
+
+Verbatim from Blizzard's documentation for this build, as the client loads it (an `Enum` reference is its number); not interpreted here.
+
+| Applies to | Key | Value |
+|---|---|---|
+| this function | `SecretArguments` | `"AllowedWhenUntainted"` |
+| this function | `SecretWhenUnitSpellCastRestricted` | `true` |
+| return `isTradeskill` | `NeverSecret` | `true` |
+| return `isEmpowered` | `NeverSecret` | `true` |
+| return `numEmpowerStages` | `NeverSecret` | `true` |
+| return `castBarID` | `NeverSecret` | `true` |
 
 Blizzard's own rendering: `UnitChannelInfo(unit)`
 

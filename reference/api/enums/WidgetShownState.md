@@ -1,4 +1,4 @@
-<!-- GENERATED from Blizzard_APIDocumentation, client build 69913. Do not edit; edit the generator. -->
+<!-- GENERATED from Blizzard_APIDocumentation, client build 70009. Do not edit; edit the generator. -->
 
 # WidgetShownState
 
@@ -6,9 +6,9 @@ _Enumeration_
 
 **Fields**
 
-| # | Name | Type | Nilable | Default |
-|---|---|---|---|---|
-| 1 | `Hidden` | `WidgetShownState` | no |  |
-| 2 | `Shown` | `WidgetShownState` | no |  |
+| # | Name | Value | Type | Nilable | Default |
+|---|---|---|---|---|---|
+| 1 | `Hidden` | 0 | `WidgetShownState` | no |  |
+| 2 | `Shown` | 1 | `WidgetShownState` | no |  |
 
 System: `UIWidgetManager`
