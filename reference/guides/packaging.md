@@ -101,21 +101,23 @@ CurseForge carries a distinct **Forever flavour** with its own download channel,
 
 **Releasing with the BigWigs packager** (`BigWigsMods/packager@v2`) works for Forever. The
 evidence is a reading of its `release.sh` on 2026-09-25 plus one real run: the
-dynamic-ambiance-forever addon's v0.3.0 release, the same day. `release.sh` maps
-`## Interface: 16???` to game type `forever`. The run built `DynamicAmbiance-v0.3.0-forever.zip`,
-created the GitHub Release, and wrote `"flavor":"forever","interface":16001` to
-`release.json`. Where the packager can publish a Forever build:
+dynamic-ambiance-forever addon's v0.3.0 and v0.3.1 releases, the same day. `release.sh` maps
+`## Interface: 16???` to game type `forever`. The v0.3.0 run built
+`DynamicAmbiance-v0.3.0-forever.zip`, created the GitHub Release, and wrote
+`"flavor":"forever","interface":16001` to `release.json`. The v0.3.1 run also uploaded to
+CurseForge and Wago, both as game version `1.60.1`. Where the packager can publish a Forever
+build:
 
 | Site | Forever | Source |
 |---|---|---|
-| GitHub Releases | yes | the v0.3.0 run |
-| CurseForge | yes, game id `88568` | `release.sh`. Not yet exercised by a real upload |
-| Wago | yes, type `forever`; Wago's API listed patch `1.60.1` | `release.sh` and Wago's `/api/data/game`. Not yet exercised |
+| GitHub Releases | yes | the v0.3.0 and v0.3.1 runs |
+| CurseForge | yes, game id `88568` | the v0.3.1 run |
+| Wago | yes, type `forever` | the v0.3.1 run |
 | WoWInterface | **no**: "No WoWInterface game type match for \"forever\"", and the run fails if `## X-WoWI-ID` is set | `release.sh` |
 
-The workflow, `.pkgmeta` for an addon in a subfolder, `@project-version@`, and cutting a
-release are in the `publish` skill (`skills/publish/SKILL.md`). Update this table when a real
-CurseForge or Wago upload has run.
+The workflow, `.pkgmeta` for an addon in a subfolder, `@project-version@`, cutting a
+release, and creating the CurseForge and Wago projects are in the `publish` skill
+(`skills/publish/SKILL.md`).
 
 ## Related
 
