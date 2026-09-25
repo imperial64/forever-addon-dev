@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: SV First
+## LoadSavedVariablesFirst: 1
+## SavedVariables: SVFirstDB, SVFirstKeptDB, SVFirstResetDB
+
+# A correct header: the directive with a known value, and file entries carrying
+# the per-file load conditions Blizzard's forever branch uses. Must lint clean.
+SVFirst.lua
+Camelot\SVFirstOverrides.lua [AllowLoadGameType camelot]
+SVFirstShared.lua [AllowLoadGameType standard, camelot]

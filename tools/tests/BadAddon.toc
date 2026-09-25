@@ -1,11 +1,14 @@
-# The header half of BadAddon.lua, wrong in the two ways a .toc can be wrong
+# The header half of BadAddon.lua, wrong in the ways a .toc can be wrong
 # here. Not installable; it exists to be linted. A plain `#` comment does not
 # end the header, which is why these three lines are not a finding.
 
 ## Interface: 110107, 110105
 ## Title: Bad Addon
 ## SavedVariablesPerCharacter: BadAddonCharDB
+## LoadSavedVariablesFirst: yes
 
 ## SavedVariables: BadAddonDB
 
 BadAddon.lua
+Camelot\BadAddonOverrides.lua [AllowLoadGameType camelot]
+BadAddonShared.lua [AllowLoadFlavor standard]

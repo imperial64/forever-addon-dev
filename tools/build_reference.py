@@ -74,10 +74,82 @@ def _bucket(name: str) -> str:
     return first if first.isalpha() else "_"
 
 
+def restriction_key(key: Any) -> bool:
+    """Whether a documentation key is carried onto pages verbatim.
+
+    Every key whose name contains "secret" (case-insensitively, the way
+    `/fprobe docs secrets` counted the taxonomy in findings §P.26), plus the
+    other gating keys Blizzard writes on an entry. The adapter and the in-game
+    dumper both project exactly these, so the two roads stay equivalent; keep
+    the three in step. Nothing here is interpreted - the keys are Blizzard's
+    and so is whatever they mean.
+    """
+    if not isinstance(key, str):
+        return False
+    return ("secret" in key.lower() or key.startswith("Requires")
+            or key in ("ChecksForbiddenAspects", "IsProtectedFunction", "HasRestrictions"))
+
+
+def lua_literal(value: Any) -> str:
+    """A value as the Lua it was written in, deterministically. Dict keys sort;
+    lists keep their order, because order is the source's."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    if isinstance(value, str):
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    if isinstance(value, list):
+        return "{ " + ", ".join(lua_literal(v) for v in value) + " }" if value else "{}"
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        parts = []
+        for key in sorted(value, key=lambda k: (not isinstance(k, int), str(k))):
+            if isinstance(key, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+                label = key
+            else:
+                label = f"[{lua_literal(key)}]"
+            parts.append(f"{label} = {lua_literal(value[key])}")
+        return "{ " + ", ".join(parts) + " }"
+    return "nil"
+
+
+def _cell(text: str) -> str:
+    """Inline code for a table cell; a pipe would end the cell early."""
+    return "`" + text.replace("|", "\\|") + "`"
+
+
+def _keys_rows(label: str, entry: dict[str, Any], skip: tuple[str, ...] = ()) -> list[str]:
+    return [f"| {label} | `{key}` | {_cell(lua_literal(entry[key]))} |"
+            for key in sorted(k for k in entry if restriction_key(k) and k not in skip)]
+
+
+def documented_keys_section(rows: list[str]) -> list[str]:
+    """The dedicated section for Blizzard's secrecy and gating keys. Rendered
+    only when there is something in it, so a capture that predates these keys
+    produces exactly the page it always did."""
+    if not rows:
+        return []
+    return [
+        "**Secrecy and restriction keys**", "",
+        "Verbatim from Blizzard's documentation for this build, as the client loads it"
+        " (an `Enum` reference is its number); not interpreted here.", "",
+        "| Applies to | Key | Value |", "|---|---|---|",
+        *rows, "",
+    ]
+
+
 def _field_rows(fields: list[dict[str, Any]] | None) -> list[str]:
     if not fields:
         return []
-    rows = ["| # | Name | Type | Nilable | Default |", "|---|---|---|---|---|"]
+    # Enum members carry EnumValue. A capture that predates the dumper keeping
+    # it has no Value column at all, rather than a column of blanks.
+    valued = any("EnumValue" in field for field in fields)
+    if valued:
+        rows = ["| # | Name | Value | Type | Nilable | Default |", "|---|---|---|---|---|---|"]
+    else:
+        rows = ["| # | Name | Type | Nilable | Default |", "|---|---|---|---|---|"]
     for index, field in enumerate(fields, start=1):
         type_name = field.get("Type") or ""
         inner = field.get("InnerType")
@@ -87,16 +159,33 @@ def _field_rows(fields: list[dict[str, Any]] | None) -> list[str]:
         if mixin:
             type_name = f"{type_name} ({mixin})"
         default = field.get("Default")
+        value = ""
+        if field.get("EnumValue") is not None:
+            value = lua_literal(field["EnumValue"])
         rows.append(
-            "| {i} | `{name}` | `{type}` | {nilable} | {default} |".format(
+            "| {i} | `{name}` |{value} `{type}` | {nilable} | {default} |".format(
                 i=index,
                 name=field.get("Name") or "",
+                value=f" {value} |" if valued else "",
                 type=type_name or "?",
                 nilable="yes" if field.get("Nilable") else "no",
                 default=f"`{default}`" if default is not None else "",
             )
         )
     return rows
+
+
+def effective_namespace(function: dict[str, Any], system: dict[str, Any]) -> str | None:
+    """A function's own `Namespace` wins over its system's; "" means global."""
+    if "Namespace" in function:
+        return function.get("Namespace") or None
+    return system.get("Namespace") or None
+
+
+def _shared_sort_key(key: str) -> tuple[str, int]:
+    """"X" before "X~2" before "X~10": first-loaded keeps the plain key."""
+    base, _, suffix = key.partition("~")
+    return (base, int(suffix) if suffix.isdigit() else 0)
 
 
 def _signature(function: dict[str, Any], qualified: str) -> str:
@@ -163,6 +252,30 @@ class Restrictions:
             found += [e for e in self.by_namespace.get(namespace, []) if e not in found]
         return found
 
+    # An entry may carry its own `build` and `measured_on`, for one re-measured
+    # on a later client than the rest of the file. Unset, it inherits meta's.
+    # Each output that states a build states the entry's own, so a re-measured
+    # entry never sits under a line naming the build it was not measured on.
+    def build_of(self, entry: dict[str, Any]) -> str:
+        return str(entry.get("build") or self.meta.get("build", ""))
+
+    def measured_of(self, entry: dict[str, Any]) -> str:
+        return str(entry.get("measured_on") or self.meta.get("measured_on", ""))
+
+    def own_build(self, entry: dict[str, Any]) -> bool:
+        """Whether the entry was measured somewhere other than meta says, and
+        so has to say where on outputs that otherwise state meta's build once."""
+        return ((entry.get("build") is not None
+                 and str(entry["build"]) != str(self.meta.get("build", "")))
+                or (entry.get("measured_on") is not None
+                    and str(entry["measured_on"]) != str(self.meta.get("measured_on", ""))))
+
+    def own_build_note(self, entry: dict[str, Any]) -> str:
+        """The suffix a one-line row carries when the entry has its own build."""
+        if not self.own_build(entry):
+            return ""
+        return f" _(measured {self.measured_of(entry)} on build {self.build_of(entry)})_"
+
     def banner(self, entries: list[dict[str, Any]], depth: int = 4) -> list[str]:
         lines: list[str] = []
         for entry in entries:
@@ -170,8 +283,8 @@ class Restrictions:
             label = VERDICT_LABEL.get(verdict, verdict.upper())
             scope = entry.get("scope", "always")
             scope_text = "in combat only" if scope == "in-combat" else "at all times"
-            measured = self.meta.get("measured_on", "")
-            build = self.meta.get("build", "")
+            measured = self.measured_of(entry)
+            build = self.build_of(entry)
             lines.append(
                 f"> **{label} — measured, {scope_text}.** "
                 + " ".join((entry.get("summary") or "").split())
@@ -301,7 +414,29 @@ class ReferenceBuilder:
         self.annotated: set[str] = set()
         self.costed: set[str] = set()
         self.surface: dict[str, Any] = {}
+        # The build the --surface capture was taken on. None means it did not
+        # say, which is treated like a mismatch: unverifiable.
+        self.surface_build: str | None = None
         self.stubs = 0
+        # Lowercased table page path -> the table names written there.
+        self.table_path_owner: dict[str, list[str]] = {}
+        self.table_collisions: list[str] = []
+        self.shared_tables = 0
+
+    @property
+    def docs_build(self) -> str | None:
+        build = (self.docs.get("client") or {}).get("build")
+        return str(build) if build is not None else None
+
+    @property
+    def surface_mismatch(self) -> bool:
+        """True when the surface dump cannot be shown to come from the build
+        the documentation describes. A stub is a claim about one client; a
+        surface from another build cannot make it."""
+        if not self.surface:
+            return False
+        return (self.surface_build is None or self.docs_build is None
+                or self.surface_build != self.docs_build)
 
     # -- page emission -----------------------------------------------------
     def _write(self, path: Path, lines: list[str]) -> None:
@@ -334,11 +469,12 @@ class ReferenceBuilder:
     def function_page(self, function: dict[str, Any], owner: dict[str, Any],
                       directory: Path, qualified: str) -> None:
         name = function.get("Name") or "unknown"
+        namespace = effective_namespace(function, owner)
         lines = [self._header(), "", f"# {qualified}", ""]
 
         # Our measured restrictions go ABOVE Blizzard's own flag: the flag says
         # the call is gated, ours says what the client actually did.
-        measured = self.restrictions.for_function(qualified, owner.get("Namespace"))
+        measured = self.restrictions.for_function(qualified, namespace)
         if measured:
             lines += self.restrictions.banner(measured, self._depth(directory))
             for entry in measured:
@@ -372,14 +508,31 @@ class ReferenceBuilder:
         lines += _field_rows(rets) if rets else ["_None._"]
         lines += [""]
 
+        # HasRestrictions already has its banner above; everything else the
+        # documentation says about secrecy and gating goes here, verbatim.
+        keyed = _keys_rows("this function", function, skip=("HasRestrictions",))
+        for kind, fields in (("argument", args), ("return", rets)):
+            for field in fields or []:
+                keyed += _keys_rows(f"{kind} `{field.get('Name') or '?'}`", field)
+        lines += documented_keys_section(keyed)
+
         blizzard = strip_colour(function.get("FullName"))
         if blizzard:
             lines += [f"Blizzard's own rendering: `{blizzard}`", ""]
 
         owner_name = owner.get("Name") or "?"
+        if "Namespace" in function:
+            # The function's own Namespace overrode its system's. Say so, since
+            # Blizzard's rendering above still uses the system's.
+            system_ns = owner.get("Namespace")
+            placed = f" · Namespace: `{namespace}`" if namespace else " · Global"
+            placed += (" (function-level `Namespace`; the system's is "
+                       + (f"`{system_ns}`)" if system_ns else "none)"))
+        else:
+            placed = f" · Namespace: `{owner['Namespace']}`" if owner.get("Namespace") else ""
         lines += [
             f"System: `{owner_name}`"
-            + (f" · Namespace: `{owner['Namespace']}`" if owner.get("Namespace") else "")
+            + placed
             + (" · Widget methods" if owner.get("Type") == "ScriptObject" else ""),
         ]
         self._write(directory / f"{_safe_name(name)}.md", lines)
@@ -397,69 +550,145 @@ class ReferenceBuilder:
         payload = event.get("Payload")
         lines += ["**Payload**", ""]
         lines += _field_rows(payload) if payload else ["_No payload._"]
-        lines += ["", f"System: `{owner.get('Name') or '?'}`"]
+        lines += [""]
+        # Events have no HasRestrictions banner, so here it goes in the table.
+        keyed = _keys_rows("this event", event)
+        for field in payload or []:
+            keyed += _keys_rows(f"payload `{field.get('Name') or '?'}`", field)
+        lines += documented_keys_section(keyed)
+        lines += [f"System: `{owner.get('Name') or '?'}`"]
         self._write(directory / f"{_safe_name(literal)}.md", lines)
         self.index.append((literal, f"events/{_bucket(literal)}/{_safe_name(literal)}.md"))
 
-    def table_page(self, table: dict[str, Any], owner: dict[str, Any]) -> None:
+    @staticmethod
+    def table_path(table: dict[str, Any]) -> str:
+        name = table.get("Name") or "unknown"
+        folder = "enums" if table.get("Type") == "Enumeration" else "structures"
+        return f"{folder}/{_safe_name(name)}.md"
+
+    def table_page(self, table: dict[str, Any], owner: dict[str, Any] | None) -> None:
+        """`owner` is None for a shared table: one filed in a nameless
+        documentation table, which the client keeps in APIDocumentation.tables
+        and never attaches to a system."""
         name = table.get("Name") or "unknown"
         kind = table.get("Type") or "Table"
-        folder = "enums" if kind == "Enumeration" else "structures"
-        directory = self.out / folder
+        relative = self.table_path(table)
         lines = [self._header(), "", f"# {name}", "", f"_{kind}_", ""]
 
         values = table.get("Values")
         if values:
-            lines += ["| Name | Value |", "|---|---|"]
-            for value in values:
-                lines.append(f"| `{value.get('Name')}` | {value.get('EnumValue')} |")
+            if any("Value" in v or "EnumValue" in v for v in values):
+                lines += ["| Name | Type | Value |", "|---|---|---|"]
+                for value in values:
+                    raw = value.get("Value", value.get("EnumValue"))
+                    lines.append(
+                        f"| `{value.get('Name')}` | `{value.get('Type') or '?'}` |"
+                        f" {_cell(lua_literal(raw)) if raw is not None else ''} |")
+            else:
+                # A capture from before the dumper kept constant values. Left
+                # exactly as it always rendered, so old captures still
+                # reproduce the tree they produced.
+                lines += ["| Name | Value |", "|---|---|"]
+                for value in values:
+                    lines.append(f"| `{value.get('Name')}` | {value.get('EnumValue')} |")
             lines += [""]
 
         fields = table.get("Fields")
         if fields:
             lines += ["**Fields**", ""] + _field_rows(fields) + [""]
+            keyed: list[str] = []
+            for field in fields:
+                keyed += _keys_rows(f"field `{field.get('Name') or '?'}`", field)
+            lines += documented_keys_section(keyed)
 
-        lines += [f"System: `{owner.get('Name') or '?'}`"]
-        self._write(directory / f"{_safe_name(name)}.md", lines)
-        self.index.append((name, f"{folder}/{_safe_name(name)}.md"))
+        if owner is None:
+            lines += ["System: none (a shared table, filed in `APIDocumentation.tables`)"]
+        else:
+            lines += [f"System: `{owner.get('Name') or '?'}`"]
+        self._write(self.out / relative, lines)
+        self.index.append((name, relative))
 
     # -- drivers -----------------------------------------------------------
+    def placement(self, function: dict[str, Any], system: dict[str, Any],
+                  key: str) -> tuple[Path, str]:
+        """Where a function's page goes and the name it is called by.
+
+        A function's own `Namespace` overrides its system's, and an empty one
+        means a plain global: InCombatLockdown is documented inside
+        C_RestrictedActions but is called as a global, and
+        GetDefaultAbbreviationBreakpoints sits in a namespace-less system but
+        is C_StringUtil's. Captures from before the dumper kept the field fall
+        back to the system's, which is what they always did."""
+        name = function.get("Name") or "unknown"
+        namespace = effective_namespace(function, system)
+        if namespace:
+            return (self.out / "namespaces" / _safe_name(namespace), f"{namespace}.{name}")
+        if system.get("Type") == "ScriptObject" and "Namespace" not in function:
+            owner = system.get("Name") or key
+            return self.out / "widgets" / _safe_name(owner), f"{system.get('Name')}:{name}"
+        # A system with no namespace holds plain globals.
+        return self.out / "globals" / _bucket(name), name
+
     def build(self) -> None:
         for key in sorted(self.systems):
             system = self.systems[key]
             if not isinstance(system, dict):
                 continue
-            namespace = system.get("Namespace")
-            is_widget = system.get("Type") == "ScriptObject"
-
-            if namespace:
-                directory = self.out / "namespaces" / _safe_name(namespace)
-                prefix = f"{namespace}."
-            elif is_widget:
-                directory = self.out / "widgets" / _safe_name(system.get("Name") or key)
-                prefix = f"{system.get('Name')}:"
-            else:
-                directory = None
-                prefix = ""
-
             for function in system.get("Functions") or []:
-                name = function.get("Name") or "unknown"
-                if directory is None:
-                    # A system with no namespace holds plain globals.
-                    target = self.out / "globals" / _bucket(name)
-                    self.function_page(function, system, target, name)
-                else:
-                    self.function_page(function, system, directory, prefix + name)
+                directory, qualified = self.placement(function, system, key)
+                self.function_page(function, system, directory, qualified)
 
             for event in system.get("Events") or []:
                 self.event_page(event, system)
             for table in system.get("Tables") or []:
+                self.table_path_owner.setdefault(self.table_path(table).lower(), []).append(
+                    table.get("Name") or "unknown")
                 self.table_page(table, system)
 
+        self.write_shared_tables()
         # Deliberately after the documented pass, so a stub never shadows a real
         # page.
         self.write_stubs()
         self.write_indexes()
+
+    def write_shared_tables(self) -> None:
+        """Pages for tables filed in nameless documentation tables.
+
+        The client keeps these in APIDocumentation.tables and attaches them to
+        no system, so a dump that walks only .systems never sees them - which
+        is how Enum.ForbiddenAspect, the flag set half the widget API checks,
+        went without a page. A capture from before the dumper walked them has
+        no `tables` key and this writes nothing.
+
+        Paths are derived from the name exactly as a system table's are. Two
+        tables that would share a path (compared case-insensitively, because
+        the tree must check out on Windows) are not suffixed, since a suffix
+        would make the path underivable: the system table keeps the page, the
+        shared one is skipped, and the collision is reported."""
+        for path, names in sorted(self.table_path_owner.items()):
+            if len(names) > 1:
+                # Pre-existing behaviour, now reported rather than silent: the
+                # last system table written to a path is the page that stands.
+                self.table_collisions.append(
+                    f"system tables {', '.join(f'`{n}`' for n in names)} share {path};"
+                    f" `{names[-1]}` stands")
+        shared = self.docs.get("tables")
+        if not isinstance(shared, dict):
+            return
+        for key in sorted(shared, key=_shared_sort_key):
+            table = shared[key]
+            if not isinstance(table, dict) or not table.get("Name"):
+                continue
+            path = self.table_path(table).lower()
+            if path in self.table_path_owner:
+                self.table_collisions.append(
+                    f"shared table `{table['Name']}` (key `{key}`) not paged: "
+                    f"{self.table_path(table)} already belongs to "
+                    + ", ".join(f"`{n}`" for n in self.table_path_owner[path]))
+                continue
+            self.table_path_owner[path] = [table["Name"]]
+            self.table_page(table, None)
+            self.shared_tables += 1
 
     def write_stubs(self) -> None:
         """Pages for symbols the client HAS but Blizzard does not document.
@@ -509,14 +738,30 @@ class ReferenceBuilder:
             lines += self.costs.banner(priced, self._depth(path.parent))
             for entry in priced:
                 self.costed.add(entry["id"])
-        lines += [
-            "> **Present on this client, but not documented by Blizzard.**"
-            " It exists in the client's global table and can be called; Blizzard's"
-            " own API documentation carries no signature for it, so none is shown"
-            " here rather than one being invented.",
-            "",
-            "Source: ForeverProbe global surface dump.",
-        ]
+        if self.surface_mismatch:
+            # The surface was dumped on a different (or unrecorded) build, so
+            # it cannot say the symbol is on THIS client. Say what it can.
+            seen = self.surface_build or "an unrecorded build"
+            here = self.docs_build or "an unrecorded build"
+            lines += [
+                f"> **Seen on client build {seen}, not documented by Blizzard on"
+                f" build {here}.** The global surface dump behind this stub was taken"
+                f" on build {seen}, not on the build this reference describes, so"
+                " whether the symbol exists on this client is unverified. Blizzard's"
+                " own API documentation carries no signature for it, so none is shown"
+                " here rather than one being invented.",
+                "",
+                f"Source: ForeverProbe global surface dump, build {seen}.",
+            ]
+        else:
+            lines += [
+                "> **Present on this client, but not documented by Blizzard.**"
+                " It exists in the client's global table and can be called; Blizzard's"
+                " own API documentation carries no signature for it, so none is shown"
+                " here rather than one being invented.",
+                "",
+                "Source: ForeverProbe global surface dump.",
+            ]
         if namespace:
             lines.append(f"Namespace: `{namespace}`")
         self._write(path, lines)
@@ -569,10 +814,12 @@ class ReferenceBuilder:
         if not entries:
             return
         meta = self.restrictions.meta
+        own = any(self.restrictions.own_build(e) for e in entries)
         lines = [
             self._header(), "", "# Restrictions", "",
             f"Measured on client {meta.get('client')} build {meta.get('build')}"
-            f" (interface {meta.get('interface')}) with {meta.get('measured_by')}.", "",
+            f" (interface {meta.get('interface')}) with {meta.get('measured_by')}"
+            + (", except where an entry names its own build." if own else "."), "",
             "Everything here was measured against a running client. Blizzard's own"
             " documentation says what a function takes; this says whether the client"
             " will let an addon call it and whether the value can be read.", "",
@@ -590,13 +837,18 @@ class ReferenceBuilder:
                     target=target_text,
                     verdict=VERDICT_LABEL.get(entry.get("verdict", ""), entry.get("verdict", "")),
                     scope=entry.get("scope", ""),
-                    summary=" ".join((entry.get("summary") or "").split()),
+                    summary=" ".join((entry.get("summary") or "").split())
+                    + self.restrictions.own_build_note(entry),
                 )
             )
         lines.append("")
         for entry in sorted(entries, key=lambda e: e["id"]):
             lines += [f"## {entry['id']}", ""]
             lines.append(" ".join((entry.get("summary") or "").split()))
+            if self.restrictions.own_build(entry):
+                lines += ["", f"**Measured {self.restrictions.measured_of(entry)} on build"
+                              f" {self.restrictions.build_of(entry)}**, not on the build"
+                              " named at the top of this page."]
             detail = entry.get("detail")
             if detail:
                 lines += ["", " ".join(detail.split())]
@@ -721,14 +973,17 @@ class ReferenceBuilder:
                     t=target_text,
                     v=VERDICT_LABEL.get(entry.get("verdict", ""), entry.get("verdict", "")),
                     s=entry.get("scope", ""),
-                    summary=" ".join((entry.get("summary") or "").split()),
+                    summary=" ".join((entry.get("summary") or "").split())
+                    + self.restrictions.own_build_note(entry),
                 )
             )
         meta = self.restrictions.meta
+        own = any(self.restrictions.own_build(e) for e in self.restrictions.entries)
         rows += ["",
                  f"Measured {meta.get('measured_on')} on client {meta.get('client')} build"
-                 f" {meta.get('build')}. Detail and evidence for each:"
-                 " `reference/api/RESTRICTIONS.md`."]
+                 f" {meta.get('build')}"
+                 + (", except where a row names its own build." if own else ".")
+                 + " Detail and evidence for each: `reference/api/RESTRICTIONS.md`."]
 
         head = text.split(begin)[0]
         tail = text.split(end)[1]
@@ -801,8 +1056,17 @@ class ReferenceBuilder:
             self._header(), "", "# Reference build", "",
             "| Field | Value |", "|---|---|",
         ]
+        # Rows that exist only when there is something to say, so a capture
+        # without shared tables and a matching surface yields the BUILD.md it
+        # always did.
+        if isinstance(self.docs.get("tables"), dict):
+            info["shared_tables"] = self.shared_tables
+        if self.surface_mismatch:
+            info["surface_build"] = self.surface_build
         for field, value in info.items():
             lines.append(f"| {field} | {value if value is not None else '_unknown_'} |")
+        if self.surface_mismatch:
+            lines += ["", "> " + self.surface_warning()]
         if not client:
             lines += [
                 "",
@@ -814,8 +1078,68 @@ class ReferenceBuilder:
         if collisions:
             lines += ["", f"Name collisions, suffixed rather than dropped: "
                           + ", ".join(f"`{c}`" for c in collisions)]
+        shared_collisions = counts.get("tableCollisions") or []
+        if shared_collisions:
+            lines += ["", "Shared-table name collisions in the capture, suffixed: "
+                          + ", ".join(f"`{c}`" for c in shared_collisions)]
+        if self.table_collisions:
+            lines += ["", "Table page collisions (one name, one path, so one page):", ""]
+            lines += [f"- {c}" for c in self.table_collisions]
         self._write(self.out / "BUILD.md", lines)
         return info
+
+    def surface_warning(self) -> str:
+        return (f"**WARNING: the --surface capture is from client build"
+                f" {self.surface_build or '(unrecorded)'}, but the documentation is from"
+                f" build {self.docs_build or '(unrecorded)'}.** Its {self.stubs} stubs"
+                " are labelled as seen on the surface's build, not as present on this"
+                " client. Take a fresh `/fprobe` surface dump on this build before"
+                " landing.")
+
+
+DOCS_VERSION_HEADER = """\
+-- DocsVersion.lua
+--
+-- GENERATED by tools/build_reference.py (--docs-version) from the same capture
+-- as reference/api/BUILD.md. Do not edit by hand; regenerate. It records the
+-- client build the shipped API reference was generated from, so the addon can
+-- tell a player when their client has moved on and the reference may be wrong.
+--
+-- This matters more here than it would in a shipped game. Blizzard moved this
+-- beta from build 69893 to 69913 inside a single day, so a reference that is
+-- slightly behind the client is the NORMAL case, not an edge case. The warning
+-- is deliberately not silenced by default for that reason.
+--
+-- Counts are carried so the warning can say what the reference actually covers
+-- rather than only naming a build number.
+"""
+
+
+def docs_version_lua(info: dict[str, Any]) -> str:
+    """The addon's copy of BUILD.md's identity rows, as Lua.
+
+    `generated` is the date half of the capture stamp, so a rerun on the same
+    capture writes the same file."""
+    def number(value: Any) -> str:
+        text = str(value) if value is not None else ""
+        return text if text.isdigit() else "nil"
+
+    def string(value: Any) -> str:
+        return lua_literal(str(value)) if value is not None else "nil"
+
+    generated = str(info.get("generated") or "").split(" ")[0] or None
+    rows = [
+        ("version", string(info.get("version"))),
+        ("build", string(info.get("build"))),
+        ("interface", number(info.get("interface"))),
+        ("generated", string(generated)),
+        ("systems", number(info.get("systems"))),
+        ("functions", number(info.get("functions"))),
+        ("events", number(info.get("events"))),
+        ("tables", number(info.get("tables"))),
+    ]
+    body = "\n".join(f"    {key:<9} = {value}," for key, value in rows)
+    return DOCS_VERSION_HEADER + "\nForeverProbeDocsVersion = {\n" + body + "\n}\n"
 
 
 def main() -> int:
@@ -841,6 +1165,10 @@ def main() -> int:
                              "stub symbols the client has but Blizzard does not document")
     parser.add_argument("--strict", action="store_true",
                         help="fail if any restriction fails to resolve")
+    parser.add_argument("--docs-version", type=Path,
+                        default=Path("addons/ForeverProbe/DocsVersion.lua"),
+                        help="the probe's record of which build the reference describes; "
+                             "written only if its folder exists")
     args = parser.parse_args()
 
     data = svlua.parse_file(str(args.capture))
@@ -877,6 +1205,14 @@ def main() -> int:
             "globals": surface_db.get("globalFunctions") or [],
             "namespaces": surface_db.get("namespaces") or {},
         }
+        # A full /fprobe run records GetBuildInfo under `build`; a capture from
+        # before that, or one that only ran the doc dump, may not.
+        recorded = surface_db.get("build")
+        if isinstance(recorded, dict) and recorded.get("build") is not None:
+            builder.surface_build = str(recorded["build"])
+        elif isinstance((surface_db.get("apiDocs") or {}).get("client"), dict):
+            client_build = surface_db["apiDocs"]["client"].get("build")
+            builder.surface_build = str(client_build) if client_build is not None else None
     builder.build()
     builder.write_restrictions_page()
     builder.write_costs_page()
@@ -911,16 +1247,39 @@ def main() -> int:
                       handle, indent=1, ensure_ascii=False, sort_keys=True, default=str)
 
     args.json.parent.mkdir(parents=True, exist_ok=True)
+    machine = {"build": info, "systems": docs["systems"]}
+    if isinstance(docs.get("tables"), dict):
+        machine["tables"] = docs["tables"]
     with args.json.open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump({"build": info, "systems": docs["systems"]}, handle,
-                  indent=1, ensure_ascii=False, sort_keys=True)
+        json.dump(machine, handle, indent=1, ensure_ascii=False, sort_keys=True)
+
+    # Only where the addon already is: a scratch run from a mirror directory
+    # has no addons/ folder and should not grow one.
+    wrote_docs_version = args.docs_version.parent.is_dir()
+    if wrote_docs_version:
+        args.docs_version.write_text(docs_version_lua(info), encoding="utf-8", newline="\n")
 
     print(f"{builder.written} pages -> {args.out}")
     print(f"  {info['systems']} systems, {info['functions']} functions, "
           f"{info['events']} events, {info['tables']} tables")
+    if builder.shared_tables:
+        print(f"  {builder.shared_tables} shared tables paged from APIDocumentation.tables")
+    for collision in builder.table_collisions:
+        print(f"  TABLE COLLISION: {collision}", file=sys.stderr)
     if builder.stubs:
         print(f"  {builder.stubs} undocumented symbols stubbed from the client surface")
+    if builder.surface_mismatch:
+        # Loud on both streams: this is the warning that stops a stale surface
+        # from turning a removed function into a "present" stub.
+        banner = "=" * 72
+        warning = builder.surface_warning().replace("**", "").replace("`", "")
+        for stream in (sys.stdout, sys.stderr):
+            print(banner, file=stream)
+            print(f"  {warning}", file=stream)
+            print(banner, file=stream)
     print(f"  machine-readable copy -> {args.json}")
+    if wrote_docs_version:
+        print(f"  probe's reference version -> {args.docs_version}")
     if restrictions.entries:
         print(f"  {len(restrictions.entries)} restrictions, "
               f"{len(builder.annotated)} matched pages -> {args.restrictions_json}")
