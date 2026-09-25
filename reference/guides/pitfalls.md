@@ -29,7 +29,8 @@ conversion. So a `pcall` around the read reports success, and the value detonate
 wherever that string is next indexed, usually in a print or a `format`, far from the read.
 
 A secret string written into SavedVariables takes the **entire flush** with it, so an addon
-can lose all of its saved data to one unguarded read.
+can lose all of its saved data to one unguarded read. Now that 70009 reads SavedVariables
+back, that is data a user would otherwise have kept.
 
 Two more, measured 2026-09-20, that make a secret harder to spot than it sounds:
 
@@ -55,22 +56,32 @@ end
 
 Full detail: `restrictions/secret-values.md`.
 
-## 3. Account-wide SavedVariables are written but never read back
+## 3. SavedVariables arrive after your file scope, and replace what you put there
 
-On this build the client writes `## SavedVariables` to disk on logout or `/reload` and
-**never loads it**. Your addon starts from defaults every launch.
+On build 70009, SavedVariables are read back, account-wide and per-character, across
+`/reload` and a full relaunch (`research/findings.md` §P.30). What bites now is **when**
+they arrive.
 
-**`## SavedVariablesPerCharacter` survives a `/reload`** — but not a logout, so it is not
-a settings story either. Measured side by side in one addon with identical binding code.
-Nothing about your binding idiom matters here; two published "fixes" claimed otherwise and
-both were tested and refuted. See `guides/savedvariables.md`.
+By default the client restores at `ADDON_LOADED`, *after* your files have run, and it
+**replaces** the global rather than filling in your table. So this common idiom loses every
+write from the second launch on, silently:
 
-**The flush is destructive, so collect first and reload second.** Your table starts `nil`
-every session, and a reload writes whatever the *current* session built, replacing the file
-rather than merging into it. A `/reload` before you have run anything therefore writes an
-empty table over yesterday's data and destroys it. The client's `.bak` is the only recovery
-and it survives exactly one further flush. This is not hypothetical: it destroyed five
-completed measurement runs in a sister repository.
+```lua
+MyAddonDB = MyAddonDB or {}
+local db = MyAddonDB      -- points at a table the client throws away at ADDON_LOADED
+```
+
+`## LoadSavedVariablesFirst: 1` moves the restore ahead of file scope. The idiom above is
+then fine, and an unconditional `MyAddonDB = { ... }` is what destroys saved data instead.
+The idiom that is safe under both orders is to bind inside `ADDON_LOADED` and only mutate
+the table. Measured side by side in two addons differing by that one line (§P.31).
+`guides/savedvariables.md` has the table and the code.
+
+**On 69913 it was worse.** The account-wide file was never read back, per-character survived
+only a `/reload`, and a `/reload` before running anything wrote an empty table over the last
+session's data. If you installed a workaround for that (ForeverSVFix, WTFix, svshim, a
+`.toc` link line, or a symbolic link into `WTF`), remove it on 70009. See
+`guides/savedvariables.md`.
 
 ## 4. `ReloadUI()` is protected
 
@@ -212,4 +223,7 @@ it.
 3. Did a call get refused? Forbidden actions fire `ADDON_ACTION_FORBIDDEN` or
    `ADDON_ACTION_BLOCKED` rather than raising.
 4. Is a read returning a secret rather than nil? They look identical in a print.
-5. Does the function exist on this build at all? Check `reference/api/`.
+5. Was it a secure snippet run in combat? `frame:Execute` on a header made before combat
+   returns normally and does nothing, and only an `ADDON_ACTION_BLOCKED` event records the
+   refusal. See `restrictions/protected-actions.md`.
+6. Does the function exist on this build at all? Check `reference/api/`.

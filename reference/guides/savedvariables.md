@@ -1,123 +1,58 @@
 # Persistence, and moving data in and out
 
-These are the same topic on this client, because the mechanism that gets data *in* is the
-same one that works around the bug in getting data *back*.
+On beta builds up to 69913 these were one topic, because the mechanism that gets data *in*
+was also the only way around a SavedVariables bug. **On build 70009 that bug is gone.**
+SavedVariables work, and this page now covers them first and the data channel second.
 
 ## What works, measured
 
-| Direction | State |
-|---|---|
-| Addon → disk | **Works.** The client writes SavedVariables on `/reload` and logout |
-| Disk → addon, via `## SavedVariablesPerCharacter` | **Survives a `/reload`, not a logout.** |
-| Disk → addon, via `## SavedVariables` | **Broken on this build.** Never read back at all |
-| Disk → addon, via a generated `.lua` | **Works.** The client executes it as addon code at load |
-| Addon reloading itself | **Forbidden.** `ReloadUI()` is protected |
+| Direction | 70009 | 69913 and earlier |
+|---|---|---|
+| Addon → disk | **Works.** Written on `/reload` and logout | Works |
+| Disk → addon, `## SavedVariables` | **Works.** Across `/reload` and a full relaunch | Never read back |
+| Disk → addon, `## SavedVariablesPerCharacter` | **Works.** Across `/reload` and a full relaunch | Survived a `/reload`, not a logout |
+| Disk → addon, via a generated `.lua` | Works. The client executes it as addon code at load | Works |
+| Addon reloading itself | **Forbidden.** `ReloadUI()` is protected | Forbidden |
 
-## There is no persistence across sessions — but `/reload` is survivable
+The 70009 column was measured on 2026-09-25. A marker was seeded into twelve saved globals
+across two test addons, account-wide and per-character. The client was then fully exited and
+relaunched through Battle.net, and the marker came back in every one of them
+(`research/findings.md` §P.30). This page has an expiry: re-check on every new build.
 
-Take this in two parts, because the obvious summary ("SavedVariables are broken on
-Forever") is right about the thing that matters and wrong about the details.
+## The one thing that bites on 70009: when the restore happens
 
-**Across a logout or client restart: nothing survives, on either directive.** There is no
-way to keep user settings between play sessions on this build. Measured on a cold start
-with a populated file sitting on disk (`research/findings.md` §P.27).
+Saved data now arrives. The question is **when**. The answer depends on one `.toc`
+directive.
 
-**Across a `/reload` inside one session: per-character survives, account-wide does not.**
+**By default, the client restores after your file scope.** While your addon's files run,
+every saved global is `nil`. At `ADDON_LOADED` the client **replaces** the global with the
+restored table, and whatever your file put there is thrown away. That is retail's order.
 
-```
-## SavedVariablesPerCharacter: MyAddonDB
-```
+**With `## LoadSavedVariablesFirst: 1`, the client restores before it.** Your saved globals
+already hold last session's tables when file-scope code runs.
 
-Measured with the cleanest control available: one addon declared two globals, bound them
-with identical code in the same `ADDON_LOADED` handler, and differed only in which
-directive declared them. The per-character one came back across a `/reload` carrying a
-token from an earlier pass; the account-wide one came back empty.
+Both were measured side by side, in two addons identical apart from that one line, across a
+`/reload` and a cold start, with the same result both times (§P.31). What each idiom does:
 
-So if your addon needs to carry state across a `/reload` — a multi-pass measurement, a
-capture being assembled in stages, anything a person interrupts with a reload — use the
-per-character directive and it will be there. Do not promise your users that their
-settings will still be there tomorrow.
+| At file scope | Default | With `## LoadSavedVariablesFirst: 1` |
+|---|---|---|
+| `MyAddonDB = { ... }` | Saved data survives, because the client replaces your table at `ADDON_LOADED`. Your table is lost | **Saved data is destroyed.** Your fresh table replaces it and is what gets written at exit |
+| `MyAddonDB = MyAddonDB or {}` then `local db = MyAddonDB` | **Writes are lost.** `db` points at a table the client discarded at `ADDON_LOADED`. Nothing errors | Works |
+| Nothing at file scope, bind on `ADDON_LOADED` | Works | Works |
 
-The two exotic WTF paths other developers named (`WTF\Account\SavedVariables\`,
-`WTF\SavedVariables\`) are neither read nor written; files seeded there before a cold
-start were untouched afterwards. There is no folder that works.
+The middle row is the dangerous one. It is the idiom most addons use, and it looks safe. It
+also passes a first test. On an addon's very first launch there is no file on disk, so the
+client leaves the file-scope table alone. The orphan only appears from the second launch
+onwards. The probe addon in this repo was built that way and needed a guard added before
+this measurement to keep its own data.
 
-## The account-wide SavedVariables bug
-
-Declare `## SavedVariables: MyAddonDB` and the client will write
-`WTF/Account/<account>/SavedVariables/MyAddon.lua` faithfully. It will not load it again.
-Your global comes back `nil` on every launch, so an addon relying on account-wide settings
-starts from defaults forever. Use the per-character directive above instead.
-
-Verified three ways for the account-wide path: a pre-seeded file whose global was nil from
-main chunk to logout, a load counter that never leaves 1 across sessions, and —
-2026-09-20 — globals watched by table address across four load phases, none of which ever
-arrived. Per-character differs only across a `/reload`; see above.
-
-**What still works:** everything outbound. If your goal is getting data *out* of the
-client for something else to read, SavedVariables is fine and needs no workaround.
-
-### The flush is destructive: collect, then reload — never reload first
-
-This is the operational consequence of "never read back", and it is sharper than that
-phrasing sounds. Three facts that compose badly:
-
-1. Your saved table starts **`nil`** every session, because nothing is read back.
-2. A `/reload` or logout writes **whatever the current session built**.
-3. That write **replaces** the file. It does not merge into it.
-
-So the reload that saves your data and the reload that destroys it are the same command in a
-different order. Reload *before* running anything and you have just written an empty table
-over the previous session's results.
-
-The client keeps a `.bak` beside the file, and that is the only recovery. It holds one
-generation: a second flush overwrites it too, so a session where you reload twice while
-working out what went wrong is a session where the backup is gone as well.
-
-On 2026-09-18 this destroyed five completed measurement runs in a sister repository,
-recovered from `.bak` only because it had not yet been overwritten a second time.
-
-If your addon collects anything you would mind losing, the order is: run it, confirm it
-reported what you expected, *then* `/reload`. `research/findings.md` §P.21.
-
-### It is a tracked bug, and it is not your addon's fault
-
-**It is filed, not intended.** `forever-bugs#34` is open against this build with no
-Blizzard acknowledgement, so this page has an expiry. Re-check it on every new build.
-
-**It is not an addon-side mistake.** This was worth checking, because two published
-explanations said it was. One held that Forever restores saved variables *before*
-executing addon Lua and that a file-scope initialiser therefore throws the restored table
-away; addons that persist correctly, it said, "bind the TOC global on `ADDON_LOADED` and
-only mutate that table".
-
-Measured 2026-09-20 (`research/findings.md` §P.23): **no.** Four saved globals were bound
-four different ways in one addon — including that exact `ADDON_LOADED` idiom — and every
-one of them was `nil` when its handler first looked. There is nothing to clobber, because
-nothing is ever restored. Saved variables are also *not* loaded before addon Lua: at file
-scope, the earliest moment addon code can look, all four are `nil`. Per-character saved
-variables are written and never read back either, so `## SavedVariablesPerCharacter` is
-not a workaround.
-
-Answered, and the answer is no: seeds placed at both before a cold start were never read
-and were still sitting there untouched afterwards.
-
-The load order turned out to be retail's, not the reported one, so **write the idiom that
-is safe under either**, because it costs nothing and it is what you want the day the bug
-is fixed:
+**Write the idiom that is safe under either order:**
 
 ```lua
--- Wrong everywhere: an unconditional assignment discards whatever was restored.
-MyAddonDB = { profile = {} }
-
--- Correct only if saved variables are restored BEFORE this file runs. They are
--- not, on this client or on retail, so `db` can end up pointing at an orphan the
--- moment the bug is fixed and the client starts swapping the global again.
-MyAddonDB = MyAddonDB or {}
-local db = MyAddonDB
-
--- Safe under both. Bind inside ADDON_LOADED, mutate in place, never reassign.
 local db
+
+local frame = CreateFrame("Frame")
+pcall(frame.RegisterEvent, frame, "ADDON_LOADED")
 frame:SetScript("OnEvent", function(_, event, addon)
     if event == "ADDON_LOADED" and addon == "MyAddon" then
         MyAddonDB = MyAddonDB or {}
@@ -127,9 +62,57 @@ frame:SetScript("OnEvent", function(_, event, addon)
 end)
 ```
 
-The rule that makes it safe is the second line of the handler: take your reference *after*
-`ADDON_LOADED`, and from then on only ever mutate that table. The linter flags an
-unconditional file-scope assignment to a declared saved global as `sv-file-scope-init`.
+Take your reference *after* `ADDON_LOADED`, and from then on only mutate that table. Declare
+`## LoadSavedVariablesFirst: 1` only if you genuinely need saved values while your files
+are still loading. If you do, never assign the global unconditionally. An addon cannot ask
+which order it is in: `C_AddOns.GetAddOnMetadata` returns `nil` for the directive.
+
+The linter flags an unconditional file-scope assignment to a declared saved global as
+`sv-file-scope-init`, and the file-scope `local db = MyAddonDB` reference, the one that
+actually loses data under the default order, as `sv-file-scope-alias`. With the directive
+set, it flags that reference only when the global is given a new table later in the same
+file. It stays quiet when the local is re-pointed further down, which it takes to mean the
+swap is handled. It is a regex check, so an alias taken in another file is not seen.
+
+Only the standard paths are read: `WTF\Account\<account>\SavedVariables\` and the
+per-character folder under it. The two alternative paths other developers named,
+`WTF\Account\SavedVariables\` and `WTF\SavedVariables\`, are still neither read nor written
+on 70009 (§P.33).
+
+## If you installed a SavedVariables workaround on 69913, remove it
+
+Several workarounds circulated while the bug was live. They include the ForeverSVFix and
+WTFix tools, the svshim watcher, a hand-added `.toc` line such as
+`SavedVariablesLink.lua` pointing at the SV file, and symbolic links or directory junctions
+from an addon folder into `WTF`. On 70009 the client restores the file itself, so each of
+these is now a second mechanism writing the same global. Depending on the order, it either
+repeats the restore or overwrites it with an older copy. That is reasoning from the measured
+load order. None of those tools was measured here.
+
+On 70009 and later:
+
+1. **Remove the workaround addon or tool.** Disabling is not enough for tools that edited
+   other addons' `.toc` files. Stop any watcher process or scheduled task it installed.
+2. **Delete leftover `.toc` lines** that list a SavedVariables file, or a link to one, as
+   addon code. Reinstalling the affected addon from a clean copy also removes them.
+3. **Remove symbolic links and junctions** under `WTF` and `Interface\AddOns`. Remove the
+   link itself (`Remove-Item <link>`), not the file it points at.
+
+To find them from PowerShell, with `$beta` set to your `_classic_beta_` folder:
+
+```powershell
+Get-ChildItem "$beta\WTF\Account", "$beta\Interface\AddOns" -Recurse -Force -Attributes ReparsePoint -ErrorAction SilentlyContinue | Select-Object FullName, LinkType, Target
+```
+
+### What 69913 did, briefly
+
+On 69913 the account-wide file was written and never read back. The per-character file
+survived a `/reload` but not a restart (§P.23, §P.27). The flush was destructive: a table
+that starts `nil` every session means a `/reload` before running anything writes an empty
+table over the last session's data. The rule then was **collect, then reload**, because the
+client's `.bak` holds exactly one generation (§P.21). On 70009 your table starts as last
+session's, so that rule only still matters if your addon discards the restored table
+itself, as in the table above.
 
 ## The inbound channel
 

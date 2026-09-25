@@ -30,6 +30,30 @@ Probe output lands here via scripts/collect-savedvars.ps1. Timestamped so runs c
   rather than a `pcall` that returned true. `/fprobe video` in combat still has not been
   run and would be an independent check on the same question.
 
-That any capture exists at all is itself a finding: the client writes SavedVariables even
-though it never reads them back, so the outbound direction works while the round trip inside
-the client does not. See findings section P.9.
+- `*_2026-09-25_132437_70009-s1*.lua` and `*_2026-09-25_132620_70009-s2*.lua` - build
+  1.60.1.70009, two client launches through Battle.net with a full exit between them. Each
+  set holds `ForeverProbe`, `ForeverProbeSV_First` and `ForeverProbeSV_Late`, account-wide
+  and `_Abla-Imperial`, plus the 2026-09-20 seed leftover as `_SavedVariables`. It is
+  unchanged: both copies are byte-identical to the 2026-09-20 one. The evidence behind
+  findings sections P.30 to P.34.
+  - The companions' `DB.observed` records every load's phases.
+  - The probe's account file carries `coldTest.reports`, `snippet.outOfCombat` and
+    `snippet.inCombat`, `port`, `rebind`, `blockLog` and `transcript`.
+  - The transcript contains three lines that are instrument bugs, not results. They are
+    listed at the end of P.30.
+
+- `SourceDocs_70009_bd2470a.lua` - **not ForeverProbe output, and not taken from a client.**
+  The API documentation for build 1.60.1.70009, exported by `tools/docs_from_source.py` from
+  Blizzard's own documentation source: the `Blizzard_APIDocumentationGenerated` folder of
+  Gethe/wow-ui-source, branch `forever`, commit
+  `bd2470aed543f72697a044e989285b6c83e63f73` ("1.60.1 (70009)"). Same shape as a
+  `/fprobe docs dump`, and the capture the shipped `reference/api/` is built from, with
+  `ForeverProbe_2026-09-25_132437_70009-s1.lua` as its `--surface`. The client date
+  `Sep 23 2026` was passed in from that surface capture's `build.buildDate`, and the
+  `generated` stamp is the commit time, so a rerun is byte-identical. A control run on
+  69913's source matched that build's in-game dump field for field, before the adapter was
+  widened to keep the secrecy keys and enum values the in-game dumper did not carry yet.
+
+That any capture exists at all was a finding on 69913. There the client wrote SavedVariables
+and never read them back, so the outbound direction worked while the round trip inside the
+client did not (findings section P.9). On 70009 the round trip works too (P.30).

@@ -96,7 +96,7 @@ before polling it.
 | `GetNumAddOns`, `GetAddOnInfo`, `IsAddOnLoaded`, `LoadAddOn` | `C_AddOns.*` |
 | `io`, `os`, `loadfile`, `dofile` | absent. The sandbox is intact |
 | `loadstring` | present |
-| `loadstring_untainted` | absent, which is a beta bug that breaks every secure snippet |
+| `loadstring_untainted` | absent, even on 70009 where secure snippets run. Not a feature test: run a snippet instead. See `restrictions/protected-actions.md` |
 
 For encoding and transport, `C_EncodingUtil` has JSON and CBOR both ways, base64, hex and
 string compression.

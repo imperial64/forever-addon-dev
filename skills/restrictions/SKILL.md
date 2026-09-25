@@ -3,9 +3,9 @@ name: restrictions
 description: >
   What World of Warcraft Forever addons are not allowed to do - combat-log subscription
   refused outright, C_Secrets value gates that make reads secret or throwing, protected
-  and forbidden actions, the silent Auction House scan throttle, and SavedVariables that
-  are written but never read back - each with the measurement that established it on a
-  live client. Use when asked whether something is blocked, forbidden, secret, throttled,
+  and forbidden actions, secure snippets refused in combat, the silent Auction House scan
+  throttle, and the SavedVariables restore timing (read back on build 70009, never on
+  69913) - each with the measurement that established it on a live client. Use when asked whether something is blocked, forbidden, secret, throttled,
   protected or permitted; why a call returned nil, an empty result or a secret value; why
   an addon threw "cannot be accessed when secret"; why a read succeeded and still gave the
   wrong answer, such as a CVar whose value is not the one in effect; or for the full
@@ -63,7 +63,7 @@ whether it is currently restricted, instead of inferring it from a masked value.
 | `ReloadUI` | **FORBIDDEN** | always | An addon cannot reload the UI. A human must type /reload. |
 | `C_AuctionHouse.ReplicateItems` | **FAILS SILENTLY** | always | A throttled full scan returns an EMPTY MARKET, not an error. |
 | `retail-graphics-cvar-names-absent` | **CAUTION** | always | gxBrightness, gxContrast and gxGamma do NOT exist on this client. |
-| SavedVariables (## SavedVariables, account-wide) | **BROKEN ON THIS BUILD** | always | The client writes ACCOUNT-WIDE SavedVariables and never reads them back. Per-character saved variables are read back normally. |
+| SavedVariables (restore timing, ## LoadSavedVariablesFirst) | **CAUTION** | always | SavedVariables ARE read back, account-wide and per-character, across /reload and a full relaunch. The trap is timing: by default the client REPLACES each saved global at ADDON_LOADED, after the addon's file scope has run. _(measured 2026-09-25 on build 70009)_ |
 | Any secret value | **CAUTION** | always | tostring() on a secret value returns a SECRET STRING. The taint survives conversion. |
 | `UnitHealth` | **SECRET** | always | Unit health is secret at ALL times, including out of combat. |
 | `UnitPower` | **SECRET** | always | Unit power is secret at ALL times, including out of combat. |
@@ -74,10 +74,11 @@ whether it is currently restricted, instead of inferring it from a masked value.
 | `C_Spell.GetSpellCooldown`, `C_Spell.GetSpellCharges` +1 | **SECRET** | in-combat | Spell and action cooldowns become secret in combat. |
 | Identity, max health, casts, threat state | **PERMITTED** | in-combat | Unit identity, max health, spell casts and threat state stay readable in combat. |
 | `SecureActionButtonTemplate:SetAttribute` | **CAUTION** | in-combat | SetAttribute on a secure action button SUCCEEDED in combat. Re-test before relying on it. |
+| Secure snippets (SecureHandler templates, frame:Execute) | **BLOCKED IN COMBAT** | in-combat | Secure snippets RUN out of combat. In combat, Execute is refused: silently, with ADDON_ACTION_BLOCKED and no error, on a frame made before combat, and with a raise on a frame made during it. _(measured 2026-09-25 on build 70009)_ |
 | Threat values | **SECRET** | in-combat | Threat VALUES are secret in combat, but threat STATE is not. |
 | Unit stats | **SECRET** | in-combat | Unit stats become secret in combat. |
 
-Measured 2026-09-20 on client 1.60.1 build 69913. Detail and evidence for each: `reference/api/RESTRICTIONS.md`.
+Measured 2026-09-20 on client 1.60.1 build 69913, except where a row names its own build. Detail and evidence for each: `reference/api/RESTRICTIONS.md`.
 <!-- END GENERATED restrictions-table -->
 
 ## Three refusal shapes, and only one is obvious
@@ -144,12 +145,17 @@ Work through it in this order:
    is a throttle, not an empty market, and the client will not say so.
 4. **Did the event ever register?** A forbidden `RegisterEvent` does not raise. The frame
    simply never receives anything. `/fprobe blocked` in the probe addon names the call.
+   The same shape applies to a secure snippet run in combat. On 70009, `Execute` on a header
+   made before combat returns normally, changes nothing, and fires `ADDON_ACTION_BLOCKED`
+   (`research/findings.md` P.32).
 5. **Does the function exist on this build?** The api skill answers that; a missing
    reference page means it is not on this client.
 
 ## Evidence
 
 Every entry links to the section of `research/findings.md` that records the measurement,
-including the client build and date. When answering, cite the section — the value of this
+including the client build and date. Most entries were measured on 69913. The
+SavedVariables and secure-snippet entries were re-measured on 70009, and their rows in the
+table above name that build. When answering, cite the section — the value of this
 data is that it is checkable, and an unsourced restriction claim is worth no more than the
 press reporting it replaces.

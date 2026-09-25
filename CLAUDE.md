@@ -40,7 +40,7 @@ is whatever the client enforces.
 | Piece | What it is |
 |---|---|
 | `skills/` | What Claude loads: `build`, `api`, `restrictions`, `regenerate` |
-| `reference/api/` | **Generated.** One page per symbol, path derivable from the name. 15,049 pages |
+| `reference/api/` | **Generated.** One page per symbol, path derivable from the name. 16,041 pages |
 | `reference/guides/`, `reference/restrictions/` | Hand-written, for an outside reader |
 | `tools/` | The generator, the linter, the SavedVariables parser. Python, so plugin users need no Lua runtime |
 | `addons/ForeverProbe/` | The probe — and the doc generator the `regenerate` skill drives |
@@ -52,7 +52,7 @@ is whatever the client enforces.
 is always wrong. Determinism there is load-bearing: no per-symbol page carries a timestamp,
 so regenerating against a newer client produces a diff that *is* the patch delta.
 
-## Where this is up to (2026-09-20)
+## Where this is up to (2026-09-25)
 
 The plugin works end to end: it installs, the reference generates from a capture, the four
 skills route, and `tools/lint_addon.py` runs clean against `addons/ForeverProbe/ForeverProbe.lua`,
@@ -65,18 +65,46 @@ Remaining:
 2. Worked examples under `examples/` — a scaffolded addon the `build` skill produces, kept
    as a dogfood test.
 
-Two measurements to redo in game when convenient: `SecureActionButton:SetAttribute`
-apparently succeeding **in combat** (P.20 — flagged `caution`, retail protects it), and the
-three `C_Secrets` gates with no out-of-combat value because the chat line truncated
-(`UnitSpellCast`, `UnitThreatState`, `UnitThreatValues`).
+Two measurements to redo in game when convenient. The first is
+`SecureActionButton:SetAttribute` apparently succeeding **in combat** (P.20, flagged
+`caution`, and retail protects it). §P.32 has since caught 70009 refusing a similar call by
+event alone, so re-test it with the block log open. The second is the three `C_Secrets`
+gates with no out-of-combat value because the chat line truncated (`UnitSpellCast`,
+`UnitThreatState`, `UnitThreatValues`).
+
+**Ran 2026-09-25 on build 1.60.1.70009**, in two client launches with a full exit and
+relaunch through Battle.net between them. The captures are
+`*_2026-09-25_132437_70009-s1*` and `*_132620_70009-s2*`, the plan is
+`research/test-plan-70009.md`, and the write-up is §P.30 to §P.34. What changed:
+
+1. **SavedVariables are read back on 70009**, account-wide and per-character, across
+   `/reload` and across a full relaunch. A seeded token came back in all twelve companion
+   globals and in the probe's own DBs. §P.23 and §P.27 remain the 69913 record. §P.30
+2. **`## LoadSavedVariablesFirst: 1` is real.** With it, the restore precedes file scope, so
+   an unconditional `X = {...}` destroys saved data and `X = X or {...}` keeps it. Without
+   it, which is the default, the client replaces the global at `ADDON_LOADED`. That
+   discards both file-scope tables and orphans any `local db` taken at file scope. §P.31
+3. **Secure snippets run on 70009 out of combat**, while `loadstring_untainted` is still
+   `nil`, so the global is not a feature test. In combat, `Execute` on a header made before
+   combat returns normally and does nothing, apart from two `ADDON_ACTION_BLOCKED` events.
+   On a header made in combat it raises "Header frame must be explicitly protected". §P.32
+4. The two exotic WTF seed paths are still not read. §P.33
+5. The porting checks reproduce, with one exception. `UnitName`/`UnitFullName("player")`
+   now return `"Abla", "Imperial"`, so the second half of the character's name is in the
+   realm slot. §P.34
+
+Three lines the probe printed in that run are instrument bugs, not results. They are the
+`/fprobe sv` "load order: undetermined … no" verdict, its "ForeverProbeDB … fresh" line, and
+`/fprobe`'s "EXTERNAL outbound read-back failed". §P.30 explains each. Do not cite them.
 
 **Ran 2026-09-20** across three sessions; captures `ForeverProbe_2026-09-20_*`, written up
 as §P.23 to §P.28. What changed:
 
-1. **SavedVariables: no persistence across sessions, on either directive.** Account-wide is
-   never read back; per-character survives a `/reload` but not a logout. Neither the
-   binding idiom nor the load order is the variable, and the exotic WTF paths other
-   developers named are neither read nor written. §P.23, §P.27
+1. **SavedVariables: no persistence across sessions, on either directive**, on 69913.
+   Account-wide is never read back; per-character survives a `/reload` but not a logout.
+   Neither the binding idiom nor the load order is the variable, and the exotic WTF paths
+   other developers named are neither read nor written. §P.23, §P.27. **Superseded on
+   70009, see above.**
 2. **Secrecy is gated per UNIT, not by combat.** A target's health, max health, power and
    max power are secret standing out of combat, on a friendly NPC and a hostile mob alike.
    The player's own health and power are secret too, but its maxima are not. Level, name,
@@ -90,12 +118,17 @@ as §P.23 to §P.28. What changed:
 5. Interface formula, no `WOW_PROJECT_*`, empty `GetCurrentRegionName()`, and
    `GetNamePlateForUnit` refusing target-of-target: confirmed. Realm identity is stable;
    the character name genuinely contains a space, which is what the port diary's broken
-   AceDB key was really about. §P.24
+   AceDB key was really about. §P.24. On 70009 the name is split across the two return
+   values instead, see §P.34.
 
 Worth doing next, in the repo rather than in game:
 
-1. **Move the probe's DB to `## SavedVariablesPerCharacter`** — §P.27 measured that this
-   survives a `/reload`, which lifts §P.21's "both passes in one session" constraint.
+1. ~~Move the probe's DB to `## SavedVariablesPerCharacter`~~ — **moot.** That move was
+   only ever a way round 69913 discarding account-wide data on `/reload`. On 70009 the
+   account-wide DB survives a `/reload` and a relaunch (§P.30), so there is nothing to
+   route around. The probe's rebind guard is what keeps `db` pointing at the restored table
+   under the default load order (§P.31). Keep the DB account-wide, which is where
+   `collect-savedvars.ps1` expects the surface dump.
 2. **Teach the generator the Secret taxonomy** (§P.26). `projectField`/`projectFunction`
    capture a single `Secret` field; widen to every key matching the pattern and the
    machine-readable half of `restrictions.yaml` becomes generable.
@@ -146,6 +179,16 @@ forbids citing it.
 - **`type()` and `==` do not reveal a secret either.** Measured 2026-09-20: `type()` on a
   secret number returns `"number"`, and `value == value` THROWS — so `if v == nil then`,
   the guard written out of caution, is itself unsafe. `issecretvalue` is the only test.
+- **SavedVariables behaviour is per build, so say which build.** On 69913 nothing
+  account-wide was read back, and per-character survived only a `/reload` (§P.23, §P.27).
+  On 70009 both are read back across a relaunch (§P.30). By default the client
+  **replaces** each saved global at `ADDON_LOADED`, after file scope, unless the `.toc`
+  declares `## LoadSavedVariablesFirst: 1` (§P.31). Never take a file-scope reference to a
+  saved global; bind it inside `ADDON_LOADED`. Re-run `/fprobe cold seed`, `/quit`,
+  relaunch, `/fprobe cold <token>` on every new build before trusting either result.
+- **An absent global is not a feature test.** Measured 2026-09-25: `loadstring_untainted`
+  is `nil` on 70009, where secure snippets run (§P.32). Decide a capability by exercising it
+  and reading the effect back, the same lesson as a secret value's `type()`.
 - **Do not extend the in-combat restrictions to non-combat states** unless a source or
   probe result explicitly says so. Several published claims conflate the two. Note the
   converse bit too: §P.25 found `UnitHealth` secret *out* of combat, and the client's own
@@ -177,10 +220,10 @@ Probe usage in-game:
 - `/fprobe external` — the out-of-game data channel: inbound `ExternalData.lua` and the
   outbound SavedVariables flush
 - `/fprobe sv` — the SavedVariables experiment: load order, which binding idiom survives,
-  and which WTF path the client actually reads. Run `scripts/seed-savedvars.ps1` and
-  restart the client first; it seeds a differently tokenised file into all four candidate
-  paths at once, so whichever token arrives names the path that works. Settles
-  `research/findings.md` §12
+  and which WTF path the client actually reads. §12 is now settled (§P.27, §P.30, §P.33).
+  Its load-order verdict line misreads 70009 (see below), so `/fprobe cold` is the
+  instrument for SavedVariables now. `scripts/seed-savedvars.ps1` overwrites the real
+  account-scoped `ForeverProbe.lua`, so do not run it casually
 - `/fprobe port` — the porting checks: whether interface `16001` really is `%d%02d%02d` of
   the version triple, which `WOW_PROJECT_*` constants exist, `GetCurrentRegionName()`,
   `GetNamePlateForUnit()` on target-of-target, and realm identity. §9 to §11
@@ -211,24 +254,47 @@ Probe usage in-game:
   hand-probed. The key name is discovered, not assumed. §13
 - `/fprobe docs dump [start] [count]` — dump it into SavedVariables for the generator
 - `/fprobe docs version` — whether the shipped reference still matches this client
+- `/fprobe cold seed [reload]` — write a marker token into every saved global of the probe and
+  of the two companions `ForeverProbeSV_First` (`## LoadSavedVariablesFirst: 1`) and
+  `ForeverProbeSV_Late` (without). `reload` marks the `/reload` leg; plain `seed` marks the
+  cold-start leg and must be the last thing before a full exit. W.30, W.32
+- `/fprobe cold [token]` — what each saved global held at file scope, `ADDON_LOADED`,
+  `PLAYER_LOGIN` and `PLAYER_ENTERING_WORLD`, per variant, including the file-scope clobber
+  check. Pass the seeded token to have other tokens marked `x`
+- `/fprobe snippet` — `type(loadstring_untainted)`, then `Execute` a one-line snippet on a
+  `SecureHandlerBaseTemplate` and a `SecureHandlerAttributeTemplate` frame and read the
+  attribute back. Run it out of combat first in the same session, then again mid-fight,
+  where it reuses those frames and also creates fresh ones. W.12, W.33
+- `/fprobe copy` — everything the probe printed since load in a selectable box, for pasting
+  back; `/fprobe copy clear` empties it. The same text is saved as `transcript`
 
 The external-channel check needs a write from outside the game first:
 `scripts/write-external-data.ps1`, then `/reload`, then `/fprobe external`. That script
 writes into the *installed* addon folder, and `install-addon.ps1` preserves the
 installed `ExternalData.lua` unless you pass `-ResetExternalData`.
 
-Both runs are required before the delta means anything, and **both must happen in one
-session**: this build writes SavedVariables and never reads them back, so a `/reload`
-discards whichever pass came first. `/reload` or log out to flush.
+Both runs are required before the delta means anything. `/reload` or log out to flush.
 
-That one-session constraint is **liftable and has not been lifted yet**. §P.27 measured
-that a `## SavedVariablesPerCharacter` global survives a `/reload` while an account-wide
-one does not, so moving the probe's DB would let the two passes span a reload. Until that
-change is made, the constraint above still applies as written.
+**On build 70009 the two passes may span a `/reload` or a full relaunch.** Measured
+2026-09-25: the probe's account-wide DB came back across both, and session 1's surface dump
+was still in it in session 2 (§P.30). That depends on the probe's rebind guard, because the
+client replaces `ForeverProbeDB` at `ADDON_LOADED`, after the probe's file scope (§P.31).
+The per-character move that was once planned to lift this is therefore not needed.
+
+On 69913 and earlier, **both passes had to happen in one session**. That build wrote
+SavedVariables and never read them back, so a `/reload` discarded whichever pass came first,
+and a `/reload` before running anything wrote an empty table over the previous session
+(§P.21). If the client is ever back on such a build, check `/fprobe cold` before relying on
+a reload.
+
+`/fprobe sv`'s one-line load-order verdict is wrong on 70009. `SavedVars.lua` snapshots file
+scope before `ForeverProbe.lua` creates its table, so it never sees the swap. Use
+`/fprobe cold` and the `rebind` record instead, until the probe is fixed (§P.30).
 
 ## Cautions
 
-- The `.toc` declares `16001`, measured on beta build 1.60.1.69893. `/fprobe` prints the
+- The `.toc` declares `16001`, first measured on beta build 1.60.1.69893. It was confirmed
+  by `/fprobe port` on 69913 (§P.24) and again on 70009 (§P.34). `/fprobe` prints the
   client's own number; if they disagree, the client wins. The beta product folder is
   `_classic_beta_`, which is what the scripts now default to.
 - Registering an event this client does not know **throws and aborts the rest of the
