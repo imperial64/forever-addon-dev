@@ -39,6 +39,7 @@ covers the whole API surface, and the restriction list is whatever the client en
 | `api` | One symbol's exact signature, or whether it exists on this build |
 | `restrictions` | Whether a call is forbidden, secret, throttled or protected, and why |
 | `regenerate` | Rebuilding the reference from your own client after a patch |
+| `publish` | Packaging and releasing with the BigWigs packager, and where a Forever build can be published |
 
 ## What makes the restriction list worth having
 
@@ -66,7 +67,7 @@ records the measurement.
 ## Layout
 
 ```
-skills/            what Claude loads: build, api, restrictions, regenerate
+skills/            what Claude loads: build, api, restrictions, regenerate, publish
 reference/api/     generated: one page per symbol, path derivable from the name
 reference/guides/  hand-written authoring guidance
 data/              machine-readable: api.json, restrictions.json, costs.json

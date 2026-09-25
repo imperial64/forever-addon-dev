@@ -39,7 +39,7 @@ is whatever the client enforces.
 
 | Piece | What it is |
 |---|---|
-| `skills/` | What Claude loads: `build`, `api`, `restrictions`, `regenerate` |
+| `skills/` | What Claude loads: `build`, `api`, `restrictions`, `regenerate`, `publish` |
 | `reference/api/` | **Generated.** One page per symbol, path derivable from the name. 16,041 pages |
 | `reference/guides/`, `reference/restrictions/` | Hand-written, for an outside reader |
 | `tools/` | The generator, the linter, the SavedVariables parser. Python, so plugin users need no Lua runtime |
