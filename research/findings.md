@@ -931,6 +931,15 @@ the shape is more useful than the number.
 closest bucket is the 4,076 *functions* that carry one. Different build or different
 counting — the discrepancy is not worth chasing, because the taxonomy is the finding.
 
+*Cross-check from source, 2026-09-25.* A plain text scan of the 69913
+`Blizzard_APIDocumentationGenerated` source (Gethe/wow-ui-source `forever` `70ef1b2fd7`)
+reproduces the per-key counts: `SecretArguments` 3,929 exactly, `NeverSecret` 949 against
+942 here, `ConditionalSecret` 20 against 19. It finds 41 `Secret`-shaped names, but that
+total also counts table and constant names such as `SecretAspectConstants`. The projection
+in `tools/docs_from_source.py`, which only reads entry keys, finds 37. So "38" is the count
+over the entries the client loaded, and the other totals count different things. The
+discrepancy is a matter of scope. It is not a wrong key list.
+
 Discovering the key name rather than assuming it was load-bearing. There is no plain
 `Secret` field: the most common keys are `SecretArguments` (3,929 entries) and
 `NeverSecret` (942). Guessing `Secret` would have counted 12 and read as "the report is

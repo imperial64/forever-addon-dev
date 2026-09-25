@@ -129,9 +129,20 @@ Worth doing next, in the repo rather than in game:
    route around. The probe's rebind guard is what keeps `db` pointing at the restored table
    under the default load order (§P.31). Keep the DB account-wide, which is where
    `collect-savedvars.ps1` expects the surface dump.
-2. **Teach the generator the Secret taxonomy** (§P.26). `projectField`/`projectFunction`
-   capture a single `Secret` field; widen to every key matching the pattern and the
-   machine-readable half of `restrictions.yaml` becomes generable.
+2. ~~Teach the generator the Secret taxonomy~~: **done 2026-09-25.** Every `Secret`-shaped
+   key, plus `ChecksForbiddenAspects`, `IsProtectedFunction`, `HasRestrictions` and
+   `Requires*`, is now projected and rendered verbatim on the pages and in `data/api.json`.
+   The part not done yet is generating the machine-readable half of `restrictions.yaml` from
+   those keys. It is still hand-maintained.
+3. **Diff an in-game `/fprobe docs dump` against `tools/docs_from_source.py`** for the same
+   build. The 70009 reference was generated from source. The source route reproduced the
+   69913 in-game dump exactly, but the in-game dumper's new projection (enum values,
+   per-function `Namespace`, shared tables, restriction keys) has not run on a client yet.
+
+The reference can now be regenerated without a client: `tools/docs_from_source.py` on a
+`Gethe/wow-ui-source` `forever` checkout fetched through `gh api`, plus a fresh `/fprobe`
+surface dump for the "present on this client" stubs. `skills/regenerate/SKILL.md` has both
+routes.
 
 §Q is the one section no instrument in this repo can refresh. It is data measured by addons
 in another repository, and `/fprobe` reproduces none of it, so a new build invalidates those
