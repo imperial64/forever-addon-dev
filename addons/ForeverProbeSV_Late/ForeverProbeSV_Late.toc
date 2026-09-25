@@ -1,0 +1,18 @@
+## Interface: 16001
+## Title: Forever Probe SV (late)
+## Notes: SavedVariables cold-start companion to ForeverProbe, WITHOUT LoadSavedVariablesFirst. Reported by /fprobe cold.
+## X-SVVariant: Late
+## SavedVariables: ForeverProbeSV_LateDB, ForeverProbeSV_LateClobber, ForeverProbeSV_LateOrInit
+## SavedVariablesPerCharacter: ForeverProbeSV_LateChar, ForeverProbeSV_LateCharClobber, ForeverProbeSV_LateCharOrInit
+
+# Directives must stay contiguous: a blank line between two ## lines ends the
+# header and the client ignores everything after it.
+#
+# Deliberately NO `## LoadSavedVariablesFirst` line: this is the control for
+# ForeverProbeSV_First, which differs from this header by that one line. No
+# dependency on ForeverProbe, on purpose: a dependency would change load order,
+# which is the thing being measured.
+#
+# Core.lua is byte-identical in both variants; Init.lua differs only in names.
+Core.lua
+Init.lua
